@@ -1,0 +1,135 @@
+/*@import url('base.css');*/
+/*@import url('theme.css');*/
+
+/*body {*/
+/*  font-family: system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, sans-serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol, Noto Color Emoji;*/
+/*  transition: all;*/
+/*  margin: 0;*/
+/*  -webkit-font-smoothing: antialiased;*/
+/*  text-rendering: optimizelegibility;*/
+
+/*  background: var(--muted-bg);*/
+/*  display: flex;*/
+/*  flex-direction: row;*/
+/*  height: 100vh;*/
+/*}*/
+
+/*body > * + * {*/
+/*    margin-top: 20px;*/
+/*}*/
+
+/*h1 {*/
+/*    text-align: center;*/
+/*    color: var(--accent);*/
+/*}*/
+
+/*#container {*/
+/*    margin-top: 20px;*/
+/*    display: flex;*/
+/*    flex-direction: row;*/
+/*    gap: 4px;*/
+/*}*/
+
+/*a {*/
+/*  text-decoration: none;*/
+/*}*/
+
+/*a, button {*/
+/*    padding: 10px 20px;*/
+/*    border: transparent;*/
+/*    font-weight: 600;*/
+/*    border-radius: 10px;*/
+/*    cursor: pointer;*/
+/*}*/
+
+/*button:nth-child(1) {*/
+/*    background: oklch(69.6% 0.17 162.48);*/
+/*    color: whitesmoke;*/
+/*}*/
+
+/*button:nth-child(2) {*/
+/*    background: oklch(78.9% 0.154 211.53);*/
+/*    color: whitesmoke;*/
+/*}*/
+
+/*button:nth-child(3) {*/
+/*    background: oklch(85.2% 0.199 91.936);*/
+/*    color: #222222;*/
+/*}*/
+
+/*#cards > div {*/
+/*    width: 100%;*/
+/*    display: flex;*/
+/*    flex-direction: column;*/
+/*    background: var(--primary);*/
+/*    color: var(--accent);*/
+/*    padding: 20px;*/
+/*    border-radius: 10px;*/
+/*}*/
+
+/*#cards > div > * + * {*/
+/*    margin-top: 10px;*/
+/*}*/
+
+/*#cards div #tag {*/
+/*    !*margin: 0 auto;*!*/
+/*    display: flex;*/
+/*    justify-content: center;*/
+/*    border-radius: 5px;*/
+/*    align-items: center;*/
+/*    padding: 4px 8px;*/
+/*    !*height: 25px;*!*/
+/*    width: 70px;*/
+/*    border: 1px solid var(--accent);*/
+/*    !*background: var(--muted-bg);*!*/
+/*    color: var(--accent);*/
+/*    font-size: 10px;*/
+/*    font-weight: 400;*/
+/*}*/
+
+/*#cards div a {*/
+/*    text-align: center;*/
+/*    color: whitesmoke;*/
+/*    background: var(--accent);*/
+/*}*/
+
+/*aside {*/
+/*  width: 16rem;*/
+/*  background: var(--accent);*/
+/*  display: flex;*/
+/*  flex-direction: column;*/
+/*  align-items: center;*/
+/*  padding-top: 20px;*/
+/*  padding-left: 20px;*/
+/*}*/
+
+/*aside span {*/
+/*  margin-top: 20px;*/
+/*  color: whitesmoke;*/
+/*  font-weight: 600;*/
+/*}*/
+
+/*aside ul {*/
+/*  list-style: none;*/
+/*}*/
+
+/*asid ul > * + * {*/
+/*  margin-top: 8px;*/
+/*}*/
+
+/*aside ul li {*/
+/*  background: var(--accent);*/
+/*  width: 100%;*/
+/*  padding: 8px;*/
+/*}*/
+
+/*aside ul li:hover {*/
+/*  background: red;*/
+/*  transition: background-color 100ms;*/
+/*  cursor: pointer;*/
+/*}*/
+
+#receipts {
+  width: 75%;
+  background: var(--primary);
+}

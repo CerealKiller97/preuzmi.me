@@ -1,0 +1,27 @@
+* {
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    --primary: #232323;
+    --accent: #FFD345;
+    --muted-bg: #232323;
+}
+
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+a,
+li,
+span,
+div,
+label,
+button,
+select {
+    user-select: none;
+}

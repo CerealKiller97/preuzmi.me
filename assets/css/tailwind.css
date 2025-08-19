@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: var(--color-zinc-300);
+  --color-primary-text: var(--color-zinc-100);
+  --color-primary-svg: var(--color-zinc-400);
+}
+
+@layer base {
+  [data-theme='cyan'] {
+    --color-primary: var(--color-cyan-600);
+    --color-primary-text: var(--color-cyan-100);
+    --color-primary-svg: var(--color-cyan-400);
+  }
+
+  [data-theme='emerald'] {
+    --color-primary: var(--color-emerald-600);
+    --color-primary-text: var(--color-emerald-100);
+    --color-primary-svg: var(--color-emerald-400);
+  }
+
+
+  [data-theme='amber'] {
+    --color-primary: var(--color-amber-600);
+    --color-primary-text: var(--color-amber-100);
+    --color-primary-svg: var(--color-amber-400);
+  }
+
+  [data-theme='rayne'] {
+    --color-primary: var(--color-red-500);
+    --color-primary-text: var(--color-red-100);
+    --color-primary-svg: var(--color-red-400);
+  }
+
+  [data-theme='pink'] {
+    --color-primary: var(--color-pink-400);
+    --color-primary-text: var(--color-pink-100);
+    --color-primary-svg: var(--color-pink-400);
+  }
+}

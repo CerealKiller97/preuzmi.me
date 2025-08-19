@@ -1,0 +1,27 @@
+{
+  "name": "preuzmi.me",
+  "version": "1.0.0",
+  "description": "Tool for lazy people (Automated receipt download for many providers)",
+  "main": "index.js",
+  "scripts": {
+    "build": "tailwindcss build -o static/css/tailwind.css",
+    "watch": "tailwindcss build -o static/css/tailwind.css --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CerealKiller97/preuzmi.me.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/CerealKiller97/preuzmi.me/issues"
+  },
+  "homepage": "https://github.com/CerealKiller97/preuzmi.me#readme",
+  "dependencies": {
+    "alpinejs": "^3.14.9",
+    "tailwindcss": "^4.1.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.4"
+  }
+}

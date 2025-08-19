@@ -3,21 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Preuzmi.me — Računi</title>
-  <!-- Tailwind CDN config with dark mode -->
+  <title>Preuzmi.me — Statistika</title>
   <script>
     tailwind.config = { darkMode: 'class' };
   </script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Initialize theme early to avoid FOUC -->
   <script>
     (function () {
       try {
         const ls = localStorage.getItem('theme');
         const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-        if (ls === 'dark' || (!ls && prefersDark)) {
-          document.documentElement.classList.add('dark');
-        }
+        if (ls === 'dark' || (!ls && prefersDark)) document.documentElement.classList.add('dark');
         window.toggleTheme = function () {
           const el = document.documentElement;
           const isDark = el.classList.toggle('dark');
@@ -29,7 +25,7 @@
   <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
 <body class="h-full bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-<div x-data="receipts" x-init="init()" class="min-h-screen">
+<div x-data="stats" x-init="init()" class="min-h-screen">
   <!-- Top bar -->
   <header class="border-b border-gray-200 dark:border-gray-800 bg-white/70 dark:bg-gray-900/70 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 sticky top-0 z-30">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -41,9 +37,8 @@
         </div>
       </div>
       <nav class="hidden md:flex items-center gap-3 sm:gap-6 text-sm">
-        <a href="/" class="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white">Dashboard</a>
         <a href="/dashboard" class="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white">Računi</a>
-        <a href="/stats" class="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white">Statistika</a>
+        <a href="/stats" class="text-cyan-600 dark:text-cyan-400 font-medium">Statistika</a>
         <button type="button" @click="window.toggleTheme()" title="Promeni temu" class="ml-3 inline-flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-700 p-2 text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white bg-white dark:bg-gray-800">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5 hidden dark:block"><path d="M21.752 15.002A9.718 9.718 0 0 1 12 21.75c-5.385 0-9.75-4.365-9.75-9.75 0-4.358 2.9-8.042 6.857-9.31a.75.75 0 0 1 .964.966A8.25 8.25 0 0 0 20.78 14.04a.75.75 0 0 1 .972.962z"/></svg>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5 dark:hidden"><path d="M12 18.75a6.75 6.75 0 1 0 0-13.5 6.75 6.75 0 0 0 0 13.5Z"/><path fill-rule="evenodd" d="M12 1.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0V2.25A.75.75 0 0 1 12 1.5Zm0 18.75a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5a.75.75 0 0 1 .75-.75ZM4.72 4.72a.75.75 0 0 1 1.06 0L6.84 5.78a.75.75 0 1 1-1.06 1.06L4.72 5.78a.75.75 0 0 1 0-1.06Zm10.56 10.56a.75.75 0 0 1 1.06 0l1.06 1.06a.75.75 0 1 1-1.06 1.06l-1.06-1.06a.75.75 0 0 1 0-1.06ZM1.5 12a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5H2.25A.75.75 0 0 1 1.5 12Zm18.75 0a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5a.75.75 0 0 1-.75-.75Zm-3.03-7.28a.75.75 0 0 1 1.06 0l1.06 1.06a.75.75 0 0 1-1.06 1.06L17.22 5.78a.75.75 0 0 1 0-1.06ZM4.72 17.22a.75.75 0 0 1 1.06 0l1.06 1.06a.75.75 0 0 1-1.06 1.06L4.72 18.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
@@ -53,27 +48,20 @@
   </header>
 
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="flex items-center justify-between">
+      <h1 class="text-2xl font-semibold">Statistika</h1>
+      <div class="text-sm text-gray-500 dark:text-gray-400">Godina: <span x-text="selectedYear"></span></div>
+    </div>
+
     <!-- Filters -->
-    <section class="space-y-4">
+    <section class="mt-6 space-y-4">
       <div class="flex items-end flex-wrap gap-3">
-        <!-- Elegant search input -->
-        <div class="flex flex-col flex-1 min-w-[240px]">
-          <label class="text-sm text-gray-600 dark:text-gray-300 mb-1">Pretraga</label>
-          <div class="relative">
-            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400 dark:text-gray-500">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            </span>
-            <input x-model.debounce.300ms="query" type="text" placeholder="Provajder, period, naziv fajla..." class="w-full h-11 pl-10 pr-3 rounded-lg ring-1 ring-gray-300 dark:ring-gray-700 border-0 bg-white/70 dark:bg-gray-900/70 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/70 shadow-sm transition-colors" />
-          </div>
-        </div>
-        <!-- Elegant select -->
         <div class="flex flex-col w-full sm:w-auto">
-          <label class="text-sm text-gray-600 dark:text-gray-300 mb-1">Period</label>
+          <label class="text-sm text-gray-600 dark:text-gray-300 mb-1">Godina</label>
           <div class="relative">
-            <select x-model="selectedPeriod" class="appearance-none w-full sm:w-44 h-11 rounded-lg ring-1 ring-gray-300 dark:ring-gray-700 border-0 bg-white/70 dark:bg-gray-900/70 text-gray-900 dark:text-gray-100 pl-3 pr-10 focus:outline-none focus:ring-2 focus:ring-cyan-500/70 shadow-sm transition-colors">
-              <option value="">Svi periodi</option>
-              <template x-for="per in periods" :key="per">
-                <option :value="per" x-text="per"></option>
+            <select x-model.number="selectedYear" @change="fetchStats()" class="appearance-none w-full sm:w-44 h-11 rounded-lg ring-1 ring-gray-300 dark:ring-gray-700 border-0 bg-white/70 dark:bg-gray-900/70 text-gray-900 dark:text-gray-100 pl-3 pr-10 focus:outline-none focus:ring-2 focus:ring-cyan-500/70 shadow-sm transition-colors">
+              <template x-for="y in years" :key="y">
+                <option :value="y" x-text="y"></option>
               </template>
             </select>
             <span class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 dark:text-gray-500">
@@ -95,43 +83,48 @@
       </div>
     </section>
 
-    <!-- Stats -->
-    <section class="mt-6 flex items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
-      <div class="flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full bg-gray-400"></span>
-        <span>Ukupno: <span class="font-medium text-gray-900 dark:text-gray-100" x-text="filteredReceipts.length"></span></span>
+    <!-- Summary cards -->
+    <section class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+        <div class="text-sm text-gray-500 dark:text-gray-400">Ukupno godišnje</div>
+        <div class="mt-2 text-2xl font-semibold" x-text="formatMoney(data.total, data.currency)"></div>
+      </div>
+      <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+        <div class="text-sm text-gray-500 dark:text-gray-400">Prosek mesečno</div>
+        <div class="mt-2 text-2xl font-semibold" x-text="formatMoney(data.average, data.currency)"></div>
+      </div>
+      <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+        <div class="text-sm text-gray-500 dark:text-gray-400">Broj računa</div>
+        <div class="mt-2 text-2xl font-semibold" x-text="totalCount"></div>
+      </div>
+      <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+        <div class="text-sm text-gray-500 dark:text-gray-400">Odabrani provajderi</div>
+        <div class="mt-2 text-lg" x-text="selectedProviders.length === 0 ? 'Svi' : selectedProviders.map(p=>p.toUpperCase()).join(', ')"></div>
       </div>
     </section>
 
-    <!-- Empty state -->
-    <section class="mt-6" x-show="!loading && filteredReceipts.length === 0">
-      <div class="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 p-8 text-center text-gray-600 dark:text-gray-300">
-        Nema računa za izabrane filtere.
+    <!-- Monthly bars -->
+    <section class="mt-8 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold">Mesečni troškovi</h2>
+        <div class="text-sm text-gray-500 dark:text-gray-400">Prikaz za <span x-text="selectedYear"></span></div>
       </div>
-    </section>
-
-    <!-- Grid -->
-    <section class="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" x-show="filteredReceipts.length > 0">
-      <template x-for="item in filteredReceipts" :key="item.url">
-        <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
-          <div class="flex items-center justify-between p-4">
-            <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium ring-1 ring-inset ring-gray-200 dark:ring-gray-700 text-gray-700 dark:text-gray-300" x-text="item.provider.toUpperCase()"></span>
-            <span class="text-xs text-gray-500 dark:text-gray-400" x-text="new Date(item.modified * 1000).toLocaleDateString()"></span>
+      <div class="grid grid-cols-12 gap-2 items-end" style="height: 180px;">
+        <template x-for="(val, idx) in data.monthly" :key="idx">
+          <div class="flex flex-col items-center justify-end">
+            <div class="w-5 sm:w-6 rounded-t bg-cyan-600/70 dark:bg-cyan-500/80" :style="{ height: barHeight(val) + '%' }" title=""></div>
+            <div class="mt-1 text-[10px] text-gray-500 dark:text-gray-400" x-text="monthShort(idx)"></div>
           </div>
-          <div class="px-6 pb-6">
-            <div class="flex flex-col items-center gap-4">
-              <span class="inline-flex w-24 justify-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ring-cyan-600/30 text-cyan-700 dark:text-cyan-300" x-text="item.period"></span>
-              <div class="text-xs text-gray-500 dark:text-gray-400" x-text="item.filename"></div>
-            </div>
-            <a :href="item.url" class="inline-flex mt-6 items-center justify-center w-full h-10 px-4 text-sm font-medium text-white bg-cyan-600 hover:bg-cyan-500 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500">
-              Pogledaj račun
-            </a>
-          </div>
-        </div>
-      </template>
+        </template>
+      </div>
+      <div class="mt-4 grid grid-cols-12 gap-2">
+        <template x-for="(cnt, idx) in data.monthly_counts" :key="'c'+idx">
+          <div class="text-center text-xs text-gray-500 dark:text-gray-400"><span x-text="cnt"></span> rač.</div>
+        </template>
+      </div>
     </section>
   </main>
 </div>
-<script src="/assets/js/app.js"></script>
+<script src="/assets/js/stats.js"></script>
 </body>
 </html>

@@ -2,15 +2,16 @@ package app
 
 import (
 	"fmt"
+	"net/http"
+
 	"github.com/CerealKiller97/preuzmi.me/pkg/container"
 	handlers "github.com/CerealKiller97/preuzmi.me/pkg/http"
-	"net/http"
 )
 
 type (
 	App struct {
 		c *container.Container
-		//middleware []middleware.Middleware
+		// middleware []middleware.Middleware
 	}
 )
 
@@ -40,7 +41,7 @@ func (a *App) Serve() error {
 
 	a.c.Logger.
 		Info().
-		Msgf("starting the http server on: http://%s", socket)
+		Msgf("starting the https server on: https://%s", socket)
 
 	return http.ListenAndServeTLS(
 		socket,

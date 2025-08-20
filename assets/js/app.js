@@ -64,12 +64,21 @@ document.addEventListener('alpine:init', () => {
         this.loading = true;
         // Build query from current filters (optional: could use server-side filtering)
         const params = new URLSearchParams();
-        if (this.selectedProviders.length > 0) params.set('provider', this.selectedProviders.join(','));
-        if (this.selectedPeriod) params.set('period', this.selectedPeriod);
+        if (this.selectedProviders.length > 0) {
+            params.set('provider', this.selectedProviders.join(','));
+        }
+
+        if (this.selectedPeriod) {
+            params.set('period', this.selectedPeriod);
+        }
+
         const url = '/api/receipts' + (params.toString() ? `?${params.toString()}` : '');
 
         const res = await fetch(url);
-        if (!res.ok) throw new Error('failed to fetch receipts');
+        if (!res.ok) {
+            throw new Error('failed to fetch receipts');
+        }
+
         const data = await res.json();
         this.receipts = Array.isArray(data) ? data : [];
       } catch (e) {

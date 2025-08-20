@@ -23,6 +23,7 @@
     })();
   </script>
   <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body class="h-full bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
 <div x-data="stats" x-init="init()" class="min-h-screen">
@@ -103,19 +104,14 @@
       </div>
     </section>
 
-    <!-- Monthly bars -->
+    <!-- Monthly line chart -->
     <section class="mt-8 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold">Mesečni troškovi</h2>
         <div class="text-sm text-gray-500 dark:text-gray-400">Prikaz za <span x-text="selectedYear"></span></div>
       </div>
-      <div class="grid grid-cols-12 gap-2 items-end" style="height: 180px;">
-        <template x-for="(val, idx) in data.monthly" :key="idx">
-          <div class="flex flex-col items-center justify-end">
-            <div class="w-5 sm:w-6 rounded-t bg-cyan-600/70 dark:bg-cyan-500/80" :style="{ height: barHeight(val) + '%' }" title=""></div>
-            <div class="mt-1 text-[10px] text-gray-500 dark:text-gray-400" x-text="monthShort(idx)"></div>
-          </div>
-        </template>
+      <div class="relative">
+        <canvas x-ref="monthlyLine" height="220"></canvas>
       </div>
       <div class="mt-4 grid grid-cols-12 gap-2">
         <template x-for="(cnt, idx) in data.monthly_counts" :key="'c'+idx">

@@ -6,6 +6,14 @@ import (
 	"github.com/rs/zerolog"
 )
 
+func (c *Container) GetLocalStorage() string {
+	return ""
+}
+
+func (c *Container) GetS3Storage() string {
+	return ""
+}
+
 func (c *Container) MTSProvider() provider.Interface {
 	if c.mtsProvider == nil {
 		cfg := c.Config.Providers["mts"]

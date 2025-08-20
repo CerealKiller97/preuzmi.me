@@ -6,11 +6,13 @@ document.addEventListener('alpine:init', () => {
     selectedYear: new Date().getFullYear(),
     data: { monthly: Array(12).fill(0), monthly_counts: Array(12).fill(0), total: 0, average: 0, currency: '' },
     loading: false,
+    chart: null,
 
     async init() {
       await this.fetchProviders();
       await this.fetchYears();
       await this.fetchStats();
+      this.renderChart();
     },
 
     async fetchProviders() {
@@ -63,12 +65,90 @@ document.addEventListener('alpine:init', () => {
           average: Number(json.average || 0),
           currency: String(json.currency || ''),
         };
+        this.renderChart();
       } catch (e) {
         console.error(e);
         this.data = { monthly: Array(12).fill(0), monthly_counts: Array(12).fill(0), total: 0, average: 0, currency: '' };
+        this.renderChart();
       } finally {
         this.loading = false;
       }
+    },
+
+    renderChart() {
+      const el = this.$refs.monthlyLine;
+      if (!el || typeof Chart === 'undefined') return;
+
+      const dark = document.documentElement.classList.contains('dark');
+      const gridColor = dark ? 'rgba(148,163,184,0.2)' : 'rgba(100,116,139,0.2)';
+      const tickColor = dark ? '#CBD5E1' : '#475569';
+      const legendColor = tickColor;
+      const cyan = 'rgb(34 211 238)'; // cyan-400
+      const cyanFill = 'rgba(34,211,238,0.15)';
+
+      const labels = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Avg','Sep','Okt','Nov','Dec'];
+      const data = this.data.monthly || Array(12).fill(0);
+
+      if (this.chart) {
+        this.chart.data.labels = labels;
+        this.chart.data.datasets[0].data = data;
+        this.chart.options.scales.x.ticks.color = tickColor;
+        this.chart.options.scales.y.ticks.color = tickColor;
+        this.chart.options.scales.x.grid.color = gridColor;
+        this.chart.options.scales.y.grid.color = gridColor;
+        this.chart.options.plugins.legend.labels.color = legendColor;
+        this.chart.update();
+        return;
+      }
+
+      this.chart = new Chart(el.getContext('2d'), {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Mesečni troškovi',
+              data,
+              borderColor: cyan,
+              backgroundColor: cyanFill,
+              tension: 0.35,
+              pointRadius: 3,
+              pointHoverRadius: 4,
+              fill: true,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              display: true,
+              labels: { color: legendColor },
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const v = ctx.parsed.y || 0;
+                  return this.formatMoney(v, this.data.currency);
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              grid: { color: gridColor },
+              ticks: { color: tickColor },
+            },
+            y: {
+              beginAtZero: true,
+              grid: { color: gridColor },
+              ticks: { color: tickColor },
+            },
+          },
+        },
+      });
     },
 
     toggleProvider(p) {
@@ -90,14 +170,6 @@ document.addEventListener('alpine:init', () => {
     monthShort(idx) {
       const names = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Avg','Sep','Okt','Nov','Dec'];
       return names[idx] || '';
-    },
-
-    barHeight(val) {
-      const arr = this.data.monthly || [];
-      const max = Math.max(0, ...arr);
-      if (!max) return 0;
-      const pct = (Number(val) || 0) / max * 100;
-      return Math.max(2, Math.min(100, Math.round(pct)));
     },
 
     formatMoney(amount, currency) {

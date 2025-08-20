@@ -31,6 +31,7 @@ func Routes(c *container.Container) {
 	http.HandleFunc("GET /api/providers", providersAPIHandler(c.Config))
 	http.HandleFunc("GET /api/receipts", receiptsAPIHandler())
 	http.HandleFunc("GET /api/stats", statsAPIHandler())
+	http.HandleFunc("GET /api/expenses/monthly", expensesMonthlyAPIHandler())
 }
 
 type PageData struct {
@@ -401,11 +402,22 @@ func statsAPIHandler() Handler {
 			}
 			idx := m - 1
 			counts[idx]++
-			if metaRec, ok := mmap[strings.ToLower(fmt.Sprintf("%s|%s", it.Period, it.Provider))]; ok {
-				monthly[idx] += metaRec.Amount
-				if currency == "" && metaRec.Currency != "" {
-					currency = metaRec.Currency
+		}
+		// Aggregate amounts from metadata independently (dummy/demo friendly)
+		for _, metaRec := range meta {
+			m, y := parsePeriod(metaRec.Period)
+			if m < 1 || m > 12 || y != year {
+				continue
+			}
+			if len(allowed) > 0 {
+				if _, ok := allowed[strings.ToLower(metaRec.Provider)]; !ok {
+					continue
 				}
+			}
+			idx := m - 1
+			monthly[idx] += metaRec.Amount
+			if currency == "" && metaRec.Currency != "" {
+				currency = metaRec.Currency
 			}
 		}
 		total := 0.0
@@ -426,6 +438,87 @@ func statsAPIHandler() Handler {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			log.Err(err).Msg("Error encoding stats")
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}
+}
+
+// expensesMonthlyAPIHandler returns monthly expenses aggregated from metadata only
+func expensesMonthlyAPIHandler() Handler {
+	return func(w http.ResponseWriter, r *http.Request) {
+		meta, err := loadReceiptMeta()
+		if err != nil {
+			log.Err(err).Msg("Error loading receipt metadata for expenses")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		// Provider filter
+		allowed := map[string]struct{}{}
+		if providersParam := strings.TrimSpace(r.URL.Query().Get("provider")); providersParam != "" {
+			for _, p := range strings.Split(providersParam, ",") {
+				p = strings.TrimSpace(strings.ToLower(p))
+				if p != "" {
+					allowed[p] = struct{}{}
+				}
+			}
+		}
+
+		// Year param (default to current)
+		year := 0
+		if yStr := strings.TrimSpace(r.URL.Query().Get("year")); yStr != "" {
+			if y, err := strconv.Atoi(yStr); err == nil {
+				year = y
+			}
+		}
+		if year == 0 {
+			year = time.Now().Year()
+		}
+
+		monthly := make([]float64, 12)
+		currency := ""
+
+		for _, m := range meta {
+			mm, yy := parsePeriod(m.Period)
+			if mm < 1 || mm > 12 || yy != year {
+				continue
+			}
+			if len(allowed) > 0 {
+				if _, ok := allowed[strings.ToLower(m.Provider)]; !ok {
+					continue
+				}
+			}
+			monthly[mm-1] += m.Amount
+			if currency == "" && m.Currency != "" {
+				currency = m.Currency
+			}
+		}
+
+		names := []string{"Jan","Feb","Mar","Apr","Maj","Jun","Jul","Avg","Sep","Okt","Nov","Dec"}
+		months := make([]map[string]any, 12)
+		total := 0.0
+		for i := 0; i < 12; i++ {
+			amt := monthly[i]
+			total += amt
+			months[i] = map[string]any{
+				"index":  i + 1,
+				"name":   names[i],
+				"amount": amt,
+			}
+		}
+		avg := total / 12.0
+
+		resp := map[string]any{
+			"year":     year,
+			"currency": currency,
+			"months":   months,
+			"total":    total,
+			"average":  avg,
+		}
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			log.Err(err).Msg("Error encoding monthly expenses")
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}

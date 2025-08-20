@@ -29,3 +29,6 @@ go.work
 
 config.json
 receipts
+node_modules
+tmp
+.idea

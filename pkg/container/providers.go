@@ -16,6 +16,9 @@ import (
 // GetStorage returns the receipt storage backend selected by config.json:
 // the local download folder or an S3-compatible bucket.
 func (c *Container) GetStorage() storage.Interface {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.storage == nil {
 		s, err := storage.New(c.config)
 		if err != nil {
@@ -36,10 +39,13 @@ func (c *Container) providerLogger(name string) zerolog.Logger {
 }
 
 func (c *Container) MTSProvider() provider.Interface {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.mtsProvider == nil {
 		c.mtsProvider = mts.New(
-			c.GetConfig().Providers["mts"],
-			c.GetStorage(),
+			c.config.Providers["mts"],
+			c.getStorageLocked(),
 			c.providerLogger("mts"),
 		)
 	}
@@ -48,11 +54,14 @@ func (c *Container) MTSProvider() provider.Interface {
 }
 
 func (c *Container) A1Provider() provider.Interface {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.a1Provider == nil {
 		c.a1Provider = a1.New(
-			c.GetConfig().Providers["a1"],
+			c.config.Providers["a1"],
 			c.providerLogger("a1"),
-			c.GetStorage(),
+			c.getStorageLocked(),
 		)
 	}
 
@@ -60,15 +69,31 @@ func (c *Container) A1Provider() provider.Interface {
 }
 
 func (c *Container) EsanduceProvider() provider.Interface {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.esanduceProvider == nil {
 		c.esanduceProvider = esanduce.New(
-			c.GetConfig().Providers["esanduce"],
+			c.config.Providers["esanduce"],
 			c.providerLogger("esanduce"),
-			c.GetStorage(),
+			c.getStorageLocked(),
 		)
 	}
 
 	return c.esanduceProvider
+}
+
+// getStorageLocked assumes c.mu is already held.
+func (c *Container) getStorageLocked() storage.Interface {
+	if c.storage == nil {
+		s, err := storage.New(c.config)
+		if err != nil {
+			c.Logger.Fatal().Err(err).Msg("Could not initialize receipt storage")
+		}
+		c.storage = s
+	}
+
+	return c.storage
 }
 
 // implemented lists the providers that actually have a download implementation.

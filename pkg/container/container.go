@@ -4,11 +4,13 @@ import (
 	"context"
 	"embed"
 	"io"
+	"sync"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/notify"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/provider"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/storage"
+	"github.com/CerealKiller97/preuzmi.me/pkg/utils"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -16,6 +18,7 @@ import (
 type Container struct {
 	Ctx              context.Context
 	cancel           context.CancelFunc
+	mu               sync.RWMutex
 	config           *config.Config
 	Logger           zerolog.Logger
 	Assets           embed.FS
@@ -51,12 +54,40 @@ func (c *Container) GetVersion() string {
 }
 
 func (c *Container) GetConfig() *config.Config {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	return c.config
+}
+
+// Reload replaces the live configuration and drops cached backends so the next
+// download / notification uses the new values without a process restart.
+func (c *Container) Reload(cfg *config.Config) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	*c.config = *cfg
+	c.storage = nil
+	c.notifier = nil
+	c.mtsProvider = nil
+	c.a1Provider = nil
+	c.esanduceProvider = nil
+	c.yettelProvider = nil
+	c.epsProvider = nil
+
+	level := cfg.LogLevel
+	if level == "" {
+		level = "info"
+	}
+	utils.ConfigureDefaultLogger(level, cfg.PrettyPrint)
 }
 
 // GetNotifier returns the notification service selected by config.json.
 // Modes that are off yield a no-op service, so callers can always call it.
 func (c *Container) GetNotifier() *notify.Service {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.notifier == nil {
 		n, err := notify.NewFromConfig(c.config, c.Logger.With().Str("component", "notify").Logger())
 		if err != nil {

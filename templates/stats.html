@@ -1,83 +1,48 @@
 <!DOCTYPE html>
 <html lang="sr" class="h-full">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Preuzmi.me — Statistika</title>
-  <script>
-    tailwind.config = { darkMode: 'class' };
-  </script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    (function () {
-      try {
-        const ls = localStorage.getItem('theme');
-        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-        if (ls === 'dark' || (!ls && prefersDark)) document.documentElement.classList.add('dark');
-        window.toggleTheme = function () {
-          const el = document.documentElement;
-          const isDark = el.classList.toggle('dark');
-          localStorage.setItem('theme', isDark ? 'dark' : 'light');
-        }
-      } catch (_) {}
-    })();
-  </script>
-  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  {{template "head" .}}
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
-<body class="h-full bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-<div x-data="stats" x-init="init()" class="min-h-screen">
-  <!-- Top bar -->
-  <header class="border-b border-gray-200 dark:border-gray-800 bg-white/70 dark:bg-gray-900/70 backdrop-blur supports-[backdrop-filter]:bg-white/60 supports-[backdrop-filter]:dark:bg-gray-900/60 sticky top-0 z-30">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="w-8 h-8 rounded-lg bg-cyan-600 flex items-center justify-center text-white font-bold">P</div>
-        <div>
-          <div class="font-semibold">Preuzmi.me</div>
-          <div class="text-xs text-gray-500 dark:text-gray-400">v{{ .Version }}</div>
-        </div>
-      </div>
-      <nav class="hidden md:flex items-center gap-3 sm:gap-6 text-sm">
-        <a href="/dashboard" class="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white">Računi</a>
-        <a href="/stats" class="text-cyan-600 dark:text-cyan-400 font-medium">Statistika</a>
-        <button type="button" @click="window.toggleTheme()" title="Promeni temu" class="ml-3 inline-flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-700 p-2 text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white bg-white dark:bg-gray-800">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5 hidden dark:block"><path d="M21.752 15.002A9.718 9.718 0 0 1 12 21.75c-5.385 0-9.75-4.365-9.75-9.75 0-4.358 2.9-8.042 6.857-9.31a.75.75 0 0 1 .964.966A8.25 8.25 0 0 0 20.78 14.04a.75.75 0 0 1 .972.962z"/></svg>
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5 dark:hidden"><path d="M12 18.75a6.75 6.75 0 1 0 0-13.5 6.75 6.75 0 0 0 0 13.5Z"/><path fill-rule="evenodd" d="M12 1.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0V2.25A.75.75 0 0 1 12 1.5Zm0 18.75a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5a.75.75 0 0 1 .75-.75ZM4.72 4.72a.75.75 0 0 1 1.06 0L6.84 5.78a.75.75 0 1 1-1.06 1.06L4.72 5.78a.75.75 0 0 1 0-1.06Zm10.56 10.56a.75.75 0 0 1 1.06 0l1.06 1.06a.75.75 0 1 1-1.06 1.06l-1.06-1.06a.75.75 0 0 1 0-1.06ZM1.5 12a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5H2.25A.75.75 0 0 1 1.5 12Zm18.75 0a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5a.75.75 0 0 1-.75-.75Zm-3.03-7.28a.75.75 0 0 1 1.06 0l1.06 1.06a.75.75 0 0 1-1.06 1.06L17.22 5.78a.75.75 0 0 1 0-1.06ZM4.72 17.22a.75.75 0 0 1 1.06 0l1.06 1.06a.75.75 0 0 1-1.06 1.06L4.72 18.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
-        </button>
-      </nav>
-    </div>
-  </header>
 
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div class="flex items-center justify-between">
-      <h1 class="text-2xl font-semibold">Statistika</h1>
-      <div class="text-sm text-gray-500 dark:text-gray-400">Godina: <span x-text="selectedYear"></span></div>
+<body class="h-full">
+<div x-data="statsPage" class="flex min-h-screen flex-col">
+  {{template "header" .}}
+
+  <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
+    <div class="animate-fade-in-up flex flex-col gap-1">
+      <h1 class="text-2xl font-semibold tracking-tight">Statistika</h1>
+      <p class="text-sm text-muted-foreground">
+        Pregled troškova po mesecima i provajderima za izabranu godinu.
+      </p>
     </div>
 
     <!-- Filters -->
-    <section class="mt-6 space-y-4">
-      <div class="flex items-end flex-wrap gap-3">
-        <div class="flex flex-col w-full sm:w-auto">
-          <label class="text-sm text-gray-600 dark:text-gray-300 mb-1">Godina</label>
-          <div class="relative">
-            <select x-model.number="selectedYear" @change="fetchStats()" class="appearance-none w-full sm:w-44 h-11 rounded-lg ring-1 ring-gray-300 dark:ring-gray-700 border-0 bg-white/70 dark:bg-gray-900/70 text-gray-900 dark:text-gray-100 pl-3 pr-10 focus:outline-none focus:ring-2 focus:ring-cyan-500/70 shadow-sm transition-colors">
-              <template x-for="y in years" :key="y">
-                <option :value="y" x-text="y"></option>
-              </template>
-            </select>
-            <span class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 dark:text-gray-500">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5"><path fill-rule="evenodd" d="M12 14.5a.75.75 0 0 1-.53-.22l-4.25-4.25a.75.75 0 1 1 1.06-1.06L12 12.69l3.72-3.72a.75.75 0 0 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-.53.22Z" clip-rule="evenodd"/></svg>
-            </span>
-          </div>
+    <section class="mt-6 flex flex-col gap-4">
+      <div class="flex w-full flex-col gap-1.5 sm:w-44">
+        <label for="year" class="text-sm font-medium leading-none">Godina</label>
+        <div class="relative">
+          <select id="year" x-model.number="selectedYear" @change="fetchStats()" class="input appearance-none pr-9">
+            <template x-for="y in years" :key="y">
+              <option :value="y" x-text="y"></option>
+            </template>
+          </select>
+          <span class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </span>
         </div>
       </div>
 
-      <div class="flex items-center flex-wrap gap-2">
-        <button @click="clearProviders()" :class="selectedProviders.length===0 ? 'bg-cyan-600 text-white ring-cyan-600' : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 ring-gray-300 dark:ring-gray-600'" class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ring-1 ring-inset">
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" @click="clearProviders()"
+                :class="selectedProviders.length === 0 ? 'pill-active' : 'pill-inactive'" class="pill">
           Svi provajderi
         </button>
         <template x-for="p in providers" :key="p">
-          <button @click="toggleProvider(p)" :class="selectedProviders.includes(p) ? 'bg-cyan-600 text-white ring-cyan-600' : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 ring-gray-300 dark:ring-gray-600'" class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ring-1 ring-inset">
+          <button type="button" @click="toggleProvider(p)"
+                  :class="selectedProviders.includes(p) ? 'pill-active' : 'pill-inactive'" class="pill">
             <span x-text="p.toUpperCase()"></span>
           </button>
         </template>
@@ -85,42 +50,154 @@
     </section>
 
     <!-- Summary cards -->
-    <section class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
-        <div class="text-sm text-gray-500 dark:text-gray-400">Ukupno godišnje</div>
-        <div class="mt-2 text-2xl font-semibold" x-text="formatMoney(data.total, data.currency)"></div>
+    <section class="animate-fade-in-up mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" style="--stagger: 2">
+      <div class="card p-5">
+        <div class="text-sm font-medium text-muted-foreground">Ukupno godišnje</div>
+        <div class="mt-2 text-2xl font-semibold tracking-tight" x-text="formatMoney(data.total, data.currency)"></div>
+        <p class="mt-1 text-xs text-muted-foreground">
+          Za <span x-text="selectedYear"></span>.
+        </p>
       </div>
-      <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
-        <div class="text-sm text-gray-500 dark:text-gray-400">Prosek mesečno</div>
-        <div class="mt-2 text-2xl font-semibold" x-text="formatMoney(data.average, data.currency)"></div>
+
+      <div class="card p-5">
+        <div class="text-sm font-medium text-muted-foreground">Prosek mesečno</div>
+        <div class="mt-2 text-2xl font-semibold tracking-tight" x-text="formatMoney(data.average, data.currency)"></div>
+        <p class="mt-1 text-xs text-muted-foreground">Prosek preko 12 meseci.</p>
       </div>
-      <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
-        <div class="text-sm text-gray-500 dark:text-gray-400">Broj računa</div>
-        <div class="mt-2 text-2xl font-semibold" x-text="totalCount"></div>
+
+      <div class="card p-5">
+        <div class="text-sm font-medium text-muted-foreground">Najskuplji mesec</div>
+        <div class="mt-2 text-2xl font-semibold tracking-tight" x-text="formatMoney(peakMonth.amount, data.currency)"></div>
+        <p class="mt-1 text-xs text-muted-foreground" x-text="peakMonth.name || '—'"></p>
       </div>
-      <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
-        <div class="text-sm text-gray-500 dark:text-gray-400">Odabrani provajderi</div>
-        <div class="mt-2 text-lg" x-text="selectedProviders.length === 0 ? 'Svi' : selectedProviders.map(p=>p.toUpperCase()).join(', ')"></div>
+
+      <div class="card p-5">
+        <div class="text-sm font-medium text-muted-foreground">Broj računa</div>
+        <div class="mt-2 text-2xl font-semibold tracking-tight" x-text="totalCount"></div>
+        <p class="mt-1 truncate text-xs text-muted-foreground"
+           x-text="selectedProviders.length === 0 ? 'Svi provajderi' : selectedProviders.map(p => p.toUpperCase()).join(', ')"></p>
       </div>
     </section>
 
-    <!-- Monthly line chart -->
-    <section class="mt-8 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-semibold">Mesečni troškovi</h2>
-        <div class="text-sm text-gray-500 dark:text-gray-400">Prikaz za <span x-text="selectedYear"></span></div>
+    <!-- Monthly chart -->
+    <section class="card animate-fade-in-up mt-6 p-5" style="--stagger: 3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 class="text-base font-semibold tracking-tight">Mesečni troškovi</h2>
+          <p class="text-sm text-muted-foreground">Prikaz za <span x-text="selectedYear"></span>.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1 rounded-lg bg-muted p-1">
+            <button type="button" @click="setChartType('bar')"
+                    :class="chartType === 'bar' ? 'bg-background shadow-sm' : 'text-muted-foreground'"
+                    class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors">
+              Stubići
+            </button>
+            <button type="button" @click="setChartType('line')"
+                    :class="chartType === 'line' ? 'bg-background shadow-sm' : 'text-muted-foreground'"
+                    class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors">
+              Linije
+            </button>
+          </div>
+          <span class="badge badge-secondary" x-text="data.currency || 'RSD'"></span>
+        </div>
       </div>
-      <div class="relative">
-        <canvas x-ref="monthlyLine" height="220"></canvas>
+
+      <div class="relative mt-5 h-[300px]">
+        <canvas x-ref="monthlyLine"></canvas>
       </div>
-      <div class="mt-4 grid grid-cols-12 gap-2">
-        <template x-for="(cnt, idx) in data.monthly_counts" :key="'c'+idx">
-          <div class="text-center text-xs text-gray-500 dark:text-gray-400"><span x-text="cnt"></span> rač.</div>
-        </template>
+    </section>
+
+    <!-- Monthly prices per provider -->
+    <section class="card animate-fade-in-up mt-6 p-5" style="--stagger: 4">
+      <h2 class="text-base font-semibold tracking-tight">Cene po provajderu i mesecu</h2>
+      <p class="text-sm text-muted-foreground">
+        Iznosi računa za <span x-text="selectedYear"></span>, sa godišnjim zbirom po provajderu.
+      </p>
+
+      <div x-show="providerSeries.length === 0" class="mt-6 text-sm text-muted-foreground">
+        Nema podataka za izabranu godinu.
+      </div>
+
+      <div class="mt-5 overflow-x-auto" x-show="providerSeries.length > 0">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b text-left text-muted-foreground">
+              <th class="pb-2 pr-4 font-medium">Mesec</th>
+              <template x-for="row in providerSeries" :key="row.provider">
+                <th class="pb-2 pr-4 text-right font-medium" x-text="row.provider.toUpperCase()"></th>
+              </template>
+              <th class="pb-2 text-right font-medium">Ukupno</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="(name, idx) in monthNames" :key="idx">
+              <tr class="border-b last:border-0">
+                <td class="py-2.5 pr-4 font-medium" x-text="name"></td>
+                <template x-for="row in providerSeries" :key="row.provider">
+                  <td class="py-2.5 pr-4 text-right tabular-nums text-muted-foreground"
+                      x-text="row.monthly[idx] ? formatMoney(row.monthly[idx], data.currency) : '—'"></td>
+                </template>
+                <td class="py-2.5 text-right font-medium tabular-nums"
+                    x-text="data.monthly[idx] ? formatMoney(data.monthly[idx], data.currency) : '—'"></td>
+              </tr>
+            </template>
+          </tbody>
+          <tfoot>
+            <tr class="border-t">
+              <td class="pt-3 pr-4 font-semibold">Godišnje</td>
+              <template x-for="row in providerSeries" :key="row.provider">
+                <td class="pt-3 pr-4 text-right font-semibold tabular-nums"
+                    x-text="formatMoney(yearlyFor(row), data.currency)"></td>
+              </template>
+              <td class="pt-3 text-right font-semibold tabular-nums"
+                  x-text="formatMoney(data.total, data.currency)"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+
+    <!-- Per-provider breakdown -->
+    <section class="card animate-fade-in-up mt-6 p-5" style="--stagger: 5">
+      <h2 class="text-base font-semibold tracking-tight">Po provajderu</h2>
+      <p class="text-sm text-muted-foreground">Udeo svakog provajdera u ukupnom trošku.</p>
+
+      <div x-show="byProvider.length === 0" class="mt-6 text-sm text-muted-foreground">
+        Nema podataka za izabranu godinu.
+      </div>
+
+      <div class="mt-5 grid items-center gap-8 lg:grid-cols-[280px_1fr]" x-show="byProvider.length > 0">
+        <div class="relative mx-auto h-[240px] w-full max-w-[280px]">
+          <canvas x-ref="providerDonut"></canvas>
+        </div>
+
+        <ul class="flex flex-col gap-4">
+          <template x-for="(row, i) in byProvider" :key="row.provider">
+            <li>
+              <div class="flex items-center justify-between gap-3 text-sm">
+                <span class="flex items-center gap-2 font-medium">
+                  <span class="h-2.5 w-2.5 shrink-0 rounded-full"
+                        :style="`background: var(--brand-${row.provider.toLowerCase()}, var(--chart-series-${(i % 5) + 1}))`"></span>
+                  <span x-text="row.provider.toUpperCase()"></span>
+                </span>
+                <span class="text-muted-foreground">
+                  <span class="font-medium text-foreground" x-text="formatMoney(row.amount, data.currency)"></span>
+                  <span x-text="'· ' + row.share.toFixed(1) + '%'"></span>
+                </span>
+              </div>
+              <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div class="h-full rounded-full transition-[width] duration-500"
+                     :style="`width: ${row.share}%; background: var(--brand-${row.provider.toLowerCase()}, var(--chart-series-${(i % 5) + 1}))`"></div>
+              </div>
+            </li>
+          </template>
+        </ul>
       </div>
     </section>
   </main>
 </div>
+
 <script src="/assets/js/stats.js"></script>
 </body>
 </html>

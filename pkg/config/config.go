@@ -111,16 +111,35 @@ const (
 	NotifyModeAllDone    = "all_done"
 )
 
-func New() (Config, error) {
+// SecretPlaceholder is what the settings UI sends back for an unchanged secret.
+const SecretPlaceholder = "••••••••"
+
+// Path returns the absolute path of config.json in the process working directory.
+func Path() (string, error) {
 	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	return path.Join(cwd, "config.json"), nil
+}
+
+func New() (Config, error) {
+	p, err := Path()
 	if err != nil {
 		return Config{}, err
 	}
 
-	f, err := os.OpenFile(path.Join(cwd, "config.json"), os.O_RDONLY, 0o600)
+	return Load(p)
+}
+
+// Load reads and validates config from path.
+func Load(path string) (Config, error) {
+	f, err := os.OpenFile(path, os.O_RDONLY, 0o600)
 	if err != nil {
 		return Config{}, err
 	}
+	defer f.Close()
 
 	cfg := Config{}
 
@@ -140,9 +159,39 @@ func New() (Config, error) {
 	return cfg, nil
 }
 
+// Save writes cfg to path atomically (temp file + rename).
+func Save(path string, cfg Config) error {
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+
+	return os.Rename(tmp, path)
+}
+
+// KeepSecret returns current when incoming is empty or the UI placeholder,
+// otherwise the new value. Lets the settings form omit unchanged secrets.
+func KeepSecret(incoming, current string) string {
+	if incoming == "" || incoming == SecretPlaceholder {
+		return current
+	}
+
+	return incoming
+}
+
 // Validate checks the storage configuration. An empty "storage" value falls
 // back to local so existing config files keep working unchanged.
 func (c *Config) Validate() error {
+	if c.Application.Port < 0 || c.Application.Port > 65535 {
+		return fmt.Errorf("application.port must be between 0 and 65535, got %d", c.Application.Port)
+	}
+
 	switch c.Storage {
 	case "":
 		c.Storage = StorageLocal
@@ -158,6 +207,10 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid storage %q, allowed values are %q and %q", c.Storage, StorageLocal, StorageS3)
 	}
 
+	if c.DownloadPath == "" {
+		return errors.New("download_path is empty")
+	}
+
 	if c.CheckUntil == 0 {
 		c.CheckUntil = DefaultCheckUntil
 	}
@@ -165,11 +218,40 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("check_until must be between 1 and 31, got %d", c.CheckUntil)
 	}
 
+	switch c.LogLevel {
+	case "":
+		c.LogLevel = "info"
+	case "trace", "debug", "info", "warn", "error", "fatal", "panic", "disabled":
+	default:
+		return fmt.Errorf("invalid log_level %q", c.LogLevel)
+	}
+
 	if err := c.validateNotifications(); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// MergeSecrets copies secret fields from prev whenever next still holds the
+// UI placeholder or an empty string, so applying settings never blanks a
+// password the user did not intentionally replace.
+func (next *Config) MergeSecrets(prev Config) {
+	next.Application.Certs.PrivateKey = KeepSecret(next.Application.Certs.PrivateKey, prev.Application.Certs.PrivateKey)
+	next.S3.AccessKey = KeepSecret(next.S3.AccessKey, prev.S3.AccessKey)
+	next.S3.SecretKey = KeepSecret(next.S3.SecretKey, prev.S3.SecretKey)
+	next.Notifications.SMTP.Password = KeepSecret(next.Notifications.SMTP.Password, prev.Notifications.SMTP.Password)
+	next.Notifications.Telegram.BotToken = KeepSecret(next.Notifications.Telegram.BotToken, prev.Notifications.Telegram.BotToken)
+
+	if next.Providers == nil {
+		next.Providers = map[Provider]Credentials{}
+	}
+
+	for name, prevCreds := range prev.Providers {
+		cur := next.Providers[name]
+		cur.Password = KeepSecret(cur.Password, prevCreds.Password)
+		next.Providers[name] = cur
+	}
 }
 
 // validateNotifications only requires delivery settings when mode is not off.

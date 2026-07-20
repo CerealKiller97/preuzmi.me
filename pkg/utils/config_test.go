@@ -1,23 +1,17 @@
 package utils_test
 
 import (
+	"testing"
+
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
 	"github.com/CerealKiller97/preuzmi.me/pkg/utils"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
-func TestName(t *testing.T) {
+func TestGetPairsReturnsOnlyFullyConfiguredProviders(t *testing.T) {
 	// Arrange
 	assert := require.New(t)
 	cfg := config.Config{
-		Application: struct {
-			Host string `json:"host"`
-			Port int    `json:"port"`
-		}{},
-		DownloadPath: "",
-		LogLevel:     "",
-		PrettyPrint:  false,
 		Providers: map[config.Provider]config.Credentials{
 			"mts": {
 				Username: "username",
@@ -29,40 +23,53 @@ func TestName(t *testing.T) {
 			},
 		},
 	}
-	// Act
-	pairs, err := utils.GetPairs(cfg)
-	// Assert
 
-	assert.Equal([]config.Provider{"mts"}, pairs)
+	// Act
+	pairs, err := utils.GetPairs(&cfg)
+
+	// Assert
 	assert.NoError(err)
+	assert.Equal([]string{"mts"}, pairs)
 }
 
-func TestEmpty(t *testing.T) {
+func TestGetPairsSkipsProvidersMissingOneHalfOfThePair(t *testing.T) {
 	// Arrange
 	assert := require.New(t)
 	cfg := config.Config{
-		Application: struct {
-			Host string `json:"host"`
-			Port int    `json:"port"`
-		}{},
-		DownloadPath: "",
-		LogLevel:     "",
-		PrettyPrint:  false,
 		Providers: map[config.Provider]config.Credentials{
 			"mts": {
-				Username: "",
+				Username: "username",
 				Password: "",
 			},
 			"a1": {
 				Username: "",
-				Password: "",
+				Password: "password",
 			},
 		},
 	}
-	// Act
-	pairs, err := utils.GetPairs(cfg)
-	// Assert
 
+	// Act
+	pairs, err := utils.GetPairs(&cfg)
+
+	// Assert
 	assert.Empty(pairs)
-	assert.Error(err)
+	assert.ErrorIs(err, utils.ErrEmptyProviders)
+}
+
+func TestGetPairsErrorsWhenNothingIsConfigured(t *testing.T) {
+	// Arrange
+	assert := require.New(t)
+	cfg := config.Config{
+		Providers: map[config.Provider]config.Credentials{
+			"mts": {Username: "", Password: ""},
+			"a1":  {Username: "", Password: ""},
+		},
+	}
+
+	// Act
+	pairs, err := utils.GetPairs(&cfg)
+
+	// Assert
+	assert.Empty(pairs)
+	assert.ErrorIs(err, utils.ErrEmptyProviders)
 }

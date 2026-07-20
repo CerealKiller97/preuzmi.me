@@ -4,14 +4,14 @@
   "description": "Tool for lazy people (Automated receipt download for many providers)",
   "main": "index.js",
   "scripts": {
-    "build": "tailwindcss build -o static/css/tailwind.css",
-    "watch": "tailwindcss build -o static/css/tailwind.css --watch"
+    "build": "tailwindcss -i ./assets/css/app.css -o ./assets/dist/css/app.css --minify",
+    "watch": "tailwindcss -i ./assets/css/app.css -o ./assets/dist/css/app.css --watch"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/CerealKiller97/preuzmi.me.git"
   },
-  "author": "",
+  "author": "Stefan Bogdanovic",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/CerealKiller97/preuzmi.me/issues"

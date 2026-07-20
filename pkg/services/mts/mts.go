@@ -2,17 +2,18 @@ package mts
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
 	"github.com/CerealKiller97/preuzmi.me/pkg/dto"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/provider"
+	"github.com/CerealKiller97/preuzmi.me/pkg/services/storage"
 	"github.com/CerealKiller97/preuzmi.me/pkg/utils"
 	"github.com/rs/zerolog"
 )
@@ -40,16 +41,16 @@ type (
 	}
 
 	Service struct {
-		config       config.Credentials
-		downloadPath string
-		logger       zerolog.Logger
-		http         *http.Client
+		config  config.Credentials
+		storage storage.Interface
+		logger  zerolog.Logger
+		http    *http.Client
 	}
 )
 
 func New(
 	config config.Credentials,
-	downloadPath string,
+	storage storage.Interface,
 	logger zerolog.Logger,
 ) *Service {
 	return &Service{
@@ -57,8 +58,8 @@ func New(
 		http: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		downloadPath: downloadPath,
-		logger:       logger,
+		storage: storage,
+		logger:  logger,
 	}
 }
 
@@ -231,24 +232,14 @@ func (s *Service) downloadReceipt(invoiceNumber string, billingAccountId string,
 		return err
 	}
 
-	formattedPath := fmt.Sprintf(
-		"%s/%s/%s.pdf",
-		s.downloadPath,
-		utils.FormatFolderPath(),
-		fileName,
-	)
-	f, err := os.OpenFile(formattedPath, os.O_WRONLY|os.O_CREATE, 0o755)
-	if err != nil {
-		return err
-	}
+	key := fmt.Sprintf("%s/%s.pdf", utils.FormatFolderPath(), fileName)
 
-	_, err = f.Write(data)
-	if err != nil {
+	if err := s.storage.Save(context.Background(), key, data); err != nil {
 		return err
 	}
 
 	s.logger.Info().
-		Str("path", formattedPath).
+		Str("key", key).
 		Msg("Successfully downloaded receipt")
 
 	return nil

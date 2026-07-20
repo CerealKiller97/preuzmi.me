@@ -2,45 +2,56 @@ package cmd
 
 import (
 	"github.com/CerealKiller97/preuzmi.me/pkg/container"
-	provider2 "github.com/CerealKiller97/preuzmi.me/pkg/services/provider"
+	"github.com/CerealKiller97/preuzmi.me/pkg/services/refresh"
 	"github.com/CerealKiller97/preuzmi.me/pkg/utils"
 	"github.com/rs/zerolog/log"
-	"sync"
 )
 
+// Checks downloads the latest receipt from every configured provider.
+//
+// The actual work lives in the refresh service, which the UI's refresh button
+// calls too, so both entry points behave identically.
 func Checks(c *container.Container) {
-	cfg := c.Config
-	pairs, err := utils.GetPairs(cfg)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to get pairs")
+	cfg := c.GetConfig()
+
+	if !cfg.RefreshAllowed() {
+		log.Info().
+			Int("check_until", cfg.CheckUntil).
+			Msg("Skipping refresh: past check_until day of the month")
+		return
 	}
 
-	log.Info().Interface("providers", pairs).Msg("Provider configured")
+	pairs, err := utils.GetPairs(cfg)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to get configured providers")
+	}
 
-	var wg sync.WaitGroup
+	log.Info().Interface("providers", pairs).Msg("Providers configured")
 
 	providers := c.GetProviders(pairs)
 	if len(providers) == 0 {
-		log.Fatal().Msg("No providers found")
+		log.Fatal().Msg("No providers with an implementation are configured")
 	}
 
-	errChan := make(chan error, len(providers))
-	for _, provider := range providers {
-		wg.Add(1)
+	failed := 0
+	results := refresh.Run(providers)
+	for _, result := range results {
+		event := log.Info()
+		if !result.OK {
+			event = log.Error()
+			failed++
+		}
 
-		go func(provider provider2.Interface) {
-			defer wg.Done()
-
-			if err := provider.DownloadReceipt(); err != nil {
-				errChan <- err
-			}
-		}(provider)
+		event.
+			Str("provider", result.Provider).
+			Int64("duration_ms", result.DurationMS).
+			Str("error", result.Error).
+			Msg("Receipt download finished")
 	}
 
-	wg.Wait()
-	close(errChan)
+	c.GetNotifier().HandleResults(results)
 
-	for err := range errChan {
-		log.Err(err).Msg("Failed to download receipt")
+	if failed > 0 {
+		log.Warn().Int("failed", failed).Msg("Some providers failed")
 	}
 }

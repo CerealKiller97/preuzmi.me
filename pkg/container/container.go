@@ -3,33 +3,40 @@ package container
 import (
 	"context"
 	"embed"
+	"io"
+
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
+	"github.com/CerealKiller97/preuzmi.me/pkg/services/notify"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/provider"
+	"github.com/CerealKiller97/preuzmi.me/pkg/services/storage"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"io"
 )
 
 type Container struct {
 	Ctx              context.Context
 	cancel           context.CancelFunc
-	Config           *config.Config
+	config           *config.Config
 	Logger           zerolog.Logger
 	Assets           embed.FS
 	templateFS       embed.FS
+	storage          storage.Interface
+	notifier         *notify.Service
 	mtsProvider      provider.Interface
 	a1Provider       provider.Interface
 	esanduceProvider provider.Interface
 	yettelProvider   provider.Interface
 	epsProvider      provider.Interface
+	version          string
 }
 
 var _ io.Closer = &Container{}
 
-func New(ctx context.Context, cfg *config.Config) *Container {
+func New(ctx context.Context, version string, cfg *config.Config) *Container {
 	return &Container{
-		Ctx:    ctx,
-		Config: cfg,
+		Ctx:     ctx,
+		config:  cfg,
+		version: version,
 		Logger: log.
 			Logger.
 			Level(zerolog.InfoLevel).
@@ -39,7 +46,29 @@ func New(ctx context.Context, cfg *config.Config) *Container {
 	}
 }
 
-func (c Container) Close() error {
+func (c *Container) GetVersion() string {
+	return c.version
+}
+
+func (c *Container) GetConfig() *config.Config {
+	return c.config
+}
+
+// GetNotifier returns the notification service selected by config.json.
+// Modes that are off yield a no-op service, so callers can always call it.
+func (c *Container) GetNotifier() *notify.Service {
+	if c.notifier == nil {
+		n, err := notify.NewFromConfig(c.config, c.Logger.With().Str("component", "notify").Logger())
+		if err != nil {
+			c.Logger.Fatal().Err(err).Msg("Could not initialize notifications")
+		}
+		c.notifier = n
+	}
+
+	return c.notifier
+}
+
+func (c *Container) Close() error {
 	// Close resources
 
 	return nil

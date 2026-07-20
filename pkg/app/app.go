@@ -22,7 +22,6 @@ func New(c *container.Container) *App {
 }
 
 func (a *App) Middleware() *App {
-
 	return a
 }
 
@@ -33,20 +32,22 @@ func (a *App) Route() *App {
 }
 
 func (a *App) Serve() error {
+	config := a.c.GetConfig()
 	socket := fmt.Sprintf(
 		"%s:%d",
-		a.c.Config.Application.Host,
-		a.c.Config.Application.Port,
+		config.Application.Host,
+		config.Application.Port,
 	)
 
 	a.c.Logger.
 		Info().
-		Msgf("starting the https server on: https://%s", socket)
+		Str("version", a.c.GetVersion()).
+		Msgf("Starting the HTTPS server on: https://%s", socket)
 
-	return http.ListenAndServeTLS(
+	return http.ListenAndServe(
 		socket,
-		a.c.Config.Application.Certs.Certificate,
-		a.c.Config.Application.Certs.PrivateKey,
+		// config.Application.Certs.Certificate,
+		// config.Application.Certs.PrivateKey,
 		nil,
 	)
 }

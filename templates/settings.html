@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="sr" class="h-full">
+<head>
+  {{template "head" .}}
+  <script src="/assets/js/settings.js"></script>
+</head>
+
+<body class="h-full">
+<div class="flex min-h-screen flex-col">
+  {{template "header" .}}
+
+  <main class="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
+    <div class="animate-fade-in-up flex flex-col gap-1">
+      <h1 class="text-2xl font-semibold tracking-tight">Podešavanja</h1>
+      <p class="text-sm text-muted-foreground">
+        Konfiguracija koju aplikacija trenutno koristi.
+        <span class="text-muted-foreground/80">Polja su samo za čitanje — izmene idu preko</span>
+        <code class="font-mono text-xs">config.json</code>.
+        Pređi mišem preko <span class="inline-flex align-middle text-muted-foreground">ⓘ</span> za objašnjenje.
+      </p>
+    </div>
+
+    <!-- Environment summary -->
+    <section class="animate-fade-in-up mt-6 grid grid-cols-[repeat(auto-fit,minmax(14rem,1fr))] gap-4" style="--stagger: 1">
+      <div class="card p-5" title="Trenutna verzija aplikacije iz fajla version.">
+        <div class="text-sm font-medium text-muted-foreground">Verzija</div>
+        <div class="mt-2 text-2xl font-semibold tracking-tight">v{{ .Version }}</div>
+      </div>
+
+      <div class="card p-5" title="Broj PDF računa pronađenih u folderu za preuzimanje.">
+        <div class="text-sm font-medium text-muted-foreground">Preuzetih računa</div>
+        <div class="mt-2 text-2xl font-semibold tracking-tight">{{ .ReceiptCount }}</div>
+      </div>
+
+      <div class="card p-5" title="Gde se čuvaju preuzeti računi: lokalni folder ili S3 bucket.">
+        <div class="text-sm font-medium text-muted-foreground">Skladište računa</div>
+        <div class="mt-2 flex flex-wrap items-center gap-1.5">
+          {{if eq .Storage "s3"}}
+            <span class="badge badge-success">S3</span>
+          {{else}}
+            <span class="badge badge-secondary">Lokalno</span>
+          {{end}}
+        </div>
+        <p class="mt-2 truncate font-mono text-xs text-muted-foreground" title="{{ .StorageTarget }}">{{ .StorageTarget }}</p>
+      </div>
+
+      {{if eq .Storage "local"}}
+        <div class="card p-5" title="Da li download_path postoji i da li aplikacija može da upisuje u njega.">
+          <div class="text-sm font-medium text-muted-foreground">Folder za preuzimanje</div>
+          <div class="mt-2 flex flex-wrap items-center gap-1.5">
+            {{if .DownloadPathExists}}
+              <span class="badge badge-success">Postoji</span>
+            {{else}}
+              <span class="badge badge-destructive">Ne postoji</span>
+            {{end}}
+            {{if .DownloadPathWritable}}
+              <span class="badge badge-success">Upisiv</span>
+            {{else}}
+              <span class="badge badge-warning">Nije upisiv</span>
+            {{end}}
+          </div>
+        </div>
+      {{end}}
+    </section>
+
+    {{if and (eq .Storage "local") (not .DownloadPathExists)}}
+      <div class="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">
+        <div class="font-medium text-destructive">Folder za preuzimanje ne postoji</div>
+        <p class="mt-1 text-muted-foreground">
+          Računi se ne mogu ni preuzeti ni prikazati dok <code class="font-mono">download_path</code>
+          ne pokazuje na postojeći folder.
+        </p>
+      </div>
+    {{end}}
+
+    {{if .IgnoredKeys}}
+      <div class="mt-4 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm">
+        <div class="font-medium text-warning">Neka podešavanja se ignorišu</div>
+        <p class="mt-1 text-muted-foreground">
+          Ovi ključevi postoje u <code class="font-mono">config.json</code>, ali ih aplikacija ne čita,
+          pa nemaju nikakav efekat:
+          {{range $i, $key := .IgnoredKeys}}{{if $i}}, {{end}}<code class="font-mono text-foreground">{{ $key }}</code>{{end}}.
+        </p>
+      </div>
+    {{end}}
+
+    <div class="mt-4 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+      Izvor: <code class="font-mono text-foreground">{{ .ConfigPath }}</code>
+      · Lozinke i tajni ključevi su sakriveni · Izmene zahtevaju restart servera
+    </div>
+
+    <!-- Application -->
+    <section class="card animate-fade-in-up mt-6 p-5" style="--stagger: 2">
+      <h2 class="text-base font-semibold tracking-tight">Aplikacija</h2>
+      <p class="text-sm text-muted-foreground">Adresa servera i TLS sertifikati.</p>
+
+      <div class="mt-5 grid gap-4 sm:grid-cols-2">
+        <div class="flex flex-col gap-1.5">
+          <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="app-host">
+            Host
+            {{template "hint" "IP adresa ili hostname na kojem HTTP server sluša. 0.0.0.0 znači sve mrežne interfejse."}}
+          </label>
+          <input id="app-host" type="text" class="input" readonly value="{{ .Config.Application.Host }}">
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="app-port">
+            Port
+            {{template "hint" "TCP port na kojem je aplikacija dostupna u browseru (npr. http://localhost:5500)."}}
+          </label>
+          <input id="app-port" type="text" class="input" readonly value="{{ .Config.Application.Port }}">
+        </div>
+        <div class="flex flex-col gap-1.5 sm:col-span-2">
+          <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="app-cert">
+            Sertifikat
+            {{template "hint" "Putanja do TLS sertifikata (PEM). Koristi se ako server radi preko HTTPS."}}
+          </label>
+          <input id="app-cert" type="text" class="input font-mono text-xs" readonly
+                 value="{{ .Config.Application.Certs.Certificate }}"
+                 placeholder="—">
+        </div>
+        <div class="flex flex-col gap-1.5 sm:col-span-2">
+          <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="app-key">
+            Privatni ključ
+            {{template "hint" "Putanja do privatnog ključa sertifikata. Nikad se ne prikazuje u čistom tekstu na ovoj stranici."}}
+          </label>
+          <input id="app-key" type="text" class="input font-mono text-xs" readonly
+                 value="{{ .Config.Application.Certs.PrivateKey }}"
+                 placeholder="—">
+        </div>
+      </div>
+    </section>
+
+    <!-- Storage -->
+    <section class="card animate-fade-in-up mt-6 p-5" style="--stagger: 3">
+      <h2 class="text-base font-semibold tracking-tight">Skladište</h2>
+      <p class="text-sm text-muted-foreground">Gde se čuvaju preuzeti računi i do kog dana u mesecu se osvežava.</p>
+
+      <div class="mt-5 grid gap-4 sm:grid-cols-2">
+        <div class="flex flex-col gap-1.5">
+          <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="storage-driver">
+            Tip skladišta
+            {{template "hint" "local = PDF fajlovi na disku u download_path. s3 = upload na S3-kompatibilni bucket (AWS, Linode, MinIO…)."}}
+          </label>
+          <input id="storage-driver" type="text" class="input" readonly
+                 value="{{if eq .Config.Storage "s3"}}S3{{else}}Lokalno{{end}}">
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="check-until">
+            Osvežavanje do dana
+            {{template "hint" "Poslednji dan u mesecu kada je dugme za preuzimanje aktivno. Posle tog datuma provajderi više ne izdaju nove račune, pa se refresh isključuje."}}
+          </label>
+          <input id="check-until" type="text" class="input" readonly value="{{ .Config.CheckUntil }}">
+        </div>
+        <div class="flex flex-col gap-1.5 sm:col-span-2">
+          <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="download-path">
+            Folder za preuzimanje
+            {{template "hint" "Apsolutna putanja gde se čuvaju računi (i meta/payments fajlovi). Mora da postoji i da bude upisiva."}}
+          </label>
+          <input id="download-path" type="text" class="input font-mono text-xs" readonly
+                 value="{{ .Config.DownloadPath }}" placeholder="—">
+        </div>
+      </div>
+
+      {{if eq .Config.Storage "s3"}}
+        <h3 class="mt-6 text-sm font-semibold tracking-tight">S3</h3>
+        <div class="mt-3 grid gap-4 sm:grid-cols-2">
+          <div class="flex flex-col gap-1.5 sm:col-span-2">
+            <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="s3-endpoint">
+              Endpoint
+              {{template "hint" "Host S3-kompatibilnog servisa. Ostavi prazno za AWS S3. Primeri: eu-central-1.linodeobjects.com ili http://localhost:9000 za MinIO."}}
+            </label>
+            <input id="s3-endpoint" type="text" class="input font-mono text-xs" readonly
+                   value="{{ .Config.S3.Endpoint }}" placeholder="(AWS podrazumevano)">
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="s3-bucket">
+              Bucket
+              {{template "hint" "Ime bucket-a u koji se uploaduju PDF računi."}}
+            </label>
+            <input id="s3-bucket" type="text" class="input" readonly value="{{ .Config.S3.Bucket }}">
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="s3-region">
+              Region
+              {{template "hint" "Region bucket-a, npr. eu-central-1. Potreban većini S3 API-ja."}}
+            </label>
+            <input id="s3-region" type="text" class="input" readonly value="{{ .Config.S3.Region }}">
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="s3-access">
+              Access key
+              {{template "hint" "Javni deo S3 kredencijala. Na ovoj stranici je sakriven ako je podešen."}}
+            </label>
+            <input id="s3-access" type="text" class="input font-mono text-xs" readonly
+                   value="{{ .Config.S3.AccessKey }}" placeholder="—">
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="s3-secret">
+              Secret key
+              {{template "hint" "Tajni deo S3 kredencijala. Nikad se ne prikazuje u čistom tekstu."}}
+            </label>
+            <input id="s3-secret" type="text" class="input font-mono text-xs" readonly
+                   value="{{ .Config.S3.SecretKey }}" placeholder="—">
+          </div>
+        </div>
+      {{end}}
+    </section>
+
+    <!-- Notifications -->
+    <section class="card animate-fade-in-up mt-6 p-5" style="--stagger: 4"
+             x-data="notifySection" x-init="init()"
+             data-can-test="{{ if .NotifyCanTest }}true{{ else }}false{{ end }}"
+             data-driver="{{ if .Config.Notifications.Driver }}{{ .Config.Notifications.Driver }}{{ else }}smtp{{ end }}"
+             @keydown.escape.window="if (guideOpen) closeGuide()">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 class="text-base font-semibold tracking-tight">Obaveštenja</h2>
+          <p class="text-sm text-muted-foreground">
+            Kada i kako da se pošalje poruka posle preuzimanja računa.
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" class="btn btn-outline h-8 px-3 text-xs"
+                  @click="openGuide()"
+                  title="Korak-po-korak uputstvo za izabrani drajver">
+            Uputstvo
+          </button>
+          <button type="button" class="btn btn-outline h-8 px-3 text-xs"
+                  @click="send()"
+                  :disabled="!canTest || sending"
+                  :title="canTest ? 'Šalje probnu poruku preko izabranog drajvera, bez preuzimanja računa.' : 'Popunite kredencijale drajvera u config.json'">
+            <span x-show="!sending">Pošalji test</span>
+            <span x-show="sending">Šaljem...</span>
+          </button>
+        </div>
+      </div>
+
+      <p class="mt-2 text-xs" x-show="message"
+         :class="ok ? 'text-success' : 'text-destructive'"
+         x-text="message"></p>
+
+      <div class="mt-5 grid gap-4 sm:grid-cols-2">
+        <div class="flex flex-col gap-1.5">
+          <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="notify-mode">
+            Režim
+            {{template "hint" "Samo jedna opcija: off = isključeno, per_receipt = poruka za svaki uspešan račun, all_done = jedna poruka kad svi provajderi uspeju."}}
+          </label>
+          <input id="notify-mode" type="text" class="input" readonly
+                 value="{{if .Config.Notifications.Mode}}{{ .Config.Notifications.Mode }}{{else}}off{{end}}">
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="notify-driver">
+            Drajver
+            {{template "hint" "Kako se šalju poruke: smtp (email) ili telegram (Bot API)."}}
+          </label>
+          <input id="notify-driver" type="text" class="input" readonly
+                 value="{{if .Config.Notifications.Driver}}{{ .Config.Notifications.Driver }}{{else}}smtp{{end}}">
+        </div>
+      </div>
+
+      {{if eq .Config.Notifications.Driver "telegram"}}
+        <div class="mt-6 flex flex-wrap items-center justify-between gap-2">
+          <h3 class="text-sm font-semibold tracking-tight">Telegram</h3>
+          <button type="button" class="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                  @click="openGuide()">
+            Kako da podesim?
+          </button>
+        </div>
+        <div class="mt-3 grid gap-4 sm:grid-cols-2">
+          <div class="flex flex-col gap-1.5">
+            <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="tg-token">
+              Bot token
+              {{template "hint" "Token od @BotFather (npr. 123456:ABC…). Identifikuje tvog bota prema Telegramu."}}
+            </label>
+            <input id="tg-token" type="text" class="input font-mono text-xs" readonly
+                   value="{{ .Config.Notifications.Telegram.BotToken }}" placeholder="—">
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="tg-chat">
+              Chat ID
+              {{template "hint" "ID četa ili grupe gde bot šalje poruke. Dobijaš ga preko getUpdates nakon što pošalješ botu poruku."}}
+            </label>
+            <input id="tg-chat" type="text" class="input font-mono text-xs" readonly
+                   value="{{ .Config.Notifications.Telegram.ChatID }}" placeholder="—">
+          </div>
+        </div>
+      {{else}}
+        <div class="mt-6 flex flex-wrap items-center justify-between gap-2">
+          <h3 class="text-sm font-semibold tracking-tight">SMTP</h3>
+          <button type="button" class="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                  @click="openGuide()">
+            Kako da podesim?
+          </button>
+        </div>
+        <div class="mt-3 grid gap-4 sm:grid-cols-2">
+          <div class="flex flex-col gap-1.5">
+            <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="smtp-host">
+              Host
+              {{template "hint" "SMTP server, npr. smtp.gmail.com ili smtp.mailgun.org."}}
+            </label>
+            <input id="smtp-host" type="text" class="input" readonly
+                   value="{{ .Config.Notifications.SMTP.Host }}" placeholder="—">
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="smtp-port">
+              Port
+              {{template "hint" "Obično 587 (STARTTLS) ili 465 (SMTPS / implicitni TLS)."}}
+            </label>
+            <input id="smtp-port" type="text" class="input" readonly
+                   value="{{ .Config.Notifications.SMTP.Port }}" placeholder="587">
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="smtp-user">
+              Korisničko ime
+              {{template "hint" "Nalog za prijavu na SMTP server (često ista adresa kao From)."}}
+            </label>
+            <input id="smtp-user" type="text" class="input" readonly
+                   value="{{ .Config.Notifications.SMTP.Username }}" placeholder="—">
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="smtp-pass">
+              Lozinka
+              {{template "hint" "SMTP lozinka ili app password. Na ovoj stranici je uvek sakrivena."}}
+            </label>
+            <input id="smtp-pass" type="text" class="input font-mono text-xs" readonly
+                   value="{{ .Config.Notifications.SMTP.Password }}" placeholder="—">
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="smtp-from">
+              Od
+              {{template "hint" "Adresa pošiljaoca u From zaglavlju emaila."}}
+            </label>
+            <input id="smtp-from" type="text" class="input" readonly
+                   value="{{ .Config.Notifications.SMTP.From }}" placeholder="—">
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="smtp-to">
+              Za
+              {{template "hint" "Adresa primaoca na koju stižu obaveštenja."}}
+            </label>
+            <input id="smtp-to" type="text" class="input" readonly
+                   value="{{ .Config.Notifications.SMTP.To }}" placeholder="—">
+          </div>
+        </div>
+      {{end}}
+
+      {{/* Teleport so fixed backdrop escapes card/animation transform contexts. */}}
+      <template x-teleport="body">
+        <div class="modal-backdrop" x-show="guideOpen" x-cloak
+             x-transition.opacity.duration.200ms
+             @click.self="closeGuide()"
+             role="dialog" aria-modal="true"
+             aria-labelledby="guide-title">
+          <div class="modal-panel"
+               x-show="guideOpen"
+               x-transition:enter="transition ease-out duration-200"
+               x-transition:enter-start="opacity-0 translate-y-2"
+               x-transition:enter-end="opacity-100 translate-y-0"
+               @click.stop>
+            <div class="flex items-start justify-between gap-3 border-b px-5 py-4">
+              <div>
+                <h3 id="guide-title" class="text-base font-semibold tracking-tight" x-text="currentGuide.title"></h3>
+                <p class="mt-0.5 text-sm text-muted-foreground" x-text="currentGuide.subtitle"></p>
+              </div>
+              <button type="button" class="btn btn-ghost btn-icon shrink-0" @click="closeGuide()" aria-label="Zatvori">
+                <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div class="flex items-center gap-1.5 border-b px-5 py-3">
+              <template x-for="(s, i) in currentGuide.steps" :key="i">
+                <button type="button" class="h-1.5 flex-1 rounded-full transition-colors"
+                        :class="i <= step ? 'bg-primary' : 'bg-muted'"
+                        @click="goTo(i)"
+                        :aria-label="'Korak ' + (i + 1)"></button>
+              </template>
+            </div>
+
+            <div class="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+              <div class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                   x-text="'Korak ' + (step + 1) + ' / ' + currentGuide.steps.length"></div>
+              <h4 class="mt-2 text-lg font-semibold tracking-tight" x-text="currentStep.title"></h4>
+              <p class="mt-2 text-sm leading-relaxed text-muted-foreground" x-text="currentStep.body"></p>
+
+              <div class="mt-4 rounded-lg border border-border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground"
+                   x-show="currentStep.tip">
+                <span class="font-medium text-foreground">Savet:</span>
+                <span x-text="currentStep.tip"></span>
+              </div>
+
+              <pre class="mt-4 overflow-x-auto rounded-lg bg-muted p-3 text-xs leading-relaxed"
+                   x-show="currentStep.code"><code class="font-mono" x-text="currentStep.code"></code></pre>
+            </div>
+
+            <div class="flex items-center justify-between gap-3 border-t px-5 py-4">
+              <button type="button" class="btn btn-outline h-8 px-3 text-xs"
+                      @click="prev()" :disabled="isFirst">
+                Nazad
+              </button>
+              <button type="button" class="btn btn-primary h-8 px-3 text-xs"
+                      x-show="!isLast" @click="next()">
+                Dalje
+              </button>
+              <button type="button" class="btn btn-primary h-8 px-3 text-xs"
+                      x-show="isLast" @click="closeGuide()">
+                Gotovo
+              </button>
+            </div>
+          </div>
+        </div>
+      </template>
+    </section>
+
+    <!-- Logging -->
+    <section class="card animate-fade-in-up mt-6 p-5" style="--stagger: 5">
+      <h2 class="text-base font-semibold tracking-tight">Dnevnik</h2>
+      <p class="text-sm text-muted-foreground">Nivo logovanja i format ispisa.</p>
+
+      <div class="mt-5 grid gap-4 sm:grid-cols-2">
+        <div class="flex flex-col gap-1.5">
+          <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="log-level">
+            Nivo
+            {{template "hint" "Minimalni nivo poruka u logu: debug, info, warn, error. Niži nivo = više detalja."}}
+          </label>
+          <input id="log-level" type="text" class="input" readonly value="{{ .Config.LogLevel }}">
+        </div>
+        <label class="flex items-center gap-3 self-end rounded-lg border px-4 py-3 text-sm"
+               title="Uključuje čitljiv, bojeni ispis u konzoli umesto sirovog JSON loga.">
+          <input type="checkbox" class="h-4 w-4 accent-primary" disabled
+                 {{if .Config.PrettyPrint}}checked{{end}}>
+          <span class="inline-flex items-center gap-1.5">
+            <span>
+              <span class="font-medium">Pretty print</span>
+              <span class="mt-0.5 block text-xs text-muted-foreground">Čitljiv ispis u konzoli</span>
+            </span>
+            {{template "hint" "Uključuje čitljiv, bojeni ispis u konzoli umesto sirovog JSON loga."}}
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <!-- Providers -->
+    <section class="card animate-fade-in-up mt-6 p-5" style="--stagger: 6">
+      <h2 class="text-base font-semibold tracking-tight">Provajderi</h2>
+      <p class="text-sm text-muted-foreground">
+        Preuzimaju se samo provajderi kod kojih su popunjena oba polja i za koje postoji implementacija.
+      </p>
+
+      <div class="mt-5 flex flex-col gap-4">
+        {{range .Providers}}
+          <div class="rounded-lg border p-4">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h3 class="text-sm font-semibold uppercase tracking-tight">{{ .Name }}</h3>
+              {{if not .Implemented}}
+                <span class="badge badge-secondary" title="Za ovog provajdera još nema implementacije preuzimanja.">Neaktivan</span>
+              {{else if .Configured}}
+                <span class="badge badge-success" title="Nalog i lozinka su popunjeni; učestvuje u refresh-u.">Aktivan</span>
+              {{else}}
+                <span class="badge badge-warning" title="Implementacija postoji, ali nalog ili lozinka nisu popunjeni.">Nije podešen</span>
+              {{end}}
+            </div>
+            <div class="mt-3 grid gap-3 sm:grid-cols-2">
+              <div class="flex flex-col gap-1.5">
+                <label class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  Nalog
+                  {{template "hint" "Korisničko ime ili email za prijavu kod ovog provajdera (identifier u config.json)."}}
+                </label>
+                <input type="text" class="input font-mono text-xs" readonly
+                       value="{{ .Identifier }}" placeholder="—">
+              </div>
+              <div class="flex flex-col gap-1.5">
+                <label class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  Lozinka
+                  {{template "hint" "Lozinka naloga. Na ovoj stranici se nikad ne prikazuje — samo da li je podešena."}}
+                </label>
+                <input type="text" class="input font-mono text-xs" readonly
+                       value="{{if .HasPassword}}••••••••{{end}}" placeholder="—">
+              </div>
+            </div>
+          </div>
+        {{else}}
+          <p class="py-4 text-center text-sm text-muted-foreground">
+            Nijedan provajder nije definisan u konfiguraciji.
+          </p>
+        {{end}}
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

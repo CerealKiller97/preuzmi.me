@@ -13,9 +13,9 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/CerealKiller97/preuzmi.me/pkg/config"
 	"github.com/CerealKiller97/preuzmi.me/pkg/container"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/notify"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/payments"
@@ -25,17 +25,57 @@ import (
 )
 
 func Routes(c *container.Container) {
-	// The configured download path is the single source of truth: it is where
-	// the providers write and therefore where everything else must read from.
-	dir := c.GetConfig().DownloadPath
+	// Path-aware caches so changing download_path in settings recreates these
+	// without requiring a process restart.
+	var (
+		storeMu     sync.Mutex
+		paidPath    string
+		paidStore   *payments.Store
+		refreshPath string
+		refreshSvc  *refresh.Service
+	)
 
-	// A nil store is tolerated: receipts then simply render as unpaid, and the
-	// mark-paid endpoint reports the failure rather than silently resetting a
-	// file that may just be corrupt.
-	paidStore, err := paymentsStore(dir)
-	if err != nil {
-		log.Err(err).Msg("Error loading payments store, paid state is unavailable")
+	getPaidStore := func() *payments.Store {
+		storeMu.Lock()
+		defer storeMu.Unlock()
+
+		dir := c.GetConfig().DownloadPath
+		if paidStore == nil || paidPath != dir {
+			s, err := paymentsStore(dir)
+			if err != nil {
+				log.Err(err).Msg("Error loading payments store, paid state is unavailable")
+				paidStore = nil
+			} else {
+				paidStore = s
+			}
+			paidPath = dir
+		}
+
+		return paidStore
 	}
+
+	getRefresh := func() *refresh.Service {
+		storeMu.Lock()
+		defer storeMu.Unlock()
+
+		dir := c.GetConfig().DownloadPath
+		if refreshSvc == nil || refreshPath != dir {
+			s, err := refresh.New(dir)
+			if err != nil {
+				log.Err(err).Msg("Error loading refresh state, last-fetched time is unavailable")
+				refreshSvc = nil
+			} else {
+				refreshSvc = s
+			}
+			refreshPath = dir
+		}
+
+		return refreshSvc
+	}
+
+	// Warm caches once at startup so the first request is not colder.
+	_ = getPaidStore()
+	_ = getRefresh()
 
 	http.Handle("GET /assets/", http.StripPrefix("/assets/", staticAssets()))
 
@@ -46,30 +86,27 @@ func Routes(c *container.Container) {
 	})
 
 	http.HandleFunc("GET /", indexHandler())
-	http.HandleFunc("GET /dashboard", dashboardHandler(
-		c.GetConfig(),
-		c.GetVersion(),
-	))
-	http.HandleFunc("GET /stats", statsHandler(
-		c.GetConfig(),
-		c.GetVersion(),
-	))
+	http.HandleFunc("GET /dashboard", dashboardHandler(c))
+	http.HandleFunc("GET /stats", statsHandler(c))
 	http.HandleFunc("GET /settings", settingsHandler(c))
-	http.HandleFunc("GET /receipt/{period}/{provider}", receiptHandler(dir))
+	http.HandleFunc("GET /receipt/{period}/{provider}", receiptHandler(c))
 	// API endpoints
-	http.HandleFunc("GET /api/providers", providersAPIHandler(c.GetConfig()))
-	http.HandleFunc("GET /api/receipts", receiptsAPIHandler(dir, paidStore))
-	http.HandleFunc("PUT /api/receipts/{period}/{provider}/paid", markPaidHandler(paidStore))
-	http.HandleFunc("GET /api/stats", statsAPIHandler(dir))
-	http.HandleFunc("GET /api/expenses/monthly", expensesMonthlyAPIHandler(dir))
+	http.HandleFunc("GET /api/providers", providersAPIHandler(c))
+	http.HandleFunc("GET /api/receipts", receiptsAPIHandler(c, getPaidStore))
+	http.HandleFunc("PUT /api/receipts/{period}/{provider}/paid", func(w http.ResponseWriter, r *http.Request) {
+		markPaidHandler(getPaidStore())(w, r)
+	})
+	http.HandleFunc("GET /api/stats", statsAPIHandler(c))
+	http.HandleFunc("GET /api/expenses/monthly", expensesMonthlyAPIHandler(c))
 
-	refreshSvc, err := refresh.New(dir)
-	if err != nil {
-		log.Err(err).Msg("Error loading refresh state, last-fetched time is unavailable")
-	}
-	http.HandleFunc("GET /api/refresh", refreshStatusHandler(c, refreshSvc))
-	http.HandleFunc("POST /api/refresh", startRefreshHandler(c, refreshSvc))
+	http.HandleFunc("GET /api/refresh", func(w http.ResponseWriter, r *http.Request) {
+		refreshStatusHandler(c, getRefresh())(w, r)
+	})
+	http.HandleFunc("POST /api/refresh", func(w http.ResponseWriter, r *http.Request) {
+		startRefreshHandler(c, getRefresh())(w, r)
+	})
 	http.HandleFunc("POST /api/notifications/test", testNotificationHandler(c))
+	http.HandleFunc("PUT /api/settings", updateSettingsHandler(c))
 }
 
 // refreshStatusHandler reports whether a refresh is running and when the last
@@ -261,8 +298,9 @@ func indexHandler() Handler {
 	}
 }
 
-func dashboardHandler(cfg *config.Config, version string) Handler {
+func dashboardHandler(c *container.Container) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
+		cfg := c.GetConfig()
 		template, err := template.ParseFiles(
 			"./templates/index.html",
 			"./templates/partials.html",
@@ -288,7 +326,7 @@ func dashboardHandler(cfg *config.Config, version string) Handler {
 			Title:       "Preuzmi.me — Računi",
 			Description: "Automatsko preuzimanje računa za internet, telefon i struju na jednom mestu.",
 			BaseURL:     baseURL(r),
-			Version:     version,
+			Version:     c.GetVersion(),
 		}
 
 		if err := template.Execute(w, viewModel); err != nil {
@@ -320,7 +358,7 @@ func validate(w http.ResponseWriter, req *http.Request) (string, string, error) 
 	return provider, period, nil
 }
 
-func receiptHandler(dir string) Handler {
+func receiptHandler(c *container.Container) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		provider, period, err := validate(w, r)
 		if err != nil {
@@ -328,7 +366,7 @@ func receiptHandler(dir string) Handler {
 			return
 		}
 
-		p := path.Join(dir, period, fmt.Sprintf("%s.pdf", provider))
+		p := path.Join(c.GetConfig().DownloadPath, period, fmt.Sprintf("%s.pdf", provider))
 
 		file, err := os.ReadFile(p)
 		if err != nil {
@@ -438,7 +476,7 @@ func scanReceipts(dir string, paid *payments.Store) ([]APIReceipt, error) {
 // statsHandler renders the statistics page
 type StatsPageData = PageData
 
-func statsHandler(cfg *config.Config, version string) Handler {
+func statsHandler(c *container.Container) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tmpl, err := template.ParseFiles(
 			"./templates/stats.html",
@@ -450,7 +488,7 @@ func statsHandler(cfg *config.Config, version string) Handler {
 			return
 		}
 
-		pairs, err := utils.GetPairs(cfg)
+		pairs, err := utils.GetPairs(c.GetConfig())
 		if err != nil {
 			// not fatal for page; keep empty list
 			log.Err(err).Msg("Error getting pairs for stats")
@@ -464,7 +502,7 @@ func statsHandler(cfg *config.Config, version string) Handler {
 			Title:       "Preuzmi.me — Statistika",
 			Description: "Pregled troškova po mesecima i provajderima za izabranu godinu.",
 			BaseURL:     baseURL(r),
-			Version:     version,
+			Version:     c.GetVersion(),
 		}
 		if err := tmpl.Execute(w, viewModel); err != nil {
 			log.Err(err).Msg("Error executing stats template")
@@ -534,11 +572,11 @@ func loadReceiptMeta(dir string) ([]ReceiptMeta, error) {
 }
 
 // providersAPIHandler returns all configured provider keys from config
-func providersAPIHandler(cfg *config.Config) Handler {
+func providersAPIHandler(c *container.Container) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Nothing configured yet is an ordinary state for a fresh install, not
 		// a server error: answer with an empty list so the UI still renders.
-		providers, err := utils.GetPairs(cfg)
+		providers, err := utils.GetPairs(c.GetConfig())
 		if err != nil {
 			if !errors.Is(err, utils.ErrEmptyProviders) {
 				log.Err(err).Msg("Error getting pairs for providers")
@@ -555,9 +593,10 @@ func providersAPIHandler(cfg *config.Config) Handler {
 }
 
 // receiptsAPIHandler returns the list of receipts; optional query params: provider (comma-separated), period
-func receiptsAPIHandler(dir string, paid *payments.Store) Handler {
+func receiptsAPIHandler(c *container.Container, paidFn func() *payments.Store) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
-		items, err := scanReceipts(dir, paid)
+		dir := c.GetConfig().DownloadPath
+		items, err := scanReceipts(dir, paidFn())
 		if err != nil {
 			log.Err(err).Msg("Error scanning receipts")
 			w.WriteHeader(http.StatusInternalServerError)
@@ -651,8 +690,9 @@ func markPaidHandler(paid *payments.Store) Handler {
 }
 
 // statsAPIHandler aggregates monthly and annual totals; query: year (int), provider (comma-separated)
-func statsAPIHandler(dir string) Handler {
+func statsAPIHandler(c *container.Container) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
+		dir := c.GetConfig().DownloadPath
 		items, err := scanReceipts(dir, nil)
 		if err != nil {
 			log.Err(err).Msg("Error scanning receipts for stats")
@@ -782,8 +822,9 @@ func statsAPIHandler(dir string) Handler {
 }
 
 // expensesMonthlyAPIHandler returns monthly expenses aggregated from metadata only
-func expensesMonthlyAPIHandler(dir string) Handler {
+func expensesMonthlyAPIHandler(c *container.Container) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
+		dir := c.GetConfig().DownloadPath
 		meta, err := loadReceiptMeta(dir)
 		if err != nil {
 			log.Err(err).Msg("Error loading receipt metadata for expenses")

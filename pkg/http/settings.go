@@ -1,6 +1,7 @@
 package http
 
 import (
+	"bytes"
 	"encoding/json"
 	"html/template"
 	"net/http"
@@ -15,7 +16,7 @@ import (
 )
 
 // redacted replaces every secret before it leaves the process.
-const redacted = "••••••••"
+const redacted = config.SecretPlaceholder
 
 // redactedCredentials mirrors config.Credentials with the password removed.
 //
@@ -142,6 +143,28 @@ func redact(cfg *config.Config) redactedConfig {
 	return out
 }
 
+// editableForm is the JSON shape the settings UI edits. Secret fields are
+// blank so the browser never sees them; an empty submit keeps the previous
+// value via MergeSecrets.
+func editableForm(cfg *config.Config) config.Config {
+	out := *cfg
+	out.Application.Certs.PrivateKey = ""
+	out.S3.AccessKey = ""
+	out.S3.SecretKey = ""
+	out.Notifications.SMTP.Password = ""
+	out.Notifications.Telegram.BotToken = ""
+
+	out.Providers = make(map[config.Provider]config.Credentials, len(cfg.Providers))
+	for name, creds := range cfg.Providers {
+		out.Providers[name] = config.Credentials{
+			Username: creds.Username,
+			Password: "",
+		}
+	}
+
+	return out
+}
+
 // ProviderStatus summarises one provider for the settings table.
 type ProviderStatus struct {
 	Name        string
@@ -177,6 +200,17 @@ type SettingsPageData struct {
 	// NotifyCanTest is true when the selected driver has enough credentials
 	// to send a probe message from the settings page.
 	NotifyCanTest bool
+
+	// FormJSON is the editable config snapshot for Alpine (secrets blanked).
+	FormJSON template.JS
+
+	HasAppKey   bool
+	HasS3Access bool
+	HasS3Secret bool
+	HasSMTPPass bool
+	HasTgToken  bool
+	// ProviderSecretsJSON maps provider name → whether a password is stored.
+	ProviderSecretsJSON template.JS
 
 	// IgnoredKeys are top-level keys present in config.json that the
 	// application does not understand and therefore silently discards.
@@ -287,6 +321,23 @@ func settingsHandler(c *container.Container) Handler {
 			storageTarget = cfg.S3.Bucket
 		}
 
+		formJSON, err := json.Marshal(editableForm(cfg))
+		if err != nil {
+			log.Err(err).Msg("Error encoding settings form JSON")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		// Prevent </script> in paths from breaking the JSON script tag.
+		formJSON = bytes.ReplaceAll(formJSON, []byte("<"), []byte(`\u003c`))
+		formJSON = bytes.ReplaceAll(formJSON, []byte(">"), []byte(`\u003e`))
+		formJSON = bytes.ReplaceAll(formJSON, []byte("&"), []byte(`\u0026`))
+
+		providerSecrets := map[string]bool{}
+		for _, p := range providers {
+			providerSecrets[p.Name] = p.HasPassword
+		}
+		providerSecretsJSON, _ := json.Marshal(providerSecrets)
+
 		viewModel := SettingsPageData{
 			PageData: PageData{
 				URL:         "/settings",
@@ -305,6 +356,13 @@ func settingsHandler(c *container.Container) Handler {
 			DownloadPathExists:   exists,
 			DownloadPathWritable: exists && writable(dir),
 			NotifyCanTest:        c.GetNotifier().CanTest(),
+			FormJSON:             template.JS(formJSON),
+			HasAppKey:            cfg.Application.Certs.PrivateKey != "",
+			HasS3Access:          cfg.S3.AccessKey != "",
+			HasS3Secret:          cfg.S3.SecretKey != "",
+			HasSMTPPass:          cfg.Notifications.SMTP.Password != "",
+			HasTgToken:           cfg.Notifications.Telegram.BotToken != "",
+			ProviderSecretsJSON:  template.JS(providerSecretsJSON),
 			IgnoredKeys:          ignoredConfigKeys(configPath),
 		}
 

@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#18181b"/>
+      <stop offset="55%" stop-color="#0e0e11"/>
+      <stop offset="100%" stop-color="#09090b"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.18" cy="0.12" r="0.75">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="spark" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e4e4e7" stop-opacity="0.05"/>
+      <stop offset="45%" stop-color="#e4e4e7" stop-opacity="0.38"/>
+      <stop offset="100%" stop-color="#e4e4e7" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e4e4e7" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#e4e4e7" stop-opacity="0"/>
+    </linearGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#ffffff" stroke-opacity="0.028" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+
+  <!-- Monthly-spend sparkline, echoing the statistics page -->
+  <path d="M0 470 C 90 470 130 452 200 436 C 270 420 300 372 380 366 C 460 360 505 384 560 380
+           C 620 376 660 344 740 352 C 820 360 850 424 920 436 C 990 448 1030 430 1200 424 L1200 630 L0 630 Z"
+        fill="url(#sparkFill)"/>
+  <path d="M0 470 C 90 470 130 452 200 436 C 270 420 300 372 380 366 C 460 360 505 384 560 380
+           C 620 376 660 344 740 352 C 820 360 850 424 920 436 C 990 448 1030 430 1200 424"
+        fill="none" stroke="url(#spark)" stroke-width="3"/>
+
+  <!-- Logo mark, drawn directly in the 112px box so the arrow and the torn
+       edge keep the spacing they were designed with -->
+  <g transform="translate(80 72)">
+    <rect width="112" height="112" rx="26" fill="#fafafa"/>
+    <g fill="none" stroke="#18181b" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M56 26v30"/>
+      <path d="M41 45 56 60l15-15"/>
+      <path d="M28 84 42 76l14 8 14-8 14 8"/>
+    </g>
+  </g>
+
+  <text x="80" y="322" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="104"
+        font-weight="700" fill="#fafafa" letter-spacing="-3">Preuzmi.me</text>
+
+  <text x="80" y="382" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="34"
+        fill="#a1a1aa">Automatsko preuzimanje računa na jednom mestu</text>
+
+  <!-- Provider list -->
+  <text x="80" y="462" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="26"
+        font-weight="500" fill="#71717a" letter-spacing="1.5">MTS · A1 · EPS · YETTEL · ESANDUCE</text>
+
+  <!-- Paid indicator, tying the image to the app's status badges -->
+  <g transform="translate(80 516)">
+    <rect width="188" height="46" rx="23" fill="#10b981" fill-opacity="0.12" stroke="#10b981" stroke-opacity="0.32"/>
+    <circle cx="30" cy="23" r="6" fill="#10b981"/>
+    <text x="50" y="31" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="21"
+          font-weight="600" fill="#10b981">Plaćeno</text>
+  </g>
+</svg>

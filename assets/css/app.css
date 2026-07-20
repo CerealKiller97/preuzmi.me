@@ -333,6 +333,48 @@
            bg-card text-card-foreground shadow-2xl;
   }
 
+  .settings-apply-bar {
+    @apply fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 py-3 shadow-[0_-8px_30px_rgba(0,0,0,0.08)]
+           backdrop-blur supports-[backdrop-filter]:bg-background/80;
+  }
+
+  .toast-stack {
+    @apply pointer-events-none fixed inset-x-0 top-4 z-[110] flex flex-col items-center gap-2 px-4
+           sm:inset-x-auto sm:right-4 sm:left-auto sm:items-end;
+  }
+
+  .toast {
+    @apply pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border px-4 py-3.5
+           text-sm shadow-lg backdrop-blur;
+  }
+
+  .toast-success {
+    @apply border-success/30 bg-card text-card-foreground
+           shadow-[0_12px_40px_-12px_color-mix(in_oklab,var(--success)_45%,transparent)];
+  }
+
+  .toast-error {
+    @apply border-destructive/30 bg-card text-card-foreground
+           shadow-[0_12px_40px_-12px_color-mix(in_oklab,var(--destructive)_45%,transparent)];
+  }
+
+  .toast-icon {
+    @apply mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full;
+  }
+
+  .toast-success .toast-icon {
+    @apply bg-success/15 text-success;
+  }
+
+  .toast-error .toast-icon {
+    @apply bg-destructive/15 text-destructive;
+  }
+
+  .toast-close {
+    @apply -mr-1 -mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground
+           transition-colors hover:bg-muted hover:text-foreground;
+  }
+
   /* Filter pills used for provider selection */
   .pill {
     @apply inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs

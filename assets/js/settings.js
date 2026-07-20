@@ -1,17 +1,32 @@
 /**
- * Settings page behaviours: notification test send and step-by-step setup
- * guides for each notification driver (Telegram, SMTP).
+ * Settings page: editable config form with apply/reload, notification test,
+ * and step-by-step setup guides for the selected driver.
  */
 document.addEventListener('alpine:init', () => {
-  Alpine.data('notifySection', () => ({
+  Alpine.data('settingsPage', () => ({
+    form: {},
+    dirty: false,
+    saving: false,
+    flash: { show: false, ok: false, title: '', message: '', warnings: [] },
+    flashTimer: null,
+
     canTest: false,
     sending: false,
-    ok: false,
-    message: '',
+    testOk: false,
+    testMessage: '',
 
     guideOpen: false,
     guideKey: 'smtp',
     step: 0,
+
+    secretHints: {
+      appKey: false,
+      s3Access: false,
+      s3Secret: false,
+      smtpPass: false,
+      tgToken: false,
+      providers: {},
+    },
 
     guides: {
       telegram: {
@@ -34,13 +49,13 @@ document.addEventListener('alpine:init', () => {
             tip: 'Lični chat ima pozitivan ID. Grupe često imaju negativan ID (npr. -100…).',
           },
           {
-            title: 'Upisi u config.json',
-            body: 'U notifications sekciji postavi driver na telegram, mode na per_receipt ili all_done, i popuni bot_token i chat_id.',
-            code: `"notifications": {\n  "mode": "per_receipt",\n  "driver": "telegram",\n  "telegram": {\n    "bot_token": "TVOJ_TOKEN",\n    "chat_id": "TVOJ_CHAT_ID"\n  }\n}`,
+            title: 'Upisi u Podešavanja',
+            body: 'Postavi drajver na telegram, režim na per_receipt ili all_done, popuni bot token i chat ID, pa klikni „Primeni promene“.',
+            tip: 'Posle primene klikni „Pošalji test“ — ne treba restart servera.',
           },
           {
-            title: 'Restart i test',
-            body: 'Restartuj server da učita config. Vrati se na Podešavanja i klikni „Pošalji test“. Ako stigne „preuzmi.me: test“, podešeno je kako treba.',
+            title: 'Test',
+            body: 'Klikni „Pošalji test“. Ako stigne „preuzmi.me: test“, podešeno je kako treba.',
             tip: 'Ako test ne uspe, proveri da li si pisao botu /start i da li su token i chat_id tačni.',
           },
         ],
@@ -60,9 +75,9 @@ document.addEventListener('alpine:init', () => {
             tip: 'Kod Gmail-a: Google Account → Security → App passwords.',
           },
           {
-            title: 'Upisi u config.json',
-            body: 'Postavi driver na smtp, izaberi mode (per_receipt ili all_done), i popuni smtp blok.',
-            code: `"notifications": {\n  "mode": "per_receipt",\n  "driver": "smtp",\n  "smtp": {\n    "host": "smtp.gmail.com",\n    "port": 587,\n    "username": "ti@gmail.com",\n    "password": "app-password",\n    "from": "ti@gmail.com",\n    "to": "ti@gmail.com"\n  }\n}`,
+            title: 'Upisi u Podešavanja',
+            body: 'Postavi drajver na smtp, izaberi režim, popuni SMTP polja i klikni „Primeni promene“.',
+            tip: 'Lozinku ostavi praznu ako je već sačuvana — neće se obrisati.',
           },
           {
             title: 'Port i TLS',
@@ -70,55 +85,232 @@ document.addEventListener('alpine:init', () => {
             tip: 'Ako slanje padne na „certificate“ ili timeout, proveri firewall i da li host/port odgovaraju dokumentaciji.',
           },
           {
-            title: 'Restart i test',
-            body: 'Restartuj server, otvori Podešavanja i klikni „Pošalji test“. Proveri inbox (i spam) za poruku „preuzmi.me: test“.',
-            tip: 'Test radi i kad je mode: off — dovoljno je da SMTP kredencijali budu popunjeni.',
+            title: 'Test',
+            body: 'Klikni „Pošalji test“. Proveri inbox (i spam) za poruku „preuzmi.me: test“.',
+            tip: 'Test radi i kad je režim off — dovoljno je da SMTP kredencijali budu popunjeni.',
           },
         ],
       },
     },
 
     init() {
-      // Injected from the template so the button state matches the server.
+      let initial = {};
+      try {
+        const raw = document.getElementById('settings-form-data');
+        initial = JSON.parse(raw?.textContent || '{}');
+      } catch (e) {
+        console.error('Failed to parse settings form data', e);
+        this.showFlash(false, 'Greška', 'Ne mogu da učitam podešavanja sa stranice.');
+      }
+
+      this.form = this.normalizeForm(initial);
+
       this.canTest = this.$el.dataset.canTest === 'true';
-      const driver = (this.$el.dataset.driver || 'smtp').toLowerCase();
+      const driver = (this.form.notifications?.driver || 'smtp').toLowerCase();
       this.guideKey = this.guides[driver] ? driver : 'smtp';
+
+      this.secretHints.appKey = this.$el.dataset.hasAppKey === 'true';
+      this.secretHints.s3Access = this.$el.dataset.hasS3Access === 'true';
+      this.secretHints.s3Secret = this.$el.dataset.hasS3Secret === 'true';
+      this.secretHints.smtpPass = this.$el.dataset.hasSmtpPass === 'true';
+      this.secretHints.tgToken = this.$el.dataset.hasTgToken === 'true';
+
+      try {
+        const el = document.getElementById('settings-provider-secrets');
+        this.secretHints.providers = el ? JSON.parse(el.textContent || '{}') : {};
+      } catch {
+        this.secretHints.providers = {};
+      }
+
+      this.restoreFlash();
+
+      this.$nextTick(() => {
+        this.$watch(
+          'form',
+          () => {
+            this.dirty = true;
+          },
+          { deep: true },
+        );
+        this.dirty = false;
+      });
     },
 
-    /**
-     * @returns {{title: string, subtitle: string, steps: object[]}}
-     */
+    restoreFlash() {
+      try {
+        const raw = sessionStorage.getItem('settings-flash');
+        if (!raw) {
+          return;
+        }
+        sessionStorage.removeItem('settings-flash');
+        const saved = JSON.parse(raw);
+        this.showFlash(
+          !!saved.ok,
+          saved.title || (saved.ok ? 'Uspešno' : 'Greška'),
+          saved.message || '',
+          saved.warnings || [],
+        );
+      } catch {
+        sessionStorage.removeItem('settings-flash');
+      }
+    },
+
+    persistFlash(ok, title, message, warnings = []) {
+      try {
+        sessionStorage.setItem(
+          'settings-flash',
+          JSON.stringify({ ok, title, message, warnings }),
+        );
+      } catch {
+        // sessionStorage may be unavailable; toast still shows before reload.
+      }
+    },
+
+    showFlash(ok, title, message = '', warnings = []) {
+      if (this.flashTimer) {
+        window.clearTimeout(this.flashTimer);
+        this.flashTimer = null;
+      }
+
+      this.flash = {
+        show: true,
+        ok,
+        title,
+        message,
+        warnings: warnings || [],
+      };
+
+      this.flashTimer = window.setTimeout(() => {
+        if (this.flash.show) {
+          this.flash.show = false;
+        }
+      }, ok ? 4500 : 7000);
+    },
+
+    normalizeForm(input) {
+      // Alpine wraps form in a Proxy; structuredClone cannot clone proxies.
+      let form = {};
+      try {
+        form = input && typeof input === 'object'
+          ? JSON.parse(JSON.stringify(input))
+          : {};
+      } catch {
+        form = {};
+      }
+
+      if (!form.providers) {
+        form.providers = {};
+      }
+      if (!form.notifications) {
+        form.notifications = {};
+      }
+      if (!form.notifications.smtp) {
+        form.notifications.smtp = {};
+      }
+      if (!form.notifications.telegram) {
+        form.notifications.telegram = {};
+      }
+      if (!form.notifications.mode) {
+        form.notifications.mode = 'off';
+      }
+      if (!form.notifications.driver) {
+        form.notifications.driver = 'smtp';
+      }
+      if (!form.s3) {
+        form.s3 = {};
+      }
+      if (!form.application) {
+        form.application = {};
+      }
+      if (!form.application.certs) {
+        form.application.certs = {};
+      }
+      if (form.storage !== 's3') {
+        form.storage = 'local';
+      }
+      if (!form.log_level) {
+        form.log_level = 'info';
+      }
+
+      return form;
+    },
+
+    providerNames() {
+      return Object.keys(this.form.providers || {}).sort();
+    },
+
+    secretPlaceholder(has) {
+      return has ? '•••••••• (neizmenjeno)' : '';
+    },
+
+    markDirty() {
+      this.dirty = true;
+    },
+
+    async apply() {
+      if (this.saving) {
+        return;
+      }
+
+      this.saving = true;
+      this.flash.show = false;
+
+      try {
+        const payload = this.normalizeForm(this.form);
+        payload.application.port = Number(payload.application.port) || 0;
+        payload.check_until = Number(payload.check_until) || 0;
+        payload.notifications.smtp.port = Number(payload.notifications.smtp.port) || 0;
+        payload.pretty_print = !!payload.pretty_print;
+
+        const res = await fetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+
+        this.dirty = false;
+
+        const title = 'Konfiguracija je uspešno promenjena';
+        const message = data.message || 'Izmene su sačuvane i primenjene.';
+        const warnings = data.warnings || [];
+
+        this.persistFlash(true, title, message, warnings);
+        this.showFlash(true, title, message, warnings);
+
+        // Reload so badges, summary cards, and secret hints match disk.
+        window.setTimeout(() => {
+          window.location.reload();
+        }, 650);
+      } catch (e) {
+        this.showFlash(false, 'Čuvanje nije uspelo', e.message || 'Pokušaj ponovo.');
+      } finally {
+        this.saving = false;
+      }
+    },
+
     get currentGuide() {
       return this.guides[this.guideKey] || this.guides.smtp;
     },
 
-    /**
-     * @returns {object}
-     */
     get currentStep() {
       return this.currentGuide.steps[this.step] || this.currentGuide.steps[0];
     },
 
-    /**
-     * @returns {boolean}
-     */
     get isFirst() {
       return this.step <= 0;
     },
 
-    /**
-     * @returns {boolean}
-     */
     get isLast() {
       return this.step >= this.currentGuide.steps.length - 1;
     },
 
-    /**
-     * Opens the setup guide for the currently selected notification driver.
-     * @param {string} [key]
-     */
     openGuide(key) {
-      const next = (key || this.guideKey || 'smtp').toLowerCase();
+      const next = (key || this.form.notifications.driver || 'smtp').toLowerCase();
       this.guideKey = this.guides[next] ? next : 'smtp';
       this.step = 0;
       this.guideOpen = true;
@@ -142,9 +334,6 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    /**
-     * @param {number} index
-     */
     goTo(index) {
       if (index >= 0 && index < this.currentGuide.steps.length) {
         this.step = index;
@@ -157,7 +346,7 @@ document.addEventListener('alpine:init', () => {
       }
 
       this.sending = true;
-      this.message = '';
+      this.testMessage = '';
 
       try {
         const res = await fetch('/api/notifications/test', { method: 'POST' });
@@ -165,11 +354,11 @@ document.addEventListener('alpine:init', () => {
         if (!res.ok) {
           throw new Error(text.trim() || `HTTP ${res.status}`);
         }
-        this.ok = true;
-        this.message = 'Test poruka je poslata.';
+        this.testOk = true;
+        this.testMessage = 'Test poruka je poslata.';
       } catch (e) {
-        this.ok = false;
-        this.message = e.message || 'Slanje nije uspelo.';
+        this.testOk = false;
+        this.testMessage = e.message || 'Slanje nije uspelo.';
       } finally {
         this.sending = false;
       }

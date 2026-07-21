@@ -233,18 +233,13 @@ func staticAssets() http.Handler {
 }
 
 type PageData struct {
-	URL   string
-	Pairs []string
-	// Active marks the current nav item so the shared header can highlight it.
-	Active string
-	// Title and Description feed both the <title> tag and the Open Graph cards.
+	URL         string
+	Active      string
 	Title       string
 	Description string
-	// BaseURL is the absolute scheme://host the page was served from. Open
-	// Graph requires absolute URLs, and hardcoding one would break the moment
-	// the app is reached on a different host or port.
-	BaseURL string
-	Version string
+	BaseURL     string
+	Version     string
+	Pairs       []string
 }
 
 // baseURL reconstructs the absolute origin of the current request, honouring
@@ -279,14 +274,14 @@ type ProviderMonthly struct {
 }
 
 type StatsResponse struct {
-	Year              int               `json:"year"`
+	Currency          string            `json:"currency"`
 	Monthly           []float64         `json:"monthly"`
 	MonthlyCounts     []int             `json:"monthly_counts"`
 	ByProvider        []ProviderTotal   `json:"by_provider"`
 	MonthlyByProvider []ProviderMonthly `json:"monthly_by_provider"`
+	Year              int               `json:"year"`
 	Total             float64           `json:"total"`
 	Average           float64           `json:"average"`
-	Currency          string            `json:"currency"`
 }
 
 type Handler func(http.ResponseWriter, *http.Request)
@@ -387,19 +382,16 @@ func receiptHandler(c *container.Container) Handler {
 // API models
 
 type APIReceipt struct {
-	Provider string `json:"provider"`
-	Period   string `json:"period"`
-	URL      string `json:"url"`
-	FileName string `json:"filename"`
-	Size     int64  `json:"size"`
-	Modified int64  `json:"modified"`
-	// Amount and Currency come from receipts/meta.json and are zero-valued
-	// when a receipt has no matching metadata entry.
-	Amount   float64 `json:"amount"`
+	Provider string  `json:"provider"`
+	Period   string  `json:"period"`
+	URL      string  `json:"url"`
+	FileName string  `json:"filename"`
 	Currency string  `json:"currency"`
-	// Paid and PaidAt come from receipts/payments.json.
-	Paid   bool  `json:"paid"`
-	PaidAt int64 `json:"paid_at"`
+	Size     int64   `json:"size"`
+	Modified int64   `json:"modified"`
+	Amount   float64 `json:"amount"`
+	PaidAt   int64   `json:"paid_at"`
+	Paid     bool    `json:"paid"`
 }
 
 // scanReceipts walks the ./receipts directory and returns all available
@@ -552,8 +544,8 @@ func metaKey(period, provider string) string {
 type ReceiptMeta struct {
 	Provider string  `json:"provider"`
 	Period   string  `json:"period"`
-	Amount   float64 `json:"amount"`
 	Currency string  `json:"currency"`
+	Amount   float64 `json:"amount"`
 }
 
 // loadReceiptMeta reads receipts/meta.json if present; otherwise returns empty slice.

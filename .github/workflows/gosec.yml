@@ -1,0 +1,35 @@
+name: gosec
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: gosec-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gosec:
+    name: gosec
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Run Gosec Security Scanner
+        uses: securego/gosec@v2
+        with:
+          # Known false positives / intentional patterns for this app:
+          # G104 cleanup Close(); G301/G306 local receipt permissions;
+          # G304 config/receipt paths; G101 SecretPlaceholder / URL constants;
+          # G402 SMTP TLS floor; G114 ListenAndServe timeouts; G203 escaped FormJSON.
+          args: >-
+            -exclude-generated
+            -exclude=G104,G301,G304,G306,G101,G402,G114,G203
+            -fmt text
+            ./...

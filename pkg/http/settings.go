@@ -36,7 +36,10 @@ type redactedCredentials struct {
 // config.json but absent from config.Config are silently ignored at load time
 // and therefore will not appear here either.
 type redactedConfig struct {
-	Application struct {
+	Providers     map[string]redactedCredentials `json:"providers"`
+	Notifications redactedNotifications          `json:"notifications"`
+	S3            redactedS3                     `json:"s3"`
+	Application   struct {
 		Host  string `json:"host"`
 		Port  int    `json:"port"`
 		Certs struct {
@@ -44,14 +47,11 @@ type redactedConfig struct {
 			PrivateKey  string `json:"key"`
 		} `json:"certs"`
 	} `json:"application"`
-	Storage      string                         `json:"storage"`
-	DownloadPath string                         `json:"download_path"`
-	CheckUntil     int                            `json:"check_until"`
-	S3             redactedS3                     `json:"s3"`
-	Notifications  redactedNotifications          `json:"notifications"`
-	LogLevel       string                         `json:"log_level"`
-	PrettyPrint    bool                           `json:"pretty_print"`
-	Providers      map[string]redactedCredentials `json:"providers"`
+	Storage      string `json:"storage"`
+	DownloadPath string `json:"download_path"`
+	LogLevel     string `json:"log_level"`
+	CheckUntil   int    `json:"check_until"`
+	PrettyPrint  bool   `json:"pretty_print"`
 }
 
 // redactedS3 mirrors config.S3 with both credential halves hidden: the access
@@ -66,11 +66,11 @@ type redactedS3 struct {
 
 type redactedSMTP struct {
 	Host     string `json:"host"`
-	Port     int    `json:"port"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 	From     string `json:"from"`
 	To       string `json:"to"`
+	Port     int    `json:"port"`
 }
 
 type redactedTelegram struct {
@@ -178,43 +178,24 @@ type ProviderStatus struct {
 
 // SettingsPageData backs the settings template.
 type SettingsPageData struct {
+	Config redactedConfig
 	PageData
-
-	ConfigPath string
-	// Config is the redacted, in-memory configuration shown as form fields.
-	Config       redactedConfig
-	Providers    []ProviderStatus
-	ReceiptCount int
-
-	// Storage names the configured receipt storage driver ("local" or "s3").
-	// StorageTarget is where receipts end up: the download path for local
-	// storage, the bucket name for S3.
-	Storage       string
-	StorageTarget string
-
-	// DownloadPathExists and DownloadPathWritable catch the most common
-	// misconfiguration: a path that has moved or cannot be written to.
-	DownloadPathExists   bool
+	FormJSON             template.JS
+	ConfigPath           string
+	Storage              string
+	StorageTarget        string
+	ProviderSecretsJSON  template.JS
+	Providers            []ProviderStatus
+	IgnoredKeys          []string
+	ReceiptCount         int
 	DownloadPathWritable bool
-
-	// NotifyCanTest is true when the selected driver has enough credentials
-	// to send a probe message from the settings page.
-	NotifyCanTest bool
-
-	// FormJSON is the editable config snapshot for Alpine (secrets blanked).
-	FormJSON template.JS
-
-	HasAppKey   bool
-	HasS3Access bool
-	HasS3Secret bool
-	HasSMTPPass bool
-	HasTgToken  bool
-	// ProviderSecretsJSON maps provider name → whether a password is stored.
-	ProviderSecretsJSON template.JS
-
-	// IgnoredKeys are top-level keys present in config.json that the
-	// application does not understand and therefore silently discards.
-	IgnoredKeys []string
+	HasAppKey            bool
+	HasS3Access          bool
+	HasS3Secret          bool
+	HasSMTPPass          bool
+	HasTgToken           bool
+	NotifyCanTest        bool
+	DownloadPathExists   bool
 }
 
 // knownKeys are the top-level config.json keys config.Config actually parses.

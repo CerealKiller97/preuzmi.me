@@ -20,10 +20,9 @@ const fileName = "payments.json"
 
 // Store is a concurrency-safe, file-backed set of paid receipts.
 type Store struct {
-	mu   sync.RWMutex
-	path string
-	// paid maps a receipt key to the moment it was marked paid.
 	paid map[string]int64
+	path string
+	mu   sync.RWMutex
 }
 
 // Key builds the identifier for a receipt. The period is expected to already be

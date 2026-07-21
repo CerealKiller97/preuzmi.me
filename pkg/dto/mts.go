@@ -2,14 +2,14 @@ package dto
 
 type (
 	Bill struct {
-		IsPayable                bool                     `json:"isPayable"`
 		TotalAmountFormatted     string                   `json:"totalAmountFormatted"`
 		TotalDebtAmountFormatted TotalDebtAmountFormatted `json:"totalDebtAmountFormatted"`
-		Month                    int64                    `json:"month"`
-		Year                     int64                    `json:"year"`
 		Status                   Status                   `json:"status"`
 		InvoiceNumber            string                   `json:"invoiceNumber"`
 		BillingAccountID         string                   `json:"billingAccountId"`
+		Month                    int64                    `json:"month"`
+		Year                     int64                    `json:"year"`
+		IsPayable                bool                     `json:"isPayable"`
 		ComplaintAvailable       bool                     `json:"complaintAvailable"`
 	}
 	BillGroup struct {
@@ -19,9 +19,9 @@ type (
 	}
 
 	GetReceiptsResponse struct {
+		Description string      `json:"description"`
 		BillGroups  []BillGroup `json:"billGroups"`
 		Count       int64       `json:"count"`
-		Description string      `json:"description"`
 		MaxLimit    int64       `json:"maxLimit"`
 	}
 

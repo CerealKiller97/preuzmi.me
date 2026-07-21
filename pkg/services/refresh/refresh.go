@@ -22,30 +22,26 @@ const fileName = "refresh.json"
 // Result is the outcome of one provider's download.
 type Result struct {
 	Provider   string `json:"provider"`
-	OK         bool   `json:"ok"`
 	Error      string `json:"error,omitempty"`
 	DurationMS int64  `json:"duration_ms"`
+	OK         bool   `json:"ok"`
 }
 
 // State is what the UI needs to render the refresh control.
 type State struct {
-	Running bool `json:"running"`
-	// StartedAt and FinishedAt are unix seconds; zero means "never".
+	Results    []Result `json:"results"`
 	StartedAt  int64    `json:"started_at"`
 	FinishedAt int64    `json:"finished_at"`
-	Results    []Result `json:"results"`
-	// Allowed is false once the calendar day is past check_until for this
-	// month: providers will not issue new receipts, so a refresh is wasted.
-	Allowed bool `json:"allowed"`
-	// CheckUntil is the last day of the month a refresh is still useful.
-	CheckUntil int `json:"check_until"`
+	CheckUntil int      `json:"check_until"`
+	Running    bool     `json:"running"`
+	Allowed    bool     `json:"allowed"`
 }
 
 // Service coordinates refreshes and remembers when the last one finished.
 type Service struct {
-	mu    sync.Mutex
 	path  string
 	state State
+	mu    sync.Mutex
 }
 
 // New loads the last recorded refresh from dir.

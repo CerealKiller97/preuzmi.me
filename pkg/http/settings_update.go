@@ -12,10 +12,10 @@ import (
 )
 
 type settingsUpdateResponse struct {
-	OK       bool     `json:"ok"`
 	Message  string   `json:"message,omitempty"`
 	Error    string   `json:"error,omitempty"`
 	Warnings []string `json:"warnings,omitempty"`
+	OK       bool     `json:"ok"`
 }
 
 // updateSettingsHandler validates a full config payload, merges unchanged

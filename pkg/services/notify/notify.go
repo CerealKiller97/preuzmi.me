@@ -30,9 +30,9 @@ type Sender interface {
 
 // Service decides which messages to send after a refresh finishes.
 type Service struct {
-	cfg    config.Notifications
-	sender Sender
 	log    zerolog.Logger
+	sender Sender
+	cfg    config.Notifications
 }
 
 // New builds a Service from config. When mode is off, sender may still be set

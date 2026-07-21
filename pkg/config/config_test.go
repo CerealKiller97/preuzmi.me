@@ -16,12 +16,12 @@ func TestKeepSecret(t *testing.T) {
 func TestMergeSecrets(t *testing.T) {
 	prev := Config{
 		Application: struct {
-			Host  string `json:"host"`
-			Port  int    `json:"port"`
 			Certs struct {
 				Certificate string `json:"cert"`
 				PrivateKey  string `json:"key"`
 			} `json:"certs"`
+			Host string `json:"host"`
+			Port int    `json:"port"`
 		}{
 			Certs: struct {
 				Certificate string `json:"cert"`

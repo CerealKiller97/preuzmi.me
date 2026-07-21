@@ -11,10 +11,10 @@ import (
 
 type (
 	Service struct {
-		config  config.Credentials
 		logger  zerolog.Logger
 		storage storage.Interface
 		http    *http.Client
+		config  config.Credentials
 	}
 )
 

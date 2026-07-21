@@ -17,10 +17,10 @@ var _ Sender = &TelegramSender{}
 
 // TelegramSender delivers notifications via the Bot API sendMessage method.
 type TelegramSender struct {
+	http   *http.Client
 	api    string
 	token  string
 	chatID string
-	http   *http.Client
 }
 
 func NewTelegram(cfg config.Telegram) (*TelegramSender, error) {
@@ -77,8 +77,8 @@ func (t *TelegramSender) Send(subject, body string) error {
 	}
 
 	var parsed struct {
-		OK          bool   `json:"ok"`
 		Description string `json:"description"`
+		OK          bool   `json:"ok"`
 	}
 	if err := json.Unmarshal(raw, &parsed); err != nil {
 		return fmt.Errorf("telegram: bad response (%s): %w", resp.Status, err)

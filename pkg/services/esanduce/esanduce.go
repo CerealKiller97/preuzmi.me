@@ -22,10 +22,10 @@ const (
 
 type (
 	Service struct {
-		config  config.Credentials
 		logger  zerolog.Logger
 		storage storage.Interface
 		http    *http.Client
+		config  config.Credentials
 	}
 
 	LoginResponse struct {
@@ -146,10 +146,7 @@ func (s Service) login() (string, error) {
 		return "", err
 	}
 
-	defer func(Body io.ReadCloser) {
-		if err := Body.Close(); err != nil {
-		}
-	}(response.Body)
+	defer response.Body.Close() //nolint:errcheck // best-effort body drain
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {

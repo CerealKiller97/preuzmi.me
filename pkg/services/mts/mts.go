@@ -41,10 +41,10 @@ type (
 	}
 
 	Service struct {
-		config  config.Credentials
-		storage storage.Interface
 		logger  zerolog.Logger
+		storage storage.Interface
 		http    *http.Client
+		config  config.Credentials
 	}
 )
 
@@ -127,7 +127,7 @@ func (s *Service) login() (string, error) {
 	}
 
 	if resp.StatusCode != http.StatusCreated {
-		return "", fmt.Errorf("Error making login request")
+		return "", fmt.Errorf("making login request failed")
 	}
 	defer resp.Body.Close()
 
@@ -157,7 +157,7 @@ func (s *Service) getAccessToken(cookie string) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Error getting access token: %s", resp.Status)
+		return "", fmt.Errorf("getting access token failed: %s", resp.Status)
 	}
 
 	accessToken, err := io.ReadAll(resp.Body)
@@ -190,7 +190,7 @@ func (s *Service) getReceipts(token string) ([]dto.Bill, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Error getting receipts: %s", resp.Status)
+		return nil, fmt.Errorf("getting receipts failed: %s", resp.Status)
 	}
 
 	data, err := io.ReadAll(resp.Body)
@@ -224,7 +224,7 @@ func (s *Service) downloadReceipt(invoiceNumber string, billingAccountId string,
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Error getting receipt: %s", resp.Status)
+		return fmt.Errorf("getting receipt failed: %s", resp.Status)
 	}
 
 	data, err := io.ReadAll(resp.Body)

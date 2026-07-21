@@ -16,21 +16,19 @@ import (
 )
 
 type Container struct {
-	Ctx              context.Context
-	cancel           context.CancelFunc
-	mu               sync.RWMutex
-	config           *config.Config
 	Logger           zerolog.Logger
-	Assets           embed.FS
-	templateFS       embed.FS
+	esanduceProvider provider.Interface
 	storage          storage.Interface
-	notifier         *notify.Service
 	mtsProvider      provider.Interface
 	a1Provider       provider.Interface
-	esanduceProvider provider.Interface
+	Ctx              context.Context
 	yettelProvider   provider.Interface
 	epsProvider      provider.Interface
+	config           *config.Config
+	Assets           embed.FS
+	notifier         *notify.Service
 	version          string
+	mu               sync.RWMutex
 }
 
 var _ io.Closer = &Container{}

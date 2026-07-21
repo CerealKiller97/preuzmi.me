@@ -42,11 +42,11 @@ type (
 	// "smtp". Port 587 uses STARTTLS; 465 uses implicit TLS.
 	SMTP struct {
 		Host     string `json:"host"`
-		Port     int    `json:"port"`
 		Username string `json:"username"`
 		Password string `json:"password"`
 		From     string `json:"from"`
 		To       string `json:"to"`
+		Port     int    `json:"port"`
 	}
 
 	// Telegram holds Bot API credentials used when notifications.driver is
@@ -76,7 +76,10 @@ type (
 	}
 
 	Config struct {
-		Application struct {
+		Providers     map[Provider]Credentials `json:"providers"`
+		Notifications Notifications            `json:"notifications"`
+		S3            S3                       `json:"s3"`
+		Application   struct {
 			Host  string `json:"host"`
 			Port  int    `json:"port"`
 			Certs struct {
@@ -84,17 +87,11 @@ type (
 				PrivateKey  string `json:"key"`
 			} `json:"certs"`
 		} `json:"application"`
-		Storage      string                   `json:"storage"` // Allowed values: local|s3
-		DownloadPath string                   `json:"download_path"`
-		S3           S3                       `json:"s3"`
-		// CheckUntil is the last day of the month when a refresh is useful.
-		// Providers stop issuing new receipts after this day, so the UI
-		// disables the refresh button and the API rejects refreshes past it.
-		CheckUntil      int                      `json:"check_until"`
-		Notifications   Notifications            `json:"notifications"`
-		LogLevel        string                   `json:"log_level"`
-		PrettyPrint     bool                     `json:"pretty_print"`
-		Providers       map[Provider]Credentials `json:"providers"`
+		Storage      string `json:"storage"`
+		DownloadPath string `json:"download_path"`
+		LogLevel     string `json:"log_level"`
+		CheckUntil   int    `json:"check_until"`
+		PrettyPrint  bool   `json:"pretty_print"`
 	}
 )
 

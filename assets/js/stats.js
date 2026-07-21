@@ -41,6 +41,63 @@ document.addEventListener('alpine:init', () => {
 
       // Repaint the chart when the user flips the theme.
       window.addEventListener('theme-changed', () => this.restyleChart());
+
+      // Chart.js sizes against the laid-out box. Entrance animations (transform)
+      // and x-show flips leave the first paint blank until something resizes.
+      this.observeChartBoxes();
+    },
+
+    /**
+     * Keep canvases in sync with their containers after layout / visibility
+     * changes (staggered fade-in, x-show, window resize).
+     */
+    observeChartBoxes() {
+      if (typeof ResizeObserver === 'undefined') {
+        return;
+      }
+
+      const watch = (canvas, chartKey) => {
+        if (!canvas?.parentElement) {
+          return;
+        }
+
+        const ro = new ResizeObserver(() => {
+          const chart = this[chartKey];
+          if (chart) {
+            chart.resize();
+          }
+        });
+        ro.observe(canvas.parentElement);
+      };
+
+      this.$nextTick(() => {
+        watch(this.$refs.monthlyLine, 'chart');
+        watch(this.$refs.providerDonut, 'donut');
+      });
+    },
+
+    /**
+     * Paint after Alpine has applied x-show / bindings, then force a resize
+     * once the entrance animation has released its transform.
+     */
+    schedulePaint() {
+      this.$nextTick(() => {
+        this.renderChart();
+        this.renderDonut();
+
+        // Two rAFs: one for style flush, one after paint. Then a short delay
+        // past the fade-in-up duration (0.4s + stagger) so transform:none sticks.
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            this.chart?.resize();
+            this.donut?.resize();
+            window.setTimeout(() => {
+              this.chart?.resize();
+              this.donut?.resize();
+            }, 500);
+          });
+        });
+      });
     },
 
     /**
@@ -195,8 +252,7 @@ document.addEventListener('alpine:init', () => {
         };
       } finally {
         this.loading = false;
-        this.renderChart();
-        this.renderDonut();
+        this.schedulePaint();
       }
     },
 
@@ -389,11 +445,14 @@ document.addEventListener('alpine:init', () => {
           data: row.monthly || Array(12).fill(0),
           backgroundColor: color,
           hoverBackgroundColor: this.rgba(color, 0.85),
-          borderRadius: 5,
+          // Only round the top of the stack so thin segments don't become pills.
+          borderRadius: i === this.providerSeries.length - 1
+            ? { topLeft: 6, topRight: 6, bottomLeft: 0, bottomRight: 0 }
+            : 0,
           borderSkipped: false,
-          barPercentage: 0.72,
-          categoryPercentage: 0.82,
-          maxBarThickness: 28,
+          barPercentage: 0.78,
+          categoryPercentage: 0.86,
+          maxBarThickness: 40,
         };
       });
     },

@@ -99,50 +99,6 @@
       · Tajna polja ostavi prazna da zadržiš postojeću vrednost
     </div>
 
-    <!-- Application (listen bind — runtime immutable) -->
-    <section class="card animate-fade-in-up mt-6 p-5" style="--stagger: 2">
-      <h2 class="text-base font-semibold tracking-tight">Aplikacija</h2>
-      <p class="text-sm text-muted-foreground">
-        Host, port i TLS se ne menjaju iz UI-ja — server je već pokrenut na tim vrednostima.
-        Izmena ide preko <code class="font-mono text-xs">config.json</code> + restart.
-      </p>
-
-      <div class="mt-5 grid gap-4 sm:grid-cols-2">
-        <div class="flex flex-col gap-1.5">
-          <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="app-host">
-            Host
-            {{template "hint" "IP adresa ili hostname na kojem HTTP server sluša. 0.0.0.0 znači sve mrežne interfejse. Zahteva restart."}}
-          </label>
-          <input id="app-host" type="text" class="input" readonly
-                 :value="form.application.host">
-        </div>
-        <div class="flex flex-col gap-1.5">
-          <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="app-port">
-            Port
-            {{template "hint" "TCP port na kojem je aplikacija dostupna. Zahteva restart."}}
-          </label>
-          <input id="app-port" type="text" class="input" readonly
-                 :value="form.application.port">
-        </div>
-        <div class="flex flex-col gap-1.5 sm:col-span-2">
-          <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="app-cert">
-            Sertifikat
-            {{template "hint" "Putanja do TLS sertifikata (PEM). Zahteva restart."}}
-          </label>
-          <input id="app-cert" type="text" class="input font-mono text-xs" readonly
-                 :value="form.application.certs.cert || '—'">
-        </div>
-        <div class="flex flex-col gap-1.5 sm:col-span-2">
-          <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="app-key">
-            Privatni ključ
-            {{template "hint" "Putanja do privatnog ključa. Nikad se ne prikazuje u čistom tekstu. Zahteva restart."}}
-          </label>
-          <input id="app-key" type="text" class="input font-mono text-xs" readonly
-                 :value="secretHints.appKey ? '••••••••' : '—'">
-        </div>
-      </div>
-    </section>
-
     <!-- Storage -->
     <section class="card animate-fade-in-up mt-6 p-5" style="--stagger: 3">
       <h2 class="text-base font-semibold tracking-tight">Skladište</h2>
@@ -360,31 +316,6 @@
             <input id="smtp-to" type="email" class="input" x-model="form.notifications.smtp.to" placeholder="—">
           </div>
         </div>
-      </div>
-    </section>
-
-    <!-- Logging -->
-    <section class="card animate-fade-in-up mt-6 p-5" style="--stagger: 5">
-      <h2 class="text-base font-semibold tracking-tight">Dnevnik</h2>
-      <p class="text-sm text-muted-foreground">Nivo logovanja i format ispisa.</p>
-
-      <div class="mt-5 grid gap-4 sm:grid-cols-2">
-        <div class="flex flex-col gap-1.5">
-          <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="log-level">Nivo</label>
-          <select id="log-level" class="input" x-model="form.log_level">
-            <option value="debug">debug</option>
-            <option value="info">info</option>
-            <option value="warn">warn</option>
-            <option value="error">error</option>
-          </select>
-        </div>
-        <label class="flex items-center gap-3 self-end rounded-lg border px-4 py-3 text-sm cursor-pointer">
-          <input type="checkbox" class="h-4 w-4 accent-primary" x-model="form.pretty_print">
-          <span>
-            <span class="font-medium">Pretty print</span>
-            <span class="mt-0.5 block text-xs text-muted-foreground">Čitljiv ispis u konzoli</span>
-          </span>
-        </label>
       </div>
     </section>
 

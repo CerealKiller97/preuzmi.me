@@ -2,15 +2,21 @@ package esanduce
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/CerealKiller97/preuzmi.me/pkg/config"
-	"github.com/CerealKiller97/preuzmi.me/pkg/services/provider"
-	"github.com/CerealKiller97/preuzmi.me/pkg/services/storage"
-	"github.com/rs/zerolog"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
+
+	"github.com/CerealKiller97/preuzmi.me/pkg/config"
+	"github.com/CerealKiller97/preuzmi.me/pkg/services/provider"
+	"github.com/CerealKiller97/preuzmi.me/pkg/services/receipts"
+	"github.com/CerealKiller97/preuzmi.me/pkg/services/storage"
+	"github.com/CerealKiller97/preuzmi.me/pkg/utils"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -18,14 +24,25 @@ const (
 	ApplicationID = "31C64209-93FC-490F-542B-08D6D6E198FE"
 	RequestType   = "password"
 	BaseURL       = "https://esanduceservice.infostan.rs/api"
+
+	// identListURL lists the account's idents for issuer 1 (ЈКП Инфостан
+	// Технологије); the ident identifies which space's bills to fetch.
+	identListURL = BaseURL + "/SONUpit/identi_lista_izdavaoc/1"
+
+	// statusDugaPaid is the Cyrillic value of status_duga that marks a bill as
+	// paid; anything else counts as unpaid.
+	statusDugaPaid = "плаћен"
+
+	fileName = "esanduce"
 )
 
 type (
 	Service struct {
-		logger  zerolog.Logger
-		storage storage.Interface
-		http    *http.Client
-		config  config.Credentials
+		logger   zerolog.Logger
+		storage  storage.Interface
+		receipts *receipts.Store
+		http     *http.Client
+		config   config.Credentials
 	}
 
 	LoginResponse struct {
@@ -69,6 +86,22 @@ type (
 		GroupCount int    `json:"groupCount"`
 	}
 
+	IdentEntry struct {
+		Ident         int    `json:"ident"`
+		Vrsta         string `json:"vrsta"`
+		IzdavaocNaziv string `json:"izdavaoc_naziv"`
+		IzdavaocID    int    `json:"izdavaoc_id"`
+		Tip           string `json:"tip"`
+		Naselje       string `json:"naselje"`
+	}
+
+	IdentListResponse struct {
+		Summary    any          `json:"summary"`
+		Data       []IdentEntry `json:"data"`
+		TotalCount int          `json:"totalCount"`
+		GroupCount int          `json:"groupCount"`
+	}
+
 	GetUserInfoResponse struct {
 		InterniPortal             any    `json:"interniPortal"`
 		TelekomRacun              any    `json:"telekomRacun"`
@@ -95,11 +128,12 @@ type (
 
 var _ provider.Interface = &Service{}
 
-func New(config config.Credentials, logger zerolog.Logger, storage storage.Interface) *Service {
+func New(config config.Credentials, logger zerolog.Logger, storage storage.Interface, receiptsStore *receipts.Store) *Service {
 	return &Service{
-		config:  config,
-		logger:  logger,
-		storage: storage,
+		config:   config,
+		logger:   logger,
+		storage:  storage,
+		receipts: receiptsStore,
 		http: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -112,9 +146,187 @@ func (s Service) DownloadReceipt() error {
 		return err
 	}
 
-	fmt.Println(accessToken)
+	ident, err := s.getIdent(accessToken)
+	if err != nil {
+		s.logger.Err(err).Msg("Error while fetching esanduce ident")
+		return err
+	}
+
+	s.logger.Info().Int("ident", ident).Msg("Resolved esanduce ident")
+
+	bills, err := s.getReceipts(accessToken, ident)
+	if err != nil {
+		s.logger.Err(err).Msg("Error while fetching esanduce receipts")
+		return err
+	}
+
+	if len(bills) == 0 {
+		return fmt.Errorf("esanduce returned no bills")
+	}
+
+	// Sorted by ggmm descending, so the first bill is the latest.
+	bill := bills[0]
+	period := periodFromGGMM(bill.Ggmm)
+
+	if err := s.downloadReceipt(accessToken, ident, bill.Ggmm, period); err != nil {
+		s.logger.Err(err).Int("ggmm", bill.Ggmm).Msg("Error downloading esanduce receipt")
+		return err
+	}
+
+	// Record price and paid status. Best-effort: the PDF is already saved, so a
+	// database hiccup must not fail the download.
+	if s.receipts != nil {
+		ctx := context.Background()
+		if err := s.receipts.SetPrice(ctx, fileName, period, bill.Zaduzenje); err != nil {
+			s.logger.Err(err).Str("period", period).Msg("Failed to record esanduce receipt price")
+		}
+		if err := s.receipts.SetStatus(ctx, fileName, period, billStatus(bill)); err != nil {
+			s.logger.Err(err).Str("period", period).Msg("Failed to record esanduce receipt status")
+		}
+	}
 
 	return nil
+}
+
+// getReceipts fetches the ident's bills, newest first (sorted by ggmm desc).
+func (s Service) getReceipts(token string, ident int) ([]Bill, error) {
+	q := url.Values{}
+	q.Set("skip", "0")
+	q.Set("take", "10")
+	q.Set("sort", `[{"selector":"ggmm","desc":true}]`)
+	q.Set("filter", "")
+
+	endpoint := fmt.Sprintf("%s/SONUpit/ident/%d/racuni?%s", BaseURL, ident, q.Encode())
+
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := s.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close() //nolint:errcheck // best-effort body drain
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("esanduce receipts failed: %s", resp.Status)
+	}
+
+	var res GetReceiptResponse
+	if err := json.Unmarshal(body, &res); err != nil {
+		return nil, err
+	}
+
+	return res.Data, nil
+}
+
+// downloadReceipt fetches the PDF for the given ident/ggmm and persists it under
+// the period folder.
+func (s Service) downloadReceipt(token string, ident, ggmm int, period string) error {
+	endpoint := fmt.Sprintf("%s/SONUpit/ident/%d/zaduzenje/%d/stampa", BaseURL, ident, ggmm)
+
+	req, err := http.NewRequest(http.MethodPost, endpoint, nil)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := s.http.Do(req)
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close() //nolint:errcheck // best-effort body drain
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("esanduce pdf download failed: %s", resp.Status)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	key := fmt.Sprintf("%s/%s.pdf", period, fileName)
+
+	if err := s.storage.Save(context.Background(), key, data); err != nil {
+		return err
+	}
+
+	s.logger.Info().Str("key", key).Msg("Successfully downloaded receipt")
+
+	return nil
+}
+
+// periodFromGGMM converts esanduce's YYMM code (e.g. 2606) into the "MM-YYYY"
+// folder, falling back to the previous-month heuristic on an out-of-range value.
+func periodFromGGMM(ggmm int) string {
+	year := 2000 + ggmm/100
+	month := ggmm % 100
+
+	if month < 1 || month > 12 {
+		return utils.PreviousMonthFolder()
+	}
+
+	return fmt.Sprintf("%02d-%d", month, year)
+}
+
+// billStatus maps esanduce's status_duga onto the receipts table label
+// ("plaćeno" / "neplaćeno").
+func billStatus(bill Bill) string {
+	if strings.TrimSpace(bill.StatusDuga) == statusDugaPaid {
+		return receipts.StatusPaid
+	}
+
+	return receipts.StatusUnpaid
+}
+
+// getIdent fetches the account's idents and returns the first one, which later
+// calls use to scope the bill lookup.
+func (s Service) getIdent(token string) (int, error) {
+	req, err := http.NewRequest(http.MethodGet, identListURL, nil)
+	if err != nil {
+		return 0, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := s.http.Do(req)
+	if err != nil {
+		return 0, err
+	}
+
+	defer resp.Body.Close() //nolint:errcheck // best-effort body drain
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("esanduce ident list failed: %s", resp.Status)
+	}
+
+	var res IdentListResponse
+	if err := json.Unmarshal(body, &res); err != nil {
+		return 0, err
+	}
+
+	if len(res.Data) == 0 {
+		return 0, fmt.Errorf("esanduce returned no idents")
+	}
+
+	return res.Data[0].Ident, nil
 }
 
 func (s Service) login() (string, error) {

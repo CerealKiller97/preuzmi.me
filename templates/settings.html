@@ -179,8 +179,60 @@
       </div>
     </section>
 
-    <!-- Notifications -->
+    <!-- Email (IMAP) -->
     <section class="card animate-fade-in-up mt-6 p-5" style="--stagger: 4">
+      <h2 class="text-base font-semibold tracking-tight">Email (IMAP)</h2>
+      <p class="text-sm text-muted-foreground">
+        Server za čitanje pošte za provajdere bez API-ja (npr. eUpravnik, koji račun šalje kao PDF u prilogu).
+        Nalog i lozinku aplikacije unesi dole u sekciji Provajderi pod „eupravnik“.
+      </p>
+
+      <div class="mt-5 grid gap-4 sm:grid-cols-2">
+        <div class="flex flex-col gap-1.5">
+          <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="email-provider">
+            Provajder
+            {{template "hint" "Izaberi poznati IMAP server (gmail, outlook, yahoo, icloud) ili custom za ručni unos hosta."}}
+          </label>
+          <select id="email-provider" class="input" x-model="form.email.provider">
+            <option value="gmail">gmail</option>
+            <option value="outlook">outlook</option>
+            <option value="yahoo">yahoo</option>
+            <option value="icloud">icloud</option>
+            <option value="custom">custom</option>
+          </select>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="email-mailbox">
+            Folder
+            {{template "hint" "IMAP folder koji se pretražuje. Podrazumevano INBOX. Na Gmailu unesite naziv labele da se pretraga ograniči samo na te poruke — brže je kod velikih sandučića (ugnežđene labele: Roditelj/Dete)."}}
+          </label>
+          <input id="email-mailbox" type="text" class="input" x-model="form.email.mailbox" placeholder="INBOX">
+        </div>
+      </div>
+
+      <div x-show="form.email.provider === 'custom'" x-cloak>
+        <div class="mt-4 grid gap-4 sm:grid-cols-2">
+          <div class="flex flex-col gap-1.5">
+            <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="email-host">
+              Host
+              {{template "hint" "IMAP host servera, npr. imap.mojserver.rs. Koristi TLS (port 993)."}}
+            </label>
+            <input id="email-host" type="text" class="input font-mono text-xs"
+                   x-model="form.email.host" placeholder="imap.primer.rs">
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="email-port">
+              Port
+              {{template "hint" "IMAP-over-TLS port. Podrazumevano 993."}}
+            </label>
+            <input id="email-port" type="number" class="input" x-model.number="form.email.port" placeholder="993">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Notifications -->
+    <section class="card animate-fade-in-up mt-6 p-5" style="--stagger: 5">
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 class="text-base font-semibold tracking-tight">Obaveštenja</h2>
@@ -231,6 +283,14 @@
             <option value="telegram">telegram</option>
           </select>
         </div>
+      </div>
+
+      <div class="mt-4">
+        <label class="inline-flex items-center gap-2 text-sm font-medium" for="notify-paid">
+          <input id="notify-paid" type="checkbox" class="h-4 w-4" x-model="form.notifications.paid_confirmation">
+          Obavesti kada je račun potvrđen kao plaćen
+          {{template "hint" "Šalje poruku kad provajder potvrdi da je račun plaćen. Radi nezavisno od režima — može biti uključeno i kad je režim off (potreban je podešen drajver)."}}
+        </label>
       </div>
 
       <div x-show="form.notifications.driver === 'telegram'" x-cloak>

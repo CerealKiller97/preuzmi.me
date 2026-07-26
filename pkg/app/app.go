@@ -11,7 +11,6 @@ import (
 type (
 	App struct {
 		c *container.Container
-		// middleware []middleware.Middleware
 	}
 )
 
@@ -42,14 +41,9 @@ func (a *App) Serve() error {
 	a.c.Logger.
 		Info().
 		Str("version", a.c.GetVersion()).
-		Msgf("Starting the HTTPS server on: https://%s", socket)
+		Msgf("Starting the HTTP server on: http://%s", socket)
 
-	return http.ListenAndServe(
-		socket,
-		// config.Application.Certs.Certificate,
-		// config.Application.Certs.PrivateKey,
-		nil,
-	)
+	return http.ListenAndServe(socket, nil)
 }
 
 func (a *App) Close() error {

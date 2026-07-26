@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/dto"
-	"github.com/CerealKiller97/preuzmi.me/pkg/services/receipts"
+	"github.com/CerealKiller97/preuzmi.me/pkg/repositories/receipts"
 )
 
 func TestBillStatus(t *testing.T) {

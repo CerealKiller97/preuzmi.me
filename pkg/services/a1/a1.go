@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
+	"github.com/CerealKiller97/preuzmi.me/pkg/repositories/receipts"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/provider"
-	"github.com/CerealKiller97/preuzmi.me/pkg/services/receipts"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/storage"
 	"github.com/CerealKiller97/preuzmi.me/pkg/utils"
 	"github.com/rs/zerolog"
@@ -56,7 +56,7 @@ type (
 	Service struct {
 		logger   zerolog.Logger
 		storage  storage.Interface
-		receipts *receipts.Store
+		receipts *receipts.Repository
 		http     *http.Client
 		config   config.Credentials
 	}
@@ -122,7 +122,7 @@ type (
 
 var _ provider.Interface = &Service{}
 
-func New(config config.Credentials, logger zerolog.Logger, storage storage.Interface, receiptsStore *receipts.Store) *Service {
+func New(config config.Credentials, logger zerolog.Logger, storage storage.Interface, receiptsStore *receipts.Repository) *Service {
 	// A cookie jar carries the session cookie the login sets (and any cookies
 	// picked up along redirects) into the follow-up authenticated requests.
 	jar, _ := cookiejar.New(nil) //nolint:errcheck // cookiejar.New never errors with a nil options

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CerealKiller97/preuzmi.me/pkg/repositories/receipts"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/mailbox"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/provider"
-	"github.com/CerealKiller97/preuzmi.me/pkg/services/receipts"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/storage"
 	"github.com/CerealKiller97/preuzmi.me/pkg/utils"
 	"github.com/rs/zerolog"
@@ -37,7 +37,7 @@ var _ provider.Interface = (*Service)(nil)
 type Service struct {
 	logger   zerolog.Logger
 	storage  storage.Interface
-	receipts *receipts.Store
+	receipts *receipts.Repository
 	reader   mailbox.Reader
 }
 
@@ -48,7 +48,7 @@ func New(
 	reader mailbox.Reader,
 	logger zerolog.Logger,
 	storage storage.Interface,
-	receiptsStore *receipts.Store,
+	receiptsStore *receipts.Repository,
 ) *Service {
 	return &Service{
 		reader:   reader,

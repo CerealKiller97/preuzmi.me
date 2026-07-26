@@ -3,7 +3,7 @@ package a1
 import (
 	"testing"
 
-	"github.com/CerealKiller97/preuzmi.me/pkg/services/receipts"
+	"github.com/CerealKiller97/preuzmi.me/pkg/repositories/receipts"
 )
 
 func TestBillPeriod(t *testing.T) {

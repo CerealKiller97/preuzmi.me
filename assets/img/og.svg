@@ -54,7 +54,7 @@
 
   <!-- Provider list -->
   <text x="80" y="462" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="26"
-        font-weight="500" fill="#71717a" letter-spacing="1.5">MTS · A1 · EPS · YETTEL · ESANDUCE</text>
+        font-weight="500" fill="#71717a" letter-spacing="1.5">MTS · A1 · EPS · YETTEL · ESANDUCE · EUPRAVNIK</text>
 
   <!-- Paid indicator, tying the image to the app's status badges -->
   <g transform="translate(80 516)">

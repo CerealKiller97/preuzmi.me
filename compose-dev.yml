@@ -1,0 +1,51 @@
+# Local S3-compatible storage for testing `"storage": "s3"`.
+#
+# RustFS exposes the S3 API on :9000 and a web console on :9001. The
+# `createbuckets` helper waits for the API, then creates the `receipts`
+# bucket the app writes into.
+#
+# Point config.json at it:
+#   "storage": "s3",
+#   "s3": {
+#     "endpoint": "http://localhost:9000",
+#     "bucket": "receipts",
+#     "region": "us-east-1",
+#     "access_key": "rustfsadmin",
+#     "secret_key": "rustfsadmin"
+#   }
+#
+# Console: http://localhost:9001  (same credentials)
+
+services:
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: rustfs
+    command: ["/data"]
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # web console
+    environment:
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_SECRET_KEY: rustfsadmin
+      RUSTFS_CONSOLE_ENABLE: "true"
+    volumes:
+      - rustfs-data:/data
+    restart: unless-stopped
+
+  # One-shot: create the `receipts` bucket once RustFS is reachable, then exit.
+  createbuckets:
+    image: minio/mc:latest
+    depends_on:
+      - rustfs
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://rustfs:9000 rustfsadmin rustfsadmin; do
+        echo 'waiting for rustfs...'; sleep 1;
+      done;
+      mc mb --ignore-existing local/receipts;
+      echo 'bucket ready: receipts';
+      "
+    restart: "no"
+
+volumes:
+  rustfs-data:

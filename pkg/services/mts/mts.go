@@ -8,11 +8,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
 	"github.com/CerealKiller97/preuzmi.me/pkg/dto"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/provider"
+	"github.com/CerealKiller97/preuzmi.me/pkg/services/receipts"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/storage"
 	"github.com/CerealKiller97/preuzmi.me/pkg/utils"
 	"github.com/rs/zerolog"
@@ -41,10 +44,11 @@ type (
 	}
 
 	Service struct {
-		logger  zerolog.Logger
-		storage storage.Interface
-		http    *http.Client
-		config  config.Credentials
+		logger   zerolog.Logger
+		storage  storage.Interface
+		receipts *receipts.Store
+		http     *http.Client
+		config   config.Credentials
 	}
 )
 
@@ -52,14 +56,16 @@ func New(
 	config config.Credentials,
 	storage storage.Interface,
 	logger zerolog.Logger,
+	receiptsStore *receipts.Store,
 ) *Service {
 	return &Service{
 		config: config,
 		http: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		storage: storage,
-		logger:  logger,
+		storage:  storage,
+		receipts: receiptsStore,
+		logger:   logger,
 	}
 }
 
@@ -84,20 +90,108 @@ func (s *Service) DownloadReceipt() error {
 
 	s.logger.Info().Int("billsCount", len(bills)).Msg("Successfully fetched receipts")
 
-	invoiceNumber := bills[0].InvoiceNumber
-	billingAccountId := bills[0].BillingAccountID
+	if len(bills) == 0 {
+		return fmt.Errorf("mts returned no bills")
+	}
 
-	if err := s.downloadReceipt(invoiceNumber, billingAccountId, token); err != nil {
+	// The bills are not returned in any guaranteed order, so pick the most
+	// recent one by its own month/year rather than trusting the array order.
+	bill := latestBill(bills)
+
+	// The bill carries its own month/year, which is the authoritative period for
+	// the receipt. Fall back to the previous-month heuristic only if the API
+	// omits them.
+	period := billPeriod(bill)
+
+	if err := s.downloadReceipt(bill.InvoiceNumber, bill.BillingAccountID, token, period); err != nil {
 		s.logger.Err(err).
-			Str("invoiceNumber", invoiceNumber).
-			Str("billingAccountId", billingAccountId).
-			Str("token", token).
+			Str("invoiceNumber", bill.InvoiceNumber).
+			Str("billingAccountId", bill.BillingAccountID).
 			Msg("Error downloading receipt")
 
 		return err
 	}
 
+	// Record the receipt's price and paid status. Best-effort: the PDF is already
+	// saved, so a database hiccup must not fail the download.
+	if s.receipts != nil {
+		ctx := context.Background()
+		if err := s.receipts.SetPrice(ctx, fileName, period, billPrice(bill)); err != nil {
+			s.logger.Err(err).Str("period", period).Msg("Failed to record MTS receipt price")
+		}
+		if err := s.receipts.SetStatus(ctx, fileName, period, billStatus(bill)); err != nil {
+			s.logger.Err(err).Str("period", period).Msg("Failed to record MTS receipt status")
+		}
+	}
+
 	return nil
+}
+
+// billStatus maps the MTS paid state onto the label stored in the receipts
+// table ("plaćeno" / "neplaćeno").
+func billStatus(bill dto.Bill) string {
+	if bill.Status == dto.Paid {
+		return receipts.StatusPaid
+	}
+
+	return receipts.StatusUnpaid
+}
+
+// latestBill returns the most recent bill by (year, month). The caller must
+// pass a non-empty slice.
+func latestBill(bills []dto.Bill) dto.Bill {
+	latest := bills[0]
+	for _, b := range bills[1:] {
+		if b.Year > latest.Year || (b.Year == latest.Year && b.Month > latest.Month) {
+			latest = b
+		}
+	}
+
+	return latest
+}
+
+// billPeriod returns the "MM-YYYY" folder for a bill, preferring the bill's own
+// month/year and falling back to the previous-month heuristic when the API does
+// not provide them.
+func billPeriod(bill dto.Bill) string {
+	if bill.Month >= 1 && bill.Month <= 12 && bill.Year > 0 {
+		return fmt.Sprintf("%02d-%d", bill.Month, bill.Year)
+	}
+
+	return utils.PreviousMonthFolder()
+}
+
+// billPrice returns the receipt amount. It prefers the numeric totalAmount when
+// the response includes it, and otherwise parses the formatted string, which is
+// the only amount the raw API response carries.
+func billPrice(bill dto.Bill) float64 {
+	if bill.TotalAmount != 0 {
+		return bill.TotalAmount
+	}
+
+	return parsePrice(bill.TotalAmountFormatted)
+}
+
+// parsePrice converts an MTS formatted amount like "1.819,46" (Serbian locale:
+// "." groups thousands, "," is the decimal separator, plus an optional currency
+// suffix) into a float. An unparseable value yields 0.
+func parsePrice(formatted string) float64 {
+	var b strings.Builder
+	for _, r := range formatted {
+		if (r >= '0' && r <= '9') || r == '.' || r == ',' || r == '-' {
+			b.WriteRune(r)
+		}
+	}
+
+	s := strings.ReplaceAll(b.String(), ".", "") // drop thousands separators
+	s = strings.ReplaceAll(s, ",", ".")          // decimal comma -> dot
+
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0
+	}
+
+	return f
 }
 
 func (s *Service) login() (string, error) {
@@ -204,10 +298,14 @@ func (s *Service) getReceipts(token string) ([]dto.Bill, error) {
 		return nil, err
 	}
 
+	if len(response.BillGroups) == 0 {
+		return nil, fmt.Errorf("mts returned no bill groups")
+	}
+
 	return response.BillGroups[0].Bills, nil
 }
 
-func (s *Service) downloadReceipt(invoiceNumber string, billingAccountId string, token string) error {
+func (s *Service) downloadReceipt(invoiceNumber string, billingAccountId string, token string, period string) error {
 	url := fmt.Sprintf(exportPDFURL, invoiceNumber, billingAccountId)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -232,7 +330,7 @@ func (s *Service) downloadReceipt(invoiceNumber string, billingAccountId string,
 		return err
 	}
 
-	key := fmt.Sprintf("%s/%s.pdf", utils.FormatFolderPath(), fileName)
+	key := fmt.Sprintf("%s/%s.pdf", period, fileName)
 
 	if err := s.storage.Save(context.Background(), key, data); err != nil {
 		return err

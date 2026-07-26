@@ -43,7 +43,7 @@ func MonthlyFolder(folder string) error {
 	month := t.Month()
 
 	for i := int(month); i <= 12; i++ {
-		s := fmt.Sprintf("0%d-%d", i, year)
+		s := fmt.Sprintf("%02d-%d", i, year)
 		if err := os.MkdirAll(path.Join(folder, s), 0o755); err != nil {
 			return err
 		}
@@ -57,7 +57,27 @@ func FormatFolderPath() string {
 	year := t.Year()
 	month := t.Month()
 
-	return fmt.Sprintf("0%d-%d", month, year)
+	return fmt.Sprintf("%02d-%d", month, year)
+}
+
+// PreviousMonthFolder returns the "MM-YYYY" folder for the month before now,
+// rolling the year back across January. Some providers (MTS, EPS) publish the
+// previous month's bill, so a run in July fetches June's receipt and it must be
+// filed under June's folder.
+//
+// Month arithmetic is done directly to avoid time.AddDate's day-overflow (e.g.
+// July 31 minus a month lands back in July).
+func PreviousMonthFolder() string {
+	t := time.Now()
+	year, month := t.Year(), int(t.Month())
+
+	month--
+	if month < 1 {
+		month = 12
+		year--
+	}
+
+	return fmt.Sprintf("%02d-%d", month, year)
 }
 
 // DateTimeFormat Default datetime format

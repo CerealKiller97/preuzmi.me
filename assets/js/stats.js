@@ -534,6 +534,15 @@ document.addEventListener('alpine:init', () => {
             return;
           }
 
+          // While a segment is hovered its tooltip sits over the donut hole, so
+          // skip the center total to avoid the two overlapping.
+          const active = chart.tooltip && chart.tooltip.getActiveElements
+            ? chart.tooltip.getActiveElements()
+            : [];
+          if (active.length > 0) {
+            return;
+          }
+
           const { x, y } = meta.data[0];
           const { ctx } = chart;
 

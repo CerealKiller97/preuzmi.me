@@ -57,13 +57,49 @@ document.addEventListener('alpine:init', () => {
     },
 
     /**
+     * Whether the provider itself reports the receipt as paid, from the
+     * database status column ("plaćeno"). NFC-normalized so the comparison does
+     * not depend on how the accented characters were encoded.
+     *
+     * @param {object} item
+     * @returns {boolean}
+     */
+    isProviderPaid(item) {
+      return (item.status || '').normalize('NFC') === 'plaćeno'.normalize('NFC');
+    },
+
+    /**
+     * Effective paid state: either the provider reports it paid, or the user
+     * marked it paid here.
+     *
+     * @param {object} item
+     * @returns {boolean}
+     */
+    isPaid(item) {
+      return !!item.paid || this.isProviderPaid(item);
+    },
+
+    /**
+     * Whether a receipt's payment is verified by the provider. The user marking
+     * it paid is only their own claim (they scanned the QR and paid); the
+     * verified badge appears once a later fetch shows the provider itself
+     * reports the receipt as paid.
+     *
+     * @param {object} item
+     * @returns {boolean}
+     */
+    isVerified(item) {
+      return this.isProviderPaid(item);
+    },
+
+    /**
      * Unpaid receipts across the whole set, not just the filtered view, so the
      * number does not change as filters are applied.
      *
      * @returns {number}
      */
     get unpaidCount() {
-      return this.receipts.filter(r => !r.paid).length;
+      return this.receipts.filter(r => !this.isPaid(r)).length;
     },
 
     /**
@@ -89,7 +125,7 @@ document.addEventListener('alpine:init', () => {
 
       if (this.paidFilter !== 'all') {
         const wantPaid = this.paidFilter === 'paid';
-        items = items.filter(r => !!r.paid === wantPaid);
+        items = items.filter(r => this.isPaid(r) === wantPaid);
       }
 
       const q = this.query.trim().toLowerCase();
@@ -265,6 +301,26 @@ document.addEventListener('alpine:init', () => {
       } catch (_) {
         return `${num.toFixed(2)} ${sym}`;
       }
+    },
+
+    /**
+     * Formats a unix timestamp (seconds) as DD.MM.YYYY, or '' when unset.
+     *
+     * @param {number} ts
+     *
+     * @returns {string}
+     */
+    formatDate(ts) {
+      const num = Number(ts) || 0;
+      if (num <= 0) {
+        return '';
+      }
+
+      const d = new Date(num * 1000);
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+
+      return `${dd}.${mm}.${d.getFullYear()}`;
     },
 
     /**

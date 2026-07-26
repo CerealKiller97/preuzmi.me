@@ -28,7 +28,9 @@ go.work
 # End of https://www.toptal.com/developers/gitignore/api/go
 
 config.json
-receipts
+# Downloaded-receipt output dir at the repo root only — not the
+# pkg/services/receipts source package.
+/receipts/
 node_modules
 tmp
 .idea

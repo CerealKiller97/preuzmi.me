@@ -2,15 +2,19 @@ package dto
 
 type (
 	Bill struct {
-		TotalAmountFormatted     string                   `json:"totalAmountFormatted"`
-		TotalDebtAmountFormatted TotalDebtAmountFormatted `json:"totalDebtAmountFormatted"`
-		Status                   Status                   `json:"status"`
-		InvoiceNumber            string                   `json:"invoiceNumber"`
-		BillingAccountID         string                   `json:"billingAccountId"`
-		Month                    int64                    `json:"month"`
-		Year                     int64                    `json:"year"`
-		IsPayable                bool                     `json:"isPayable"`
-		ComplaintAvailable       bool                     `json:"complaintAvailable"`
+		// TotalAmountFormatted is always present in the raw API response
+		// ("1.819,46"). TotalAmount is the numeric value some response variants
+		// also include; it may be absent (0), in which case the formatted string
+		// is parsed instead.
+		TotalAmountFormatted     string  `json:"totalAmountFormatted"`
+		TotalDebtAmountFormatted string  `json:"totalDebtAmountFormatted"`
+		Status                   Status  `json:"status"`
+		InvoiceNumber            string  `json:"invoiceNumber"`
+		BillingAccountID         string  `json:"billingAccountId"`
+		TotalAmount              float64 `json:"totalAmount"`
+		Month                    int     `json:"month"`
+		Year                     int     `json:"year"`
+		ComplaintAvailable       bool    `json:"complaintAvailable"`
 	}
 	BillGroup struct {
 		Title       string `json:"title"`
@@ -25,8 +29,7 @@ type (
 		MaxLimit    int64       `json:"maxLimit"`
 	}
 
-	Status                   string
-	TotalDebtAmountFormatted string
+	Status string
 )
 
 const (

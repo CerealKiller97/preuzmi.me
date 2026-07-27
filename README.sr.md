@@ -18,7 +18,8 @@
   <a href="#snimci-ekrana">Snimci ekrana</a> ·
   <a href="#brzi-start">Brzi start</a> ·
   <a href="#konfiguracija">Konfiguracija</a> ·
-  <a href="#cli">CLI</a>
+  <a href="#cli">CLI</a> ·
+  <a href="#docker">Docker</a>
 </p>
 
 <p align="center">
@@ -113,11 +114,7 @@ go run . checks
 {
   "application": {
     "host": "0.0.0.0",
-    "port": 5500,
-    "certs": {
-      "cert": "./keys/cert.pem",
-      "key": "./keys/priv-key.pem"
-    }
+    "port": 5500
   },
   "storage": "local",
   "download_path": "./receipts",
@@ -140,12 +137,17 @@ go run . checks
   },
   "log_level": "info",
   "pretty_print": true,
+  "email": {
+    "provider": "gmail",
+    "mailbox": "INBOX"
+  },
   "providers": {
-    "a1": { "identifier": "", "password": "" },
-    "mts": { "identifier": "", "password": "" },
-    "esanduce": { "identifier": "", "password": "" },
-    "eps": { "identifier": "", "password": "" },
-    "yettel": { "identifier": "", "password": "" }
+    "a1":        { "identifier": "", "password": "" },
+    "mts":       { "identifier": "", "password": "" },
+    "esanduce":  { "identifier": "", "password": "" },
+    "eps":       { "identifier": "", "password": "" },
+    "yettel":    { "identifier": "you@gmail.com", "password": "gmail-app-password", "mailbox": "Racuni/Yettel" },
+    "eupravnik": { "identifier": "you@gmail.com", "password": "gmail-app-password", "mailbox": "Racuni/Eupravnik" }
   }
 }
 ```
@@ -157,8 +159,29 @@ go run . checks
 | `check_until` | Poslednji dan u mesecu kada je osvežavanje dozvoljeno (podrazumevano `20`) |
 | `notifications.mode` | `off` · `per_receipt` · `all_done` |
 | `notifications.driver` | `telegram` ili `smtp` |
+| `email.provider` | Drajver sandučeta za email provajdere (eUpravnik / Yettel). **Trenutno samo `gmail`.** |
+| `providers.<ime>.mailbox` | Gmail labela koja se pretražuje za račun tog provajdera. Prazno → pada na `email.mailbox`, pa na `INBOX`. |
 
-Host / port / TLS sertifikati su **zaključani dok proces radi** — menjaju se u `config.json` + restart. Sve ostalo ide preko **Podešavanja → Primeni promene**.
+Host / port su **zaključani dok proces radi** — menjaju se u `config.json` + restart. Sve ostalo ide preko **Podešavanja → Primeni promene**.
+
+### eUpravnik & Yettel — preko sandučeta (za sada samo Gmail)
+
+Za razliku od A1 / mts / EPS / e.Sanduče, koji se prijavljuju na platformu provajdera, **eUpravnik i Yettel ne koriste kredencijale platforme.** Nijedan nema upotrebljiv API, pa aplikacija čita PDF računa **direktno iz vašeg sandučeta preko IMAP-a**.
+
+- **Trenutno je Gmail jedini drajver** (`email.provider: "gmail"`).
+- Za ova dva provajdera, `identifier` / `password` su vaša **Gmail adresa i Google [App Password](https://support.google.com/accounts/answer/185833)** — a *ne* prijava za eUpravnik / Yettel.
+- `providers.<ime>.mailbox` je Gmail **labela** koja se pretražuje (npr. `Racuni/Yettel`); ugnežđene labele koriste `/`. Prazno pada na `email.mailbox`, pa na `INBOX`.
+
+#### Brža pretraga uz Gmail labele
+
+Kada je prazno, `mailbox` na svakom osvežavanju pretražuje ceo `INBOX` — sporo na velikom sandučetu i sa većom šansom da pogodi pogrešan PDF. Dajte svakom email provajderu svoju Gmail labelu i usmerite `mailbox` na nju, da IMAP pretraga skenira samo tu labelu. Na Gmail-u je svaka labela ujedno i IMAP folder, pa aplikacija može direktno da je otvori.
+
+1. **Napravite labelu** — Gmail → *Podešavanja* ⚙ → *Prikaži sva podešavanja* → *Labele* → *Napravi novu labelu*. Koristite ugnežđeno ime kao `Racuni/Yettel` (`/` je ugnežđuje pod `Racuni`).
+2. **Filtrirajte dolazne račune u nju** — Gmail pretraga → *Prikaži opcije pretrage* → uparite mejl sa računom (npr. `from:(no-reply@yettel.rs)` ili termin iz naslova) → *Napravi filter* → čekirajte *Primeni labelu* i izaberite je. Čekirajte *Primeni i na postojeće razgovore* da obuhvatite već pristigle mejlove.
+3. **Uključite IMAP na labeli** — na ekranu *Labele* nađite labelu i čekirajte *Prikaži u IMAP-u* (*Show in IMAP*). Bez toga aplikacija ne može da je otvori preko IMAP-a.
+4. **Usmerite config na nju** — postavite `mailbox` provajdera na tačnu putanju labele: `"mailbox": "Racuni/Yettel"`.
+
+Redosled razrešavanja je `providers.<ime>.mailbox` → `email.mailbox` → `INBOX`: labela po provajderu ima prednost nad zajedničkim `email.mailbox`, a prazna vrednost pada na njega (pa na `INBOX`).
 
 ## CLI
 
@@ -168,11 +191,97 @@ preuzmi.me checks   Preuzima račune sa svih podešenih provajdera
 preuzmi.me help     Prikazuje pomoć
 ```
 
-`checks` radi isto što i dugme za osvežavanje u headeru. Pogodno za cron:
+`checks` radi isto što i dugme za osvežavanje u headeru. Pogodno za cron (vidi [Zakazivanje](#zakazivanje-cron)).
+
+## Docker
+
+SQL šema (`database/schema.sql`) je ugrađena u binarni fajl, pa image treba samo binarni fajl plus `templates/` i `assets/` (oba se čitaju sa diska). Mapirajte `config.json` i folder sa računima kao volumene da config i preuzimanja prežive rebuild.
+
+### Dockerfile
+
+```dockerfile
+# ---- build CSS ----
+FROM node:20-alpine AS css
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY assets ./assets
+RUN npm run build
+
+# ---- build binarni fajl ----
+FROM golang:1.26-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+COPY --from=css /app/assets/dist ./assets/dist
+RUN CGO_ENABLED=0 go build -trimpath -o /preuzmi .
+
+# ---- runtime ----
+FROM alpine:3.20
+WORKDIR /app
+COPY --from=build /preuzmi /app/preuzmi
+COPY templates ./templates
+COPY assets ./assets
+EXPOSE 5500
+ENTRYPOINT ["/app/preuzmi"]
+CMD ["serve"]
+```
+
+### Pokretanje
+
+Postavite `"download_path": "/data/receipts"` u `config.json`, zatim:
+
+```bash
+docker build -t preuzmi.me .
+
+docker run -d --name preuzmi \
+  -p 5500:5500 \
+  -v "$PWD/config.json:/app/config.json:ro" \
+  -v preuzmi-receipts:/data/receipts \
+  preuzmi.me
+```
+
+### docker compose
+
+```yaml
+services:
+  preuzmi:
+    build: .
+    container_name: preuzmi
+    ports:
+      - "5500:5500"
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - preuzmi-receipts:/data/receipts   # ili bind mount: ./receipts:/data/receipts
+    restart: unless-stopped
+
+volumes:
+  preuzmi-receipts:
+```
+
+```bash
+docker compose up -d --build
+```
+
+## Zakazivanje (cron)
+
+`checks` je jednokratno preuzimanje (isti posao kao dugme za osvežavanje). Pokrećite ga iz host crontab-a.
+
+Binarni fajl:
 
 ```cron
+# 10:00, dani 1–20 svakog meseca
 0 10 1-20 * *  cd /putanja/do/preuzmi.me && ./preuzmi.me checks
 ```
+
+Docker (nad pokrenutim `preuzmi` kontejnerom):
+
+```cron
+0 10 1-20 * *  docker exec preuzmi /app/preuzmi checks
+```
+
+`check_until` (podrazumevano `20`) takođe ograničava period iznutra, pa se opseg dana `1-20` i `check_until` međusobno dopunjuju.
 
 ## Struktura projekta
 

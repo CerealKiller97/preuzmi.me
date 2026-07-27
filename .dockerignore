@@ -1,0 +1,11 @@
+.git
+.github
+node_modules
+receipts
+*.md
+scripts
+compose.yml
+config.json
+keys
+Dockerfile
+.dockerignore

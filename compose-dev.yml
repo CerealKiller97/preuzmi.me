@@ -15,6 +15,24 @@
 #   }
 #
 # Console: http://localhost:9001  (same credentials)
+#
+# Mailpit captures every message the SMTP notification driver sends, so you can
+# test mail notifications without a real inbox. It listens for SMTP on :1025 and
+# serves a web UI on :8025 where the captured mail shows up. No auth, no TLS.
+#
+# Point config.json at it:
+#   "notifications": {
+#     "driver": "smtp",
+#     "smtp": {
+#       "host": "localhost",
+#       "port": 1025,
+#       "from": "preuzmi@localhost",
+#       "to": "you@localhost"
+#     }
+#   }
+# Leave username/password empty. Then hit "test notification" and watch it land.
+#
+# Inbox: http://localhost:8025
 
 services:
   rustfs:
@@ -46,6 +64,15 @@ services:
       echo 'bucket ready: receipts';
       "
     restart: "no"
+
+  # Mail testing: captures SMTP notifications and shows them in a web inbox.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit
+    ports:
+      - "1025:1025"   # SMTP (point smtp.host/port here)
+      - "8025:8025"   # web inbox
+    restart: unless-stopped
 
 volumes:
   rustfs-data:

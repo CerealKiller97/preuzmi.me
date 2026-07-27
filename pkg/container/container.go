@@ -10,6 +10,7 @@ import (
 	"github.com/CerealKiller97/preuzmi.me/pkg/repositories/receipts"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/notify"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/provider"
+	"github.com/CerealKiller97/preuzmi.me/pkg/services/refresh"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/storage"
 	"github.com/CerealKiller97/preuzmi.me/pkg/utils"
 	"github.com/rs/zerolog"
@@ -117,4 +118,80 @@ func (c *Container) Close() error {
 	}
 
 	return nil
+}
+
+// NotifyRefreshResults sends the notifications for a finished refresh. It is the
+// single path shared by the UI refresh button and the `checks` scheduler, so
+// both behave identically:
+//
+//   - a download message goes out only for receipts recorded for the first time
+//     in this run, so a daily re-run never re-announces an already-downloaded
+//     bill; and
+//   - a paid-confirmation goes out for any receipt the provider just flipped to
+//     paid.
+//
+// Both dedupe against the receipts database. With no database there is nothing
+// to dedupe against, so every successful download is announced (as before the
+// database existed) and no paid-confirmations fire.
+func (c *Container) NotifyRefreshResults(results []refresh.Result) {
+	notifier := c.GetNotifier()
+	store := c.GetReceiptsStore()
+
+	// Work on a copy: the caller's slice is also the refresh service's persisted
+	// state, so enriching it in place would race concurrent readers.
+	enriched := append([]refresh.Result(nil), results...)
+
+	if store == nil {
+		for i := range enriched {
+			enriched[i].New = enriched[i].OK
+		}
+		notifier.HandleResults(enriched)
+
+		return
+	}
+
+	newly := store.DrainNewlyDownloaded()
+	isNew := make(map[string]struct{}, len(newly))
+	for _, r := range newly {
+		isNew[downloadKey(r.Provider, r.Period)] = struct{}{}
+	}
+
+	for i := range enriched {
+		if !enriched[i].OK {
+			continue
+		}
+
+		// Name the month and amount from the database when available.
+		if rec, ok := store.Latest(c.Ctx, enriched[i].Provider); ok {
+			enriched[i].Period = rec.Period
+			enriched[i].Price = rec.Price
+		}
+
+		if _, ok := isNew[downloadKey(enriched[i].Provider, enriched[i].Period)]; ok {
+			enriched[i].New = true
+		}
+	}
+
+	notifier.HandleResults(enriched)
+
+	verified := store.DrainNewlyVerified()
+	if len(verified) == 0 {
+		return
+	}
+
+	items := make([]notify.VerifiedReceipt, 0, len(verified))
+	for _, r := range verified {
+		items = append(items, notify.VerifiedReceipt{
+			Provider: r.Provider,
+			Period:   r.Period,
+			Price:    r.Price,
+		})
+	}
+	notifier.HandleVerified(items)
+}
+
+// downloadKey joins a receipt's provider and period into the map key used to
+// match run results against the newly-downloaded set.
+func downloadKey(provider, period string) string {
+	return provider + "\x00" + period
 }

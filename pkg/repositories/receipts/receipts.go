@@ -57,6 +57,11 @@ LIMIT 1;`
 	// selectStatusQuery reads the current status for a (provider, period).
 	selectStatusQuery = `SELECT status FROM receipts WHERE provider = ? AND period = ?;`
 
+	// selectDownloadedAtQuery reads the last download time for a (provider,
+	// period); 0 (or no row) means it has never actually been downloaded, so the
+	// next Record is a first download.
+	selectDownloadedAtQuery = `SELECT downloaded_at FROM receipts WHERE provider = ? AND period = ?;`
+
 	// setStatusQuery updates the provider-reported paid state.
 	setStatusQuery = `UPDATE receipts SET status = ? WHERE provider = ? AND period = ?;`
 
@@ -95,9 +100,12 @@ type Repository struct {
 	db *sql.DB
 
 	// newlyVerified collects receipts whose provider status flipped from unpaid
-	// to paid, so a caller can drain and notify about them after a refresh.
-	mu            sync.Mutex
-	newlyVerified []Receipt
+	// to paid; newlyDownloaded collects receipts downloaded for the first time.
+	// A caller drains each after a refresh to notify about them once — so a daily
+	// re-run neither re-announces a download nor re-announces a payment.
+	mu              sync.Mutex
+	newlyVerified   []Receipt
+	newlyDownloaded []Receipt
 }
 
 // New opens (creating if needed) the receipts database in dir and ensures the
@@ -146,6 +154,13 @@ func (s *Repository) Record(ctx context.Context, r Receipt) error {
 		r.DownloadedAt = time.Now().Unix()
 	}
 
+	// A first download is one with no prior download time (no row, or a paid-only
+	// stub with downloaded_at 0). Read it before the upsert so DrainNewlyDownloaded
+	// can announce it once, and a daily re-download stays silent.
+	var prevDownloadedAt int64
+	_ = s.db.QueryRowContext(ctx, selectDownloadedAtQuery, r.Provider, r.Period).Scan(&prevDownloadedAt)
+	firstDownload := prevDownloadedAt == 0
+
 	// On a re-download we refresh the file facts but deliberately leave price,
 	// status and paid_at untouched — those are set by SetPrice / SetStatus /
 	// MarkPaid and must not be reset by the storage-layer recorder.
@@ -160,8 +175,29 @@ func (s *Repository) Record(ctx context.Context, r Receipt) error {
 		r.Status,
 		r.DownloadedAt,
 	)
+	if err != nil {
+		return err
+	}
 
-	return err
+	if firstDownload {
+		s.mu.Lock()
+		s.newlyDownloaded = append(s.newlyDownloaded, Receipt{Provider: r.Provider, Period: r.Period})
+		s.mu.Unlock()
+	}
+
+	return nil
+}
+
+// DrainNewlyDownloaded returns and clears the receipts downloaded for the first
+// time since the last drain.
+func (s *Repository) DrainNewlyDownloaded() []Receipt {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := s.newlyDownloaded
+	s.newlyDownloaded = nil
+
+	return out
 }
 
 // Latest returns the most recently downloaded receipt for a provider.
@@ -206,14 +242,18 @@ func (s *Repository) SetPrice(ctx context.Context, provider, period string, pric
 // can notify about it via DrainNewlyVerified.
 func (s *Repository) SetStatus(ctx context.Context, provider, period, status string) error {
 	var prev string
-	// Ignore the error: a missing row just yields an empty previous status.
-	_ = s.db.QueryRowContext(ctx, selectStatusQuery, provider, period).Scan(&prev)
+	// A missing row (err != nil) means this receipt was never downloaded. That
+	// happens when a fresh invoice reports the *previous* month settled before we
+	// ever saw the previous month — e.g. the first time an email provider runs, or
+	// a gap in history. There is nothing on record to confirm, so mark nothing and
+	// queue no notification: a payment is only confirmed for a receipt we hold.
+	existed := s.db.QueryRowContext(ctx, selectStatusQuery, provider, period).Scan(&prev) == nil
 
 	if _, err := s.db.ExecContext(ctx, setStatusQuery, status, provider, period); err != nil {
 		return err
 	}
 
-	if status == StatusPaid && prev != StatusPaid {
+	if existed && status == StatusPaid && prev != StatusPaid {
 		var price float64
 		_ = s.db.QueryRowContext(ctx, selectPriceQuery, provider, period).Scan(&price)
 

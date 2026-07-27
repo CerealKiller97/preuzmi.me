@@ -53,6 +53,43 @@ func TestRecordAndList(t *testing.T) {
 	}
 }
 
+func TestDrainNewlyDownloaded(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer store.Close() //nolint:errcheck
+
+	ctx := context.Background()
+
+	// First download of each (provider, period) queues it as newly downloaded.
+	if err := store.Record(ctx, Receipt{Provider: "eps", Period: "06-2026", StorageKey: "06-2026/eps.pdf"}); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	if err := store.Record(ctx, Receipt{Provider: "mts", Period: "06-2026", StorageKey: "06-2026/mts.pdf"}); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	newly := store.DrainNewlyDownloaded()
+	if len(newly) != 2 {
+		t.Fatalf("expected 2 newly downloaded, got %d", len(newly))
+	}
+
+	// Draining clears the queue.
+	if again := store.DrainNewlyDownloaded(); len(again) != 0 {
+		t.Fatalf("expected drain to clear the queue, got %d", len(again))
+	}
+
+	// Re-downloading an already-recorded receipt must NOT re-queue it — this is
+	// what keeps a daily cron from re-notifying about the same bill.
+	if err := store.Record(ctx, Receipt{Provider: "eps", Period: "06-2026", StorageKey: "06-2026/eps.pdf"}); err != nil {
+		t.Fatalf("Record re-download: %v", err)
+	}
+	if again := store.DrainNewlyDownloaded(); len(again) != 0 {
+		t.Fatalf("re-download must not queue as new, got %d", len(again))
+	}
+}
+
 func TestPriceAndPaid(t *testing.T) {
 	store, err := New(t.TempDir())
 	if err != nil {
@@ -172,6 +209,28 @@ func TestNewlyVerifiedTransition(t *testing.T) {
 	}
 	if got := store.DrainNewlyVerified(); len(got) != 0 {
 		t.Fatalf("re-confirming paid should not queue a verification, got %d", len(got))
+	}
+}
+
+// A later invoice can report the previous month settled before that month was
+// ever downloaded (e.g. the first run of an email provider). Marking a receipt
+// we never held as paid must NOT fire a confirmation.
+func TestSetStatusPaidOnMissingReceiptIsNotVerified(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer store.Close() //nolint:errcheck
+
+	ctx := context.Background()
+
+	// No Record for this (provider, period): the row does not exist.
+	if err := store.SetStatus(ctx, "yettel", "05-2026", StatusPaid); err != nil {
+		t.Fatalf("SetStatus: %v", err)
+	}
+
+	if got := store.DrainNewlyVerified(); len(got) != 0 {
+		t.Fatalf("confirming a never-downloaded receipt must not queue a verification, got %d", len(got))
 	}
 }
 

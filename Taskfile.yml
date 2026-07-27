@@ -1,0 +1,162 @@
+# https://taskfile.dev — single source of truth for the commands that CI runs.
+#
+# Every check under .github/workflows/ is mirrored here so it can be run
+# locally with the exact same flags. The workflows keep the CI-only glue
+# (checkout, setup-go, QEMU/buildx, GHCR login, metadata-action); the actual
+# work — the `run:` steps — lives in these tasks.
+#
+#   task            # list everything
+#   task ci         # run the full check suite, as CI does
+#   task build      # compile the binary (with CSS)
+version: "3"
+
+vars:
+  BINARY: preuzmi
+  # Where `go build` writes the binary. The Docker build produces its own; this
+  # is for local runs.
+  BIN_DIR: bin
+  COVERAGE: coverage.out
+  # Linker flags matching the Dockerfile: strip symbols and DWARF for a smaller
+  # binary.
+  LDFLAGS: "-s -w"
+  # GHCR image name, lowercased as GHCR requires. Override on the CLI:
+  #   task image IMAGE=ghcr.io/you/preuzmi.me
+  IMAGE: '{{.IMAGE | default "ghcr.io/cerealkiller97/preuzmi.me"}}'
+  # Multi-arch targets, same set release.yml publishes.
+  PLATFORMS: linux/amd64,linux/arm64
+  # gosec exclusions — known false positives / intentional patterns for this
+  # app. Kept in one place so the Taskfile and gosec.yml can't drift:
+  #   G104 cleanup Close(); G301/G306 local receipt permissions;
+  #   G304 config/receipt paths; G101 SecretPlaceholder / URL constants;
+  #   G402 SMTP TLS floor; G114 ListenAndServe timeouts; G203 escaped FormJSON.
+  GOSEC_EXCLUDE: G104,G301,G304,G306,G101,G402,G114,G203
+  # Read from ./version, the value embedded into the binary via go:embed.
+  VERSION:
+    sh: cat version
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  # ---- dependencies -------------------------------------------------------
+
+  deps:
+    desc: Download Go modules (mirrors the "Download modules" step)
+    cmds:
+      - go mod download
+
+  # ---- assets -------------------------------------------------------------
+
+  css:
+    desc: Build minified Tailwind CSS (package.json "build")
+    sources:
+      - assets/css/**/*.css
+      - templates/**/*.html
+    generates:
+      - assets/dist/css/app.css
+    cmds:
+      - npm run build
+
+  css:watch:
+    desc: Rebuild CSS on change (package.json "watch")
+    cmds:
+      - npm run watch
+
+  # ---- build & run --------------------------------------------------------
+
+  build:
+    desc: Compile the binary (builds CSS first, like the Docker image)
+    deps: [css]
+    sources:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+    generates:
+      - "{{.BIN_DIR}}/{{.BINARY}}"
+    cmds:
+      - CGO_ENABLED=0 go build -trimpath -ldflags="{{.LDFLAGS}}" -o {{.BIN_DIR}}/{{.BINARY}} .
+
+  run:
+    desc: Run the server locally (task run -- serve)
+    cmds:
+      - go run . {{.CLI_ARGS | default "serve"}}
+
+  # ---- CI checks (one task per workflow) ----------------------------------
+
+  vet:
+    desc: go vet (go-vet.yml)
+    cmds:
+      - go vet ./...
+
+  test:
+    desc: Race-enabled tests with coverage (go-test.yml)
+    cmds:
+      - go test ./... -race -count=1 -covermode=atomic -coverprofile={{.COVERAGE}}
+
+  cover:
+    desc: Show the per-function coverage report
+    deps: [test]
+    cmds:
+      - go tool cover -func={{.COVERAGE}}
+
+  lint:
+    desc: golangci-lint (golangci-lint.yml)
+    cmds:
+      - golangci-lint run --timeout=5m
+
+  gosec:
+    desc: gosec security scan (gosec.yml)
+    cmds:
+      - gosec -exclude-generated -exclude={{.GOSEC_EXCLUDE}} -fmt text ./...
+
+  govulncheck:
+    desc: Scan for known vulnerabilities (govulncheck.yml)
+    cmds:
+      - go install golang.org/x/vuln/cmd/govulncheck@latest
+      - govulncheck ./...
+
+  ci:
+    desc: Run the full check suite, exactly what CI runs
+    cmds:
+      - task: vet
+      - task: lint
+      - task: test
+      - task: gosec
+      - task: govulncheck
+
+  # ---- docker & release (release.yml) -------------------------------------
+
+  docker:
+    desc: Build the image locally for the host arch (tagged :local)
+    cmds:
+      - docker build -t {{.BINARY}}:local .
+
+  image:
+    desc: Build the multi-arch image and push to GHCR (mirrors release.yml)
+    cmds:
+      - >-
+        docker buildx build
+        --platform {{.PLATFORMS}}
+        -t {{.IMAGE}}:{{.VERSION}}
+        -t {{.IMAGE}}:latest
+        --push .
+
+  release:
+    desc: "Cut a SemVer release (task release -- patch|minor|major|X.Y.Z [--push])"
+    cmds:
+      - scripts/release.sh {{.CLI_ARGS}}
+
+  # ---- local dev environment (compose-dev.yml) ----------------------------
+
+  dev:up:
+    desc: Start dev dependencies (RustFS S3 + Mailpit)
+    cmds:
+      - docker compose -f compose-dev.yml up -d
+
+  dev:down:
+    desc: Stop dev dependencies
+    cmds:
+      - docker compose -f compose-dev.yml down

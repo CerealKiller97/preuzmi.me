@@ -6,7 +6,9 @@ import (
 	"html/template"
 	"net/http"
 
+	"github.com/CerealKiller97/preuzmi.me/pkg/config"
 	"github.com/CerealKiller97/preuzmi.me/pkg/container"
+	"github.com/CerealKiller97/preuzmi.me/pkg/services/storage"
 	"github.com/CerealKiller97/preuzmi.me/pkg/utils"
 	"github.com/rs/zerolog/log"
 )
@@ -47,9 +49,8 @@ func indexHandler() Handler {
 	}
 }
 
-func dashboardHandler(c *container.Container) Handler {
+func dashboardHandler(cfg *config.Config, version string) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
-		cfg := c.GetConfig()
 		template, err := template.ParseFiles(
 			"./templates/index.html",
 			"./templates/partials.html",
@@ -75,7 +76,7 @@ func dashboardHandler(c *container.Container) Handler {
 			Title:       "Preuzmi.me — Računi",
 			Description: "Automatsko preuzimanje računa za internet, telefon i struju na jednom mestu.",
 			BaseURL:     baseURL(r),
-			Version:     c.GetVersion(),
+			Version:     version,
 		}
 
 		if err := template.Execute(w, viewModel); err != nil {
@@ -111,7 +112,7 @@ func validate(w http.ResponseWriter, req *http.Request) (string, string, error) 
 	return provider, period, nil
 }
 
-func receiptHandler(c *container.Container) Handler {
+func receiptHandler(store storage.Interface) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		provider, period, err := validate(w, r)
 		if err != nil {
@@ -124,7 +125,7 @@ func receiptHandler(c *container.Container) Handler {
 		// same forward-slash form used when the receipt was saved.
 		key := fmt.Sprintf("%s/%s.pdf", period, provider)
 
-		file, err := c.GetStorage().Load(r.Context(), key)
+		file, err := store.Load(r.Context(), key)
 		if err != nil {
 			log.Err(err).Str("key", key).Msg("Error reading receipt")
 			w.WriteHeader(http.StatusNotFound)
@@ -143,7 +144,7 @@ func receiptHandler(c *container.Container) Handler {
 // statsHandler renders the statistics page
 type StatsPageData = PageData
 
-func statsHandler(c *container.Container) Handler {
+func statsHandler(cfg *config.Config, version string) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tmpl, err := template.ParseFiles(
 			"./templates/stats.html",
@@ -155,7 +156,7 @@ func statsHandler(c *container.Container) Handler {
 			return
 		}
 
-		pairs, err := utils.GetPairs(c.GetConfig())
+		pairs, err := utils.GetPairs(cfg)
 		if err != nil {
 			// not fatal for page; keep empty list
 			log.Err(err).Msg("Error getting pairs for stats")
@@ -169,7 +170,7 @@ func statsHandler(c *container.Container) Handler {
 			Title:       "Preuzmi.me — Statistika",
 			Description: "Pregled troškova po mesecima i provajderima za izabranu godinu.",
 			BaseURL:     baseURL(r),
-			Version:     c.GetVersion(),
+			Version:     version,
 		}
 		if err := tmpl.Execute(w, viewModel); err != nil {
 			log.Err(err).Msg("Error executing stats template")

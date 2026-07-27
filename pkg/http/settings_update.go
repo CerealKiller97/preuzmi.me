@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
-	"github.com/CerealKiller97/preuzmi.me/pkg/container"
 	"github.com/CerealKiller97/preuzmi.me/pkg/utils"
 	"github.com/rs/zerolog/log"
 )
@@ -20,7 +19,7 @@ type settingsUpdateResponse struct {
 
 // updateSettingsHandler validates a full config payload, merges unchanged
 // secrets, writes config.json, and hot-reloads the running process.
-func updateSettingsHandler(c *container.Container) Handler {
+func updateSettingsHandler(cfg *config.Config, reload func(*config.Config)) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var incoming config.Config
 		if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
@@ -32,7 +31,7 @@ func updateSettingsHandler(c *container.Container) Handler {
 			return
 		}
 
-		prev := *c.GetConfig()
+		prev := *cfg
 		incoming.MergeSecrets(prev)
 
 		// Listen bind cannot hot-reload: keep whatever the process started with,
@@ -82,7 +81,7 @@ func updateSettingsHandler(c *container.Container) Handler {
 			}
 		}
 
-		c.Reload(&incoming)
+		reload(&incoming)
 
 		writeJSON(w, settingsUpdateResponse{
 			OK:      true,

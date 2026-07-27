@@ -12,6 +12,7 @@ import (
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
 	"github.com/CerealKiller97/preuzmi.me/pkg/container"
+	"github.com/CerealKiller97/preuzmi.me/pkg/services/notify"
 	"github.com/rs/zerolog/log"
 )
 
@@ -38,6 +39,7 @@ type redactedCredentials struct {
 type redactedConfig struct {
 	Providers     map[string]redactedCredentials `json:"providers"`
 	Notifications redactedNotifications          `json:"notifications"`
+	Email         redactedEmail                  `json:"email"`
 	S3            redactedS3                     `json:"s3"`
 	Application   struct {
 		Host  string `json:"host"`
@@ -78,11 +80,21 @@ type redactedTelegram struct {
 	ChatID   string `json:"chat_id"`
 }
 
+// redactedEmail mirrors config.Email. It holds no secret — the mailbox login and
+// app password live under providers — so every field is shown as-is.
+type redactedEmail struct {
+	Provider string `json:"provider"`
+	Host     string `json:"host"`
+	Mailbox  string `json:"mailbox"`
+	Port     int    `json:"port"`
+}
+
 type redactedNotifications struct {
-	Mode     string           `json:"mode"`
-	Driver   string           `json:"driver"`
-	SMTP     redactedSMTP     `json:"smtp"`
-	Telegram redactedTelegram `json:"telegram"`
+	Mode             string           `json:"mode"`
+	Driver           string           `json:"driver"`
+	PaidConfirmation bool             `json:"paid_confirmation"`
+	SMTP             redactedSMTP     `json:"smtp"`
+	Telegram         redactedTelegram `json:"telegram"`
 }
 
 // redact builds the display copy of the configuration.
@@ -108,6 +120,7 @@ func redact(cfg *config.Config) redactedConfig {
 
 	out.Notifications.Mode = cfg.Notifications.Mode
 	out.Notifications.Driver = cfg.Notifications.Driver
+	out.Notifications.PaidConfirmation = cfg.Notifications.PaidConfirmation
 	out.Notifications.SMTP.Host = cfg.Notifications.SMTP.Host
 	out.Notifications.SMTP.Port = cfg.Notifications.SMTP.Port
 	out.Notifications.SMTP.Username = cfg.Notifications.SMTP.Username
@@ -121,15 +134,13 @@ func redact(cfg *config.Config) redactedConfig {
 	}
 	out.Notifications.Telegram.ChatID = cfg.Notifications.Telegram.ChatID
 
+	out.Email.Provider = cfg.Email.Provider
+	out.Email.Host = cfg.Email.Host
+	out.Email.Mailbox = cfg.Email.Mailbox
+	out.Email.Port = cfg.Email.Port
+
 	out.Application.Host = cfg.Application.Host
 	out.Application.Port = cfg.Application.Port
-	out.Application.Certs.Certificate = cfg.Application.Certs.Certificate
-
-	// The certificate path is harmless, but the private key path points
-	// straight at a secret, so treat it as one.
-	if cfg.Application.Certs.PrivateKey != "" {
-		out.Application.Certs.PrivateKey = redacted
-	}
 
 	for name, creds := range cfg.Providers {
 		entry := redactedCredentials{Identifier: creds.Username}
@@ -148,7 +159,6 @@ func redact(cfg *config.Config) redactedConfig {
 // value via MergeSecrets.
 func editableForm(cfg *config.Config) config.Config {
 	out := *cfg
-	out.Application.Certs.PrivateKey = ""
 	out.S3.AccessKey = ""
 	out.S3.SecretKey = ""
 	out.Notifications.SMTP.Password = ""
@@ -159,6 +169,9 @@ func editableForm(cfg *config.Config) config.Config {
 		out.Providers[name] = config.Credentials{
 			Username: creds.Username,
 			Password: "",
+			// Mailbox is not a secret; carry it through so a settings save from
+			// the UI does not blank a provider's configured folder/label.
+			Mailbox: creds.Mailbox,
 		}
 	}
 
@@ -206,6 +219,7 @@ var knownKeys = map[string]struct{}{
 	"download_path": {},
 	"check_until":   {},
 	"notifications": {},
+	"email":         {},
 	"log_level":     {},
 	"pretty_print":  {},
 	"providers":     {},
@@ -251,9 +265,8 @@ func writable(dir string) bool {
 	return os.Remove(name) == nil
 }
 
-func settingsHandler(c *container.Container) Handler {
+func settingsHandler(cfg *config.Config, version string, notifier *notify.Service) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
-		cfg := c.GetConfig()
 
 		tmpl, err := template.ParseFiles(
 			"./templates/settings.html",
@@ -289,7 +302,7 @@ func settingsHandler(c *container.Container) Handler {
 		_, statErr := os.Stat(dir)
 		exists := statErr == nil
 
-		receipts, err := scanReceipts(dir, nil)
+		receipts, err := scanReceipts(dir, nil, nil)
 		if err != nil {
 			log.Err(err).Msg("Error counting receipts for settings")
 		}
@@ -326,7 +339,7 @@ func settingsHandler(c *container.Container) Handler {
 				Title:       "Preuzmi.me — Podešavanja",
 				Description: "Trenutna konfiguracija aplikacije.",
 				BaseURL:     baseURL(r),
-				Version:     c.GetVersion(),
+				Version:     version,
 			},
 			ConfigPath:           filepath.Clean(configPath),
 			Config:               redact(cfg),
@@ -336,9 +349,8 @@ func settingsHandler(c *container.Container) Handler {
 			StorageTarget:        storageTarget,
 			DownloadPathExists:   exists,
 			DownloadPathWritable: exists && writable(dir),
-			NotifyCanTest:        c.GetNotifier().CanTest(),
+			NotifyCanTest:        notifier.CanTest(),
 			FormJSON:             template.JS(formJSON),
-			HasAppKey:            cfg.Application.Certs.PrivateKey != "",
 			HasS3Access:          cfg.S3.AccessKey != "",
 			HasS3Secret:          cfg.S3.SecretKey != "",
 			HasSMTPPass:          cfg.Notifications.SMTP.Password != "",

@@ -16,17 +16,11 @@ func TestKeepSecret(t *testing.T) {
 func TestMergeSecrets(t *testing.T) {
 	prev := Config{
 		Application: struct {
-			Certs struct {
-				Certificate string `json:"cert"`
-				PrivateKey  string `json:"key"`
-			} `json:"certs"`
 			Host string `json:"host"`
 			Port int    `json:"port"`
 		}{
-			Certs: struct {
-				Certificate string `json:"cert"`
-				PrivateKey  string `json:"key"`
-			}{PrivateKey: "priv"},
+			Host: "host",
+			Port: 8080,
 		},
 		S3: S3{AccessKey: "ak", SecretKey: "sk"},
 		Notifications: Notifications{
@@ -51,7 +45,6 @@ func TestMergeSecrets(t *testing.T) {
 
 	next.MergeSecrets(prev)
 
-	assert.Equal(t, "priv", next.Application.Certs.PrivateKey)
 	assert.Equal(t, "ak", next.S3.AccessKey)
 	assert.Equal(t, "sk", next.S3.SecretKey)
 	assert.Equal(t, "smtp-pass", next.Notifications.SMTP.Password)

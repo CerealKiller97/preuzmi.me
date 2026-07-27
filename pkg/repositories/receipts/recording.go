@@ -21,8 +21,16 @@ type recordingStorage struct {
 // NewRecordingStorage wraps inner so that saved receipts are recorded in store.
 // A nil store yields a plain pass-through, so callers can wire this in even when
 // the database failed to open.
-func NewRecordingStorage(inner storage.Interface, store *Repository, logger zerolog.Logger) storage.Interface {
-	return &recordingStorage{inner: inner, store: store, logger: logger}
+func NewRecordingStorage(
+	inner storage.Interface,
+	store *Repository,
+	logger zerolog.Logger,
+) storage.Interface {
+	return &recordingStorage{
+		inner:  inner,
+		store:  store,
+		logger: logger,
+	}
 }
 
 func (r *recordingStorage) Save(ctx context.Context, key string, data []byte) error {
@@ -30,6 +38,9 @@ func (r *recordingStorage) Save(ctx context.Context, key string, data []byte) er
 		return err
 	}
 
+	// A nil store is the documented pass-through mode: the database failed to
+	// open, so the PDF is saved but left unindexed. Recording is best-effort and
+	// must never crash a download.
 	if r.store == nil {
 		return nil
 	}
@@ -50,9 +61,15 @@ func (r *recordingStorage) Save(ctx context.Context, key string, data []byte) er
 	return nil
 }
 
+// Load reads straight through to the wrapped backend: recording only concerns
+// writes, so there is nothing to index on a read.
+func (r *recordingStorage) Load(ctx context.Context, key string) ([]byte, error) {
+	return r.inner.Load(ctx, key)
+}
+
 // parseKey splits a storage key like "07-2026/eps.pdf" into its provider and
 // period. A key without a slash yields an empty period.
-func parseKey(key string) (provider, period string) {
+func parseKey(key string) (provider string, period string) {
 	dir, file := path.Split(key)
 	period = strings.Trim(dir, "/")
 	provider = strings.TrimSuffix(file, path.Ext(file))

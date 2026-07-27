@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
+	"github.com/CerealKiller97/preuzmi.me/pkg/repositories/receipts"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/notify"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/provider"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/storage"
@@ -16,19 +17,21 @@ import (
 )
 
 type Container struct {
-	Logger           zerolog.Logger
-	esanduceProvider provider.Interface
-	storage          storage.Interface
-	mtsProvider      provider.Interface
-	a1Provider       provider.Interface
-	Ctx              context.Context
-	yettelProvider   provider.Interface
-	epsProvider      provider.Interface
-	config           *config.Config
-	Assets           embed.FS
-	notifier         *notify.Service
-	version          string
-	mu               sync.RWMutex
+	Logger            zerolog.Logger
+	esanduceProvider  provider.Interface
+	storage           storage.Interface
+	receiptsStore     *receipts.Repository
+	mtsProvider       provider.Interface
+	a1Provider        provider.Interface
+	Ctx               context.Context
+	yettelProvider    provider.Interface
+	epsProvider       provider.Interface
+	eupravnikProvider provider.Interface
+	config            *config.Config
+	Assets            embed.FS
+	notifier          *notify.Service
+	version           string
+	mu                sync.RWMutex
 }
 
 var _ io.Closer = &Container{}
@@ -66,12 +69,17 @@ func (c *Container) Reload(cfg *config.Config) {
 
 	*c.config = *cfg
 	c.storage = nil
+	if c.receiptsStore != nil {
+		_ = c.receiptsStore.Close()
+		c.receiptsStore = nil
+	}
 	c.notifier = nil
 	c.mtsProvider = nil
 	c.a1Provider = nil
 	c.esanduceProvider = nil
 	c.yettelProvider = nil
 	c.epsProvider = nil
+	c.eupravnikProvider = nil
 
 	level := cfg.LogLevel
 	if level == "" {
@@ -98,7 +106,15 @@ func (c *Container) GetNotifier() *notify.Service {
 }
 
 func (c *Container) Close() error {
-	// Close resources
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.receiptsStore != nil {
+		err := c.receiptsStore.Close()
+		c.receiptsStore = nil
+
+		return err
+	}
 
 	return nil
 }

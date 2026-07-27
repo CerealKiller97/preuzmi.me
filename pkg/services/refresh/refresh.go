@@ -20,11 +20,17 @@ import (
 const fileName = "refresh.json"
 
 // Result is the outcome of one provider's download.
+//
+// Period and Price are filled in after the run from the receipts database, when
+// available, so notifications can report which month's bill was fetched and how
+// much it was.
 type Result struct {
-	Provider   string `json:"provider"`
-	Error      string `json:"error,omitempty"`
-	DurationMS int64  `json:"duration_ms"`
-	OK         bool   `json:"ok"`
+	Provider   string  `json:"provider"`
+	Error      string  `json:"error,omitempty"`
+	Period     string  `json:"period,omitempty"`
+	DurationMS int64   `json:"duration_ms"`
+	Price      float64 `json:"price,omitempty"`
+	OK         bool    `json:"ok"`
 }
 
 // State is what the UI needs to render the refresh control.

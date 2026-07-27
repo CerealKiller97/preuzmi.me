@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"strings"
 	"time"
 )
 
@@ -24,6 +25,12 @@ type (
 	Credentials struct {
 		Username string `json:"identifier"`
 		Password string `json:"password"`
+		// Mailbox is optional and only used by email-based providers (eUpravnik,
+		// Yettel). It names the IMAP folder — a Gmail label works here — that
+		// holds this provider's bills, so each provider can search its own label
+		// instead of the shared config.Email.Mailbox. Empty falls back to
+		// config.Email.Mailbox, then INBOX.
+		Mailbox string `json:"mailbox,omitempty"`
 	}
 
 	// S3 configures any S3-compatible object storage (AWS S3, Linode Object
@@ -56,36 +63,53 @@ type (
 		ChatID   string `json:"chat_id"`
 	}
 
+	// Email selects the IMAP server used by providers that deliver their
+	// documents only by email (e.g. eUpravnik). It carries no secrets: the
+	// mailbox login and app password are stored as that provider's own
+	// credentials under "providers". Provider is one of gmail|outlook|yahoo|
+	// icloud|custom; Host/Port are only needed for "custom" (or to override a
+	// preset), and Mailbox defaults to INBOX.
+	Email struct {
+		Provider string `json:"provider"`
+		Host     string `json:"host"`
+		Mailbox  string `json:"mailbox"`
+		Port     int    `json:"port"`
+	}
+
 	// Notifications controls whether (and how) the user is told about
 	// completed downloads. Mode is mutually exclusive: only one behaviour
 	// can be active at a time.
 	Notifications struct {
-		// Mode selects when to notify. Allowed: off|per_receipt|all_done.
-		Mode     string   `json:"mode"`
-		Driver   string   `json:"driver"`
-		SMTP     SMTP     `json:"smtp"`
-		Telegram Telegram `json:"telegram"`
+		// Mode selects when to notify about downloads. Allowed:
+		// off|per_receipt|all_done.
+		Mode   string `json:"mode"`
+		Driver string `json:"driver"`
+		// PaidConfirmation, when true, sends a message every time a provider
+		// newly confirms a receipt as paid ("plaćeno"). It is independent of
+		// Mode: paid-confirmation messages can fire even when Mode is off, as
+		// long as the driver is configured.
+		PaidConfirmation bool     `json:"paid_confirmation"`
+		SMTP             SMTP     `json:"smtp"`
+		Telegram         Telegram `json:"telegram"`
 	}
 
 	Providers struct {
-		MTS      Credentials `json:"mts"`
-		A1       Credentials `json:"a1"`
-		Yettel   Credentials `json:"yettel"`
-		EPS      Credentials `json:"eps"`
-		Esanduce Credentials `json:"esanduce"`
+		MTS       Credentials `json:"mts"`
+		A1        Credentials `json:"a1"`
+		Yettel    Credentials `json:"yettel"`
+		EPS       Credentials `json:"eps"`
+		Esanduce  Credentials `json:"esanduce"`
+		EUpravnik Credentials `json:"eupravnik"`
 	}
 
 	Config struct {
 		Providers     map[Provider]Credentials `json:"providers"`
 		Notifications Notifications            `json:"notifications"`
+		Email         Email                    `json:"email"`
 		S3            S3                       `json:"s3"`
 		Application   struct {
-			Host  string `json:"host"`
-			Port  int    `json:"port"`
-			Certs struct {
-				Certificate string `json:"cert"`
-				PrivateKey  string `json:"key"`
-			} `json:"certs"`
+			Host string `json:"host"`
+			Port int    `json:"port"`
 		} `json:"application"`
 		Storage      string `json:"storage"`
 		DownloadPath string `json:"download_path"`
@@ -107,6 +131,17 @@ const (
 	NotifyModePerReceipt = "per_receipt"
 	NotifyModeAllDone    = "all_done"
 )
+
+// Allowed values for email.provider. "custom" (or an empty value) means the
+// IMAP host/port are given explicitly.
+var emailProviders = map[string]struct{}{
+	"":        {},
+	"gmail":   {},
+	"outlook": {},
+	"yahoo":   {},
+	"icloud":  {},
+	"custom":  {},
+}
 
 // SecretPlaceholder is what the settings UI sends back for an unchanged secret.
 const SecretPlaceholder = "••••••••"
@@ -227,6 +262,26 @@ func (c *Config) Validate() error {
 		return err
 	}
 
+	if err := c.validateEmail(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateEmail checks the IMAP server selection. A custom (or empty) provider
+// needs an explicit host; a named provider must be one we have a preset for.
+func (c *Config) validateEmail() error {
+	provider := strings.ToLower(strings.TrimSpace(c.Email.Provider))
+
+	if _, ok := emailProviders[provider]; !ok {
+		return fmt.Errorf("invalid email.provider %q", c.Email.Provider)
+	}
+
+	if c.Email.Port < 0 || c.Email.Port > 65535 {
+		return fmt.Errorf("email.port must be between 0 and 65535, got %d", c.Email.Port)
+	}
+
 	return nil
 }
 
@@ -234,7 +289,6 @@ func (c *Config) Validate() error {
 // UI placeholder or an empty string, so applying settings never blanks a
 // password the user did not intentionally replace.
 func (next *Config) MergeSecrets(prev Config) {
-	next.Application.Certs.PrivateKey = KeepSecret(next.Application.Certs.PrivateKey, prev.Application.Certs.PrivateKey)
 	next.S3.AccessKey = KeepSecret(next.S3.AccessKey, prev.S3.AccessKey)
 	next.S3.SecretKey = KeepSecret(next.S3.SecretKey, prev.S3.SecretKey)
 	next.Notifications.SMTP.Password = KeepSecret(next.Notifications.SMTP.Password, prev.Notifications.SMTP.Password)
@@ -267,7 +321,9 @@ func (c *Config) validateNotifications() error {
 		)
 	}
 
-	if n.Mode == NotifyModeOff {
+	// A driver is only required when something will actually be delivered:
+	// an active download mode, or paid-confirmation messages.
+	if !n.NotifyEnabled() && !n.PaidConfirmation {
 		return nil
 	}
 
@@ -302,9 +358,16 @@ func (c *Config) validateNotifications() error {
 	return nil
 }
 
-// NotifyEnabled reports whether any automatic notification mode is active.
+// NotifyEnabled reports whether any automatic download-notification mode is
+// active.
 func (n Notifications) NotifyEnabled() bool {
 	return n.Mode == NotifyModePerReceipt || n.Mode == NotifyModeAllDone
+}
+
+// DeliveryEnabled reports whether any message will be sent at all: a download
+// mode, paid-confirmation, or both. It governs when a driver must be configured.
+func (n Notifications) DeliveryEnabled() bool {
+	return n.NotifyEnabled() || n.PaidConfirmation
 }
 
 // RefreshAllowed reports whether today is still within the check_until window

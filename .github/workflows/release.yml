@@ -1,7 +1,8 @@
 name: release
 
 # Fires when scripts/release.sh pushes a vX.Y.Z tag. Builds a multi-arch image
-# (amd64 + arm64), pushes it to GHCR, and opens a GitHub Release for the tag.
+# (amd64 + arm64), pushes it to GHCR, and opens a GitHub Release whose notes are
+# the matching CHANGELOG.md section.
 on:
   push:
     tags:
@@ -24,6 +25,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      # keepachangelog: the release body is the CHANGELOG.md section whose
+      # heading matches this tag. Runs before the build so a missing entry
+      # fails fast, before the image is published.
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v ver="$version" '
+            index($0, "## [" ver "]") == 1 { capture = 1; next }
+            capture && index($0, "## [") == 1 { exit }
+            capture && $0 ~ /^\[[^][]+\]:[[:space:]]/ { exit }
+            capture { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "::error::No CHANGELOG.md entry for ${version}; add a '## [${version}]' section."
+            exit 1
+          fi
+          echo "Release notes for ${version}:"
+          echo
+          cat release-notes.md
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -66,4 +87,5 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          name: 🚀 ${{ github.ref_name }}
+          body_path: release-notes.md

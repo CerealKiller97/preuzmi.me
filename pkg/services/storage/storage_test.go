@@ -22,6 +22,24 @@ func TestLocalSaveCreatesMonthFolder(t *testing.T) {
 	assert.Equal(t, "pdf-bytes", string(data))
 }
 
+func TestLocalLoadRoundTrip(t *testing.T) {
+	local := NewLocal(t.TempDir())
+	ctx := context.Background()
+
+	require.NoError(t, local.Save(ctx, "07-2026/mts.pdf", []byte("pdf-bytes")))
+
+	got, err := local.Load(ctx, "07-2026/mts.pdf")
+	require.NoError(t, err)
+	assert.Equal(t, "pdf-bytes", string(got))
+}
+
+func TestLocalLoadMissingErrors(t *testing.T) {
+	local := NewLocal(t.TempDir())
+
+	_, err := local.Load(context.Background(), "07-2026/absent.pdf")
+	assert.Error(t, err)
+}
+
 func TestNormalizeEndpoint(t *testing.T) {
 	tests := []struct {
 		in     string

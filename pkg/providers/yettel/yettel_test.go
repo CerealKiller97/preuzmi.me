@@ -37,6 +37,12 @@ func (m *memStorage) Save(_ context.Context, key string, data []byte) error {
 	return nil
 }
 
+func (m *memStorage) Load(_ context.Context, _ string) ([]byte, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.data, nil
+}
+
 func pdfAttachment(name string) mailbox.Attachment {
 	return mailbox.Attachment{Filename: name, ContentType: "application/pdf", Data: []byte("%PDF-1.4\n")}
 }

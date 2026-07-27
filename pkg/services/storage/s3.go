@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"context"
+	"io"
 	"mime"
 	"path"
 	"strings"
@@ -71,4 +72,17 @@ func (s *S3) Save(ctx context.Context, key string, data []byte) error {
 	)
 
 	return err
+}
+
+// Load fetches the object stored under key and returns its bytes. minio defers
+// the request until the stream is read, so a missing key surfaces here as a
+// read error (which the caller turns into a 404).
+func (s *S3) Load(ctx context.Context, key string) ([]byte, error) {
+	obj, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, err
+	}
+	defer obj.Close() //nolint:errcheck // read-only object stream
+
+	return io.ReadAll(obj)
 }

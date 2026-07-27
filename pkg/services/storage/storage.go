@@ -12,13 +12,16 @@ import (
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
 )
 
-// Interface persists a single receipt under the given key.
+// Interface persists and retrieves a single receipt under the given key.
 //
 // The key uses forward slashes regardless of storage backend, e.g.
 // "07-2026/mts.pdf": the local backend maps it onto the filesystem, the S3
 // backend uses it verbatim as the object name.
 type Interface interface {
 	Save(ctx context.Context, key string, data []byte) error
+	// Load returns the bytes stored under key. A missing key is an error, so
+	// callers can surface it as a 404.
+	Load(ctx context.Context, key string) ([]byte, error)
 }
 
 // New builds the storage backend named by cfg.Storage.

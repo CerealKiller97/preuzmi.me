@@ -10,6 +10,12 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+### ✨ Added
+
+- ⏰ Automatic daily receipt check — the Docker image now runs `checks` on a built-in `crond` every day at 10:00 (defaults to `Europe/Belgrade`; override with `TZ`), gated by `check_until` (default 20), so bills download with no host cron.
+
+### 🔧 Changed
+
 ## [1.0.0] - 27.07.2026
 
 First public release — automatic receipt downloads with a dashboard, spending

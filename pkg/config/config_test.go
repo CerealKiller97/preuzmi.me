@@ -59,3 +59,13 @@ func TestValidateRejectsBadCheckUntil(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, FriendlyError(err), "1 i 31")
 }
+
+// The daily cron fires every day; check_until must stop a run past its day.
+func TestRefreshAllowedRespectsCheckUntil(t *testing.T) {
+	cfg := Config{CheckUntil: 20}
+
+	assert.True(t, cfg.allowedOnDay(1), "1st should run")
+	assert.True(t, cfg.allowedOnDay(20), "20th (check_until) should still run")
+	assert.False(t, cfg.allowedOnDay(21), "21st must NOT run")
+	assert.False(t, cfg.allowedOnDay(31), "31st must NOT run")
+}

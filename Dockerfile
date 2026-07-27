@@ -35,20 +35,32 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -ldflags="-s -w" -o /preuzmi .
 
 # ---- runtime ----
-# Distroless: no shell and no package manager, so a far smaller attack surface
-# than Alpine. The base image already ships ca-certificates (outbound HTTPS to
-# the providers and IMAP-over-TLS both need a trust store) and tzdata (check_until
-# and the refresh window compare against local calendar dates), so there is
-# nothing to install. :nonroot runs the process as an unprivileged user (uid
-# 65532) — the mounted download_path must therefore be writable by that user.
-FROM gcr.io/distroless/base-debian13:nonroot
+# Alpine (not distroless) so the image can ship a cron daemon: the container runs
+# the web server AND the daily `checks` pass itself, so bills download with no
+# host cron. busybox already provides crond. We add ca-certificates (outbound
+# HTTPS to providers + IMAP-over-TLS need a trust store) and tzdata so check_until
+# and the 10:00 schedule use a real local zone. crond runs as root, so the process
+# runs as root and writes download_path as root.
+FROM alpine:3.22
 
 WORKDIR /app
+
+RUN apk add --no-cache ca-certificates tzdata
+
+# Default timezone for the 10:00 schedule and the check_until day. Override at
+# run time with -e TZ=... (e.g. TZ=Europe/Ljubljana).
+ENV TZ=Europe/Belgrade
 
 COPY --from=build /preuzmi /app/preuzmi
 COPY templates ./templates
 COPY assets ./assets
 
+# Built-in daily receipt check. crond fires it every day; check_until (default
+# 20) decides whether a given day downloads, so the schedule needs no
+# day-of-month range and check_until stays the single source of truth.
+COPY deploy/crontab /etc/crontabs/root
+COPY deploy/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 EXPOSE 5500
-ENTRYPOINT ["/app/preuzmi"]
-CMD ["serve"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

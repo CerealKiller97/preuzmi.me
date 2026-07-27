@@ -373,5 +373,12 @@ func (n Notifications) DeliveryEnabled() bool {
 // RefreshAllowed reports whether today is still within the check_until window
 // for the current month.
 func (c *Config) RefreshAllowed() bool {
-	return time.Now().Day() <= c.CheckUntil
+	return c.allowedOnDay(time.Now().Day())
+}
+
+// allowedOnDay reports whether a run is allowed on the given day of the month.
+// The window is inclusive of check_until: with check_until 20, day 20 still runs
+// and day 21 does not.
+func (c *Config) allowedOnDay(day int) bool {
+	return day <= c.CheckUntil
 }

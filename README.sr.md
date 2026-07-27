@@ -237,22 +237,18 @@ preuzmi.me help     Prikazuje pomoć
 
 ## Zakazivanje (cron)
 
-`checks` je jednokratno preuzimanje (isti posao kao dugme za osvežavanje). Pokrećite ga iz host crontab-a.
+**Docker image automatski proverava račune** — ugrađeni `crond` pokreće `checks` **svaki dan u 10:00** (lokalno vreme kontejnera), pa se računi preuzimaju bez ikakvog podešavanja na hostu. `check_until` (podrazumevano `20`) odlučuje da li se tog dana zaista preuzima, pa `check_until` ostaje jedini izvor istine za period.
 
-Binarni fajl:
+- **Vremenska zona** je podrazumevano `Europe/Belgrade` (pa su 10:00 i dan iz `check_until` po beogradskom vremenu). Promeni preko `TZ` — `-e TZ=Europe/Ljubljana`, ili `environment: [TZ=…]` u compose-u.
+- **Promeni vreme** montiranjem svog crontab-a preko `/etc/crontabs/root`.
+- **Pokreni odmah**, kad god želiš: `docker exec preuzmi /app/preuzmi checks`.
 
-```cron
-# 10:00, dani 1–20 svakog meseca
-0 10 1-20 * *  cd /putanja/do/preuzmi.me && ./preuzmi.me checks
-```
-
-Docker (nad pokrenutim `preuzmi` kontejnerom):
+Pokrećeš iz koda? Zakaži iz host crontab-a — `check_until` i dalje ograničava period iznutra:
 
 ```cron
-0 10 1-20 * *  docker exec preuzmi /app/preuzmi checks
+# svaki dan u 10:00
+0 10 * * *  cd /putanja/do/preuzmi.me && ./preuzmi.me checks
 ```
-
-`check_until` (podrazumevano `20`) takođe ograničava period iznutra, pa se opseg dana `1-20` i `check_until` međusobno dopunjuju.
 
 ## Struktura projekta
 

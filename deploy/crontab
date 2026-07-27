@@ -1,0 +1,10 @@
+# Built-in daily receipt check.
+#
+# Runs every day at 10:00, container local time (set TZ, e.g. Europe/Belgrade,
+# to change the zone; the image ships tzdata). It runs every day on purpose —
+# the app's check_until (default 20) decides whether a given run actually
+# downloads, so check_until stays the single source of truth for the window and
+# no day-of-month range is needed here.
+#
+# Output is redirected to PID 1's stdout so it shows up in `docker logs`.
+0 10 * * * cd /app && /app/preuzmi checks > /proc/1/fd/1 2>&1

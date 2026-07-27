@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-   ghcr.io/cerealkiller97/preuzmi.me:1.0.0
+  ghcr.io/cerealkiller97/preuzmi.me:1.0.0
 ```
 
 ### docker compose
@@ -237,22 +237,18 @@ preuzmi.me help     Show usage
 
 ## Scheduling (cron)
 
-`checks` is a one-shot download pass (same work as the header refresh button). Run it from the host's crontab.
+**The Docker image checks for receipts automatically** — a `crond` baked into the image runs `checks` **every day at 10:00** (container local time), so bills download with no host setup. The app's `check_until` (default `20`) decides whether a given day actually downloads, so `check_until` stays the single source of truth for the window.
 
-Binary:
+- **Timezone** defaults to `Europe/Belgrade` (so 10:00 and the `check_until` day are Belgrade time). Override with `TZ` — `-e TZ=Europe/Ljubljana`, or `environment: [TZ=…]` in compose.
+- **Change the time** by mounting your own crontab over `/etc/crontabs/root`.
+- **Run it now**, anytime: `docker exec preuzmi /app/preuzmi checks`.
 
-```cron
-# 10:00 on days 1–20 each month
-0 10 1-20 * *  cd /path/to/preuzmi.me && ./preuzmi.me checks
-```
-
-Docker (against the running `preuzmi` container):
+Running from source instead? Schedule it from the host's crontab — `check_until` still gates the window from inside the app:
 
 ```cron
-0 10 1-20 * *  docker exec preuzmi /app/preuzmi checks
+# every day at 10:00
+0 10 * * *  cd /path/to/preuzmi.me && ./preuzmi.me checks
 ```
-
-`check_until` (default `20`) also guards the window from inside the app, so the `1-20` day range and `check_until` reinforce each other.
 
 ## Project layout
 

@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-  cerealkiller97/preuzmi.me:1.0.0
+   ghcr.io/cerealkiller97/preuzmi.me:1.0.0
 ```
 
 ### docker compose
@@ -65,8 +65,8 @@ docker run -d --name preuzmi \
 ```yaml
 services:
   preuzmi:
-    image: cerealkiller97/preuzmi.me:1.0.0
-    container_name: preuzmi
+    image: ghcr.io/cerealkiller97/preuzmi.me:1.0.0
+    container_name: preuzmi.me
     ports:
       - "5500:5500"
     volumes:

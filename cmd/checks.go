@@ -49,7 +49,7 @@ func Checks(c *container.Container) {
 			Msg("Receipt download finished")
 	}
 
-	c.GetNotifier().HandleResults(results)
+	c.NotifyRefreshResults(results)
 
 	if failed > 0 {
 		log.Warn().Int("failed", failed).Msg("Some providers failed")

@@ -20,7 +20,7 @@ func (f senderFunc) Send(subject, body string) error { return f(subject, body) }
 func TestMessagesPerReceipt(t *testing.T) {
 	cfg := config.Notifications{Mode: config.NotifyModePerReceipt}
 	results := []refresh.Result{
-		{Provider: "a1", OK: true, DurationMS: 1200, Period: "05-2026", Price: 1819.46},
+		{Provider: "a1", OK: true, New: true, DurationMS: 1200, Period: "05-2026", Price: 1819.46},
 		{Provider: "mts", OK: false, Error: "login failed"},
 	}
 
@@ -33,11 +33,24 @@ func TestMessagesPerReceipt(t *testing.T) {
 	assert.NotContains(t, msgs[0].Body, "s)", "duration must be removed")
 }
 
+// A successful re-download that is not new must not produce a message, so a
+// daily cron does not re-notify about a receipt already on record.
+func TestMessagesPerReceiptSkipsAlreadyDownloaded(t *testing.T) {
+	cfg := config.Notifications{Mode: config.NotifyModePerReceipt}
+	msgs := notify.Messages(cfg, []refresh.Result{
+		{Provider: "a1", OK: true, New: false, Period: "05-2026"},
+		{Provider: "mts", OK: true, New: true, Period: "05-2026"},
+	})
+
+	require.Len(t, msgs, 1, "only the newly downloaded receipt should notify")
+	assert.Contains(t, msgs[0].Subject, "MTS")
+}
+
 func TestMessagesPerReceiptWithoutEnrichment(t *testing.T) {
 	// When the run recorded no period/price, the message still sends cleanly
 	// without a month or amount and without the old duration suffix.
 	cfg := config.Notifications{Mode: config.NotifyModePerReceipt}
-	msgs := notify.Messages(cfg, []refresh.Result{{Provider: "eps", OK: true, DurationMS: 3400}})
+	msgs := notify.Messages(cfg, []refresh.Result{{Provider: "eps", OK: true, New: true, DurationMS: 3400}})
 
 	require.Len(t, msgs, 1)
 	assert.Equal(t, "Račun za EPS je uspešno preuzet.\n", msgs[0].Body)
@@ -46,14 +59,22 @@ func TestMessagesPerReceiptWithoutEnrichment(t *testing.T) {
 func TestMessagesAllDoneRequiresEveryProvider(t *testing.T) {
 	cfg := config.Notifications{Mode: config.NotifyModeAllDone}
 
+	// One provider failed → no summary.
 	assert.Empty(t, notify.Messages(cfg, []refresh.Result{
-		{Provider: "mts", OK: true},
+		{Provider: "mts", OK: true, New: true},
 		{Provider: "a1", OK: false},
 	}))
 
+	// All succeeded but nothing was new (a daily re-run) → no summary.
+	assert.Empty(t, notify.Messages(cfg, []refresh.Result{
+		{Provider: "mts", OK: true, New: false},
+		{Provider: "a1", OK: true, New: false},
+	}))
+
+	// All succeeded and at least one new → one summary.
 	msgs := notify.Messages(cfg, []refresh.Result{
-		{Provider: "mts", OK: true},
-		{Provider: "a1", OK: true},
+		{Provider: "mts", OK: true, New: true},
+		{Provider: "a1", OK: true, New: false},
 	})
 	require.Len(t, msgs, 1)
 	assert.Contains(t, msgs[0].Subject, "svi računi")

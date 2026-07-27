@@ -31,6 +31,11 @@ type Result struct {
 	DurationMS int64   `json:"duration_ms"`
 	Price      float64 `json:"price,omitempty"`
 	OK         bool    `json:"ok"`
+	// New reports whether this run downloaded the receipt for the first time, as
+	// opposed to re-downloading one already on record. It is filled in after the
+	// run (from the receipts database) and drives the download notification, so a
+	// daily re-run does not re-announce an already-downloaded bill.
+	New bool `json:"new,omitempty"`
 }
 
 // State is what the UI needs to render the refresh control.

@@ -16,6 +16,11 @@ Release, so keep the entries user-facing.
 
 ### 🔧 Changed
 
+### 🐛 Fixed
+
+- 🔕 No more duplicate notifications on repeated runs. A download is announced only the first time a receipt is fetched, so the daily cron no longer re-notifies about bills already on record. The `checks` command now also sends paid-confirmation messages, matching the UI refresh button — both now share one notification path.
+- 🧾 No false paid-confirmations for eUpravnik / Yettel. Their status comes from the *next* month's invoice, so a first run (with no previous receipt on record) no longer fires a "confirmed paid" message for a bill you never had — the confirmation now waits until the receipt exists and a later invoice settles it.
+
 ## [1.0.0] - 27.07.2026
 
 First public release — automatic receipt downloads with a dashboard, spending

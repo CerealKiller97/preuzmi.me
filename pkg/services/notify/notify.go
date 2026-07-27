@@ -169,7 +169,9 @@ func Messages(cfg config.Notifications, results []refresh.Result) []Message {
 	case config.NotifyModePerReceipt:
 		out := make([]Message, 0)
 		for _, r := range results {
-			if !r.OK {
+			// Only announce a receipt downloaded for the first time this run, so a
+			// daily re-download of an already-saved bill stays silent.
+			if !r.OK || !r.New {
 				continue
 			}
 			name := strings.ToUpper(r.Provider)
@@ -182,7 +184,10 @@ func Messages(cfg config.Notifications, results []refresh.Result) []Message {
 		return out
 
 	case config.NotifyModeAllDone:
-		if !allSucceeded(results) {
+		// Every provider succeeded, and at least one receipt was new — so the
+		// summary fires when a run completes with fresh downloads, not on every
+		// daily re-run once everything is already saved.
+		if !allSucceeded(results) || !anyNew(results) {
 			return nil
 		}
 		names := make([]string, 0, len(results))
@@ -305,4 +310,16 @@ func allSucceeded(results []refresh.Result) bool {
 	}
 
 	return true
+}
+
+// anyNew reports whether the run downloaded at least one receipt for the first
+// time, so a summary is not sent when nothing actually changed.
+func anyNew(results []refresh.Result) bool {
+	for _, r := range results {
+		if r.OK && r.New {
+			return true
+		}
+	}
+
+	return false
 }

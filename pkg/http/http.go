@@ -92,7 +92,7 @@ func Routes(c *container.Container) {
 		refreshStatusHandler(c.GetConfig(), getRefresh())(w, r)
 	})
 	http.HandleFunc("POST /api/refresh", func(w http.ResponseWriter, r *http.Request) {
-		startRefreshHandler(c.GetConfig(), c.GetProviders, c.GetReceiptsStore, c.GetNotifier(), getRefresh())(w, r)
+		startRefreshHandler(c.GetConfig(), c.GetProviders, getRefresh(), c.NotifyRefreshResults)(w, r)
 	})
 	http.HandleFunc("POST /api/notifications/test", testNotificationHandler(c.GetNotifier()))
 	http.HandleFunc("PUT /api/settings", updateSettingsHandler(c.GetConfig(), c.Reload))

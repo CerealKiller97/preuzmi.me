@@ -1,0 +1,5 @@
+# CODEOWNERS — https://docs.github.com/articles/about-code-owners
+# Order matters: the last matching pattern for a path wins.
+
+# Default owner for everything in the repo.
+*                       @CerealKiller97

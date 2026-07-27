@@ -10,7 +10,7 @@
 
 <p align="center">
   <strong>Automatsko preuzimanje računa</strong> za internet, telefon i struju — na jednom mestu.<br/>
-  Dashboard, statistika troškova, obaveštenja i podešavanja koja se primenjuju bez restarta.
+  Jednostavan dashboard za praćenje plaćenih računa i statistike troškova, da nijedan račun ne promakne neplaćen.
 </p>
 
 <p align="center">
@@ -79,7 +79,7 @@ Svaki mesec: uloguj se na A1, mts, e.Sanduče… preuzmi PDF… zaboravi jedan�
 
 ### Zahtevi
 
-- Go **1.25+**
+- Go **1.26+**
 - Node **18+** (samo za jednokratni build CSS-a)
 - `config.json` u korenu projekta (vidi ispod)
 

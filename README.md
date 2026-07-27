@@ -10,7 +10,7 @@
 
 <p align="center">
   <strong>Automatic receipt downloads</strong> for internet, phone, and electricity — in one place.<br/>
-  Dashboard, spending stats, notifications, and settings that hot-reload without a restart.
+  An easy dashboard for tracking paid receipts and spending stats, so there are no more unintentionally unpaid bills.
 </p>
 
 <p align="center">
@@ -79,7 +79,7 @@ Every month: log into A1, mts, e.Sanduče… download PDFs… forget one… repe
 
 ### Requirements
 
-- Go **1.25+**
+- Go **1.26+**
 - Node **18+** (only to build CSS once)
 - A `config.json` in the project root (see below)
 

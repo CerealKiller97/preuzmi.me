@@ -28,8 +28,9 @@ vars:
   # app. Kept in one place so the Taskfile and gosec.yml can't drift:
   #   G104 cleanup Close(); G301/G306 local receipt permissions;
   #   G304 config/receipt paths; G101 SecretPlaceholder / URL constants;
-  #   G402 SMTP TLS floor; G114 ListenAndServe timeouts; G203 escaped FormJSON.
-  GOSEC_EXCLUDE: G104,G301,G304,G306,G101,G402,G114,G203
+  #   G402 SMTP TLS floor; G114 ListenAndServe timeouts; G203 escaped FormJSON;
+  #   G117 provider login payloads must marshal a password to authenticate.
+  GOSEC_EXCLUDE: G104,G301,G304,G306,G101,G402,G114,G203,G117
   # Read from ./version, the value embedded into the binary via go:embed.
   VERSION:
     sh: cat version

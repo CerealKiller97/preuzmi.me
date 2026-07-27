@@ -28,14 +28,14 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - name: Download modules
-        run: go mod download
+      - name: Set up Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Test with coverage
-        run: |
-          go test ./... -race -count=1 \
-            -covermode=atomic \
-            -coverprofile=coverage.out
+        run: task test
 
       - name: Coverage summary
         run: |

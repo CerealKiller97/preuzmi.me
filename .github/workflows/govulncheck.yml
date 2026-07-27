@@ -28,8 +28,11 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Set up Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Scan for known vulnerabilities
-        run: govulncheck ./...
+        run: task govulncheck

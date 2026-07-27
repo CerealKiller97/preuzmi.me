@@ -28,8 +28,14 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9
+      - name: Set up Task
+        uses: arduino/setup-task@v2
         with:
-          version: latest
-          args: --timeout=5m
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install golangci-lint
+        run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b "$(go env GOPATH)/bin"
+
+      - name: Lint
+        run: task lint

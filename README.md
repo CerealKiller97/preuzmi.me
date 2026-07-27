@@ -14,12 +14,12 @@
 </p>
 
 <p align="center">
+  <a href="#quick-start">Quick start</a> ·
   <a href="#features">Features</a> ·
   <a href="#screenshots">Screenshots</a> ·
-  <a href="#quick-start">Quick start</a> ·
   <a href="#configuration">Config</a> ·
   <a href="#cli">CLI</a> ·
-  <a href="#docker">Docker</a>
+  <a href="#run-from-source">From source</a>
 </p>
 
 <p align="center">
@@ -43,6 +43,52 @@
 Every month: log into A1, mts, e.Sanduče… download PDFs… forget one… repeat.
 
 **Preuzmi.me** does that for you. One refresh button (or a cron `checks` run), a clean UI for what landed, and charts for what you spent.
+
+## Quick start
+
+The quickest way to run Preuzmi.me is with Docker. The image is multi-arch and distroless — the SQL schema is embedded, so only `config.json` and a downloads folder need mounting.
+
+First create a `config.json` (see [Configuration](#configuration)) with `"download_path": "/data/receipts"`.
+
+### docker run
+
+```bash
+docker run -d --name preuzmi \
+  -p 5500:5500 \
+  -v "$PWD/config.json:/app/config.json:ro" \
+  -v preuzmi-receipts:/data/receipts \
+  cerealkiller97/preuzmi.me:1.0.0
+```
+
+### docker compose
+
+```yaml
+services:
+  preuzmi:
+    image: cerealkiller97/preuzmi.me:1.0.0
+    container_name: preuzmi
+    ports:
+      - "5500:5500"
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - preuzmi-receipts:/data/receipts   # or a bind mount: ./receipts:/data/receipts
+    restart: unless-stopped
+
+volumes:
+  preuzmi-receipts:
+```
+
+```bash
+docker compose up -d
+```
+
+Open `http://localhost:5500/dashboard` (port comes from `application.port`).
+
+Run a download pass (same work as the header refresh button):
+
+```bash
+docker exec preuzmi /app/preuzmi checks
+```
 
 ## Features
 
@@ -74,37 +120,6 @@ Every month: log into A1, mts, e.Sanduče… download PDFs… forget one… repe
 <p align="center">
   <img src="docs/screenshots/settings.png" alt="Settings page" width="880" />
 </p>
-
-## Quick start
-
-### Requirements
-
-- Go **1.26+**
-- Node **18+** (only to build CSS once)
-- A `config.json` in the project root (see below)
-
-### Install & run
-
-```bash
-git clone https://github.com/CerealKiller97/preuzmi.me.git
-cd preuzmi.me
-
-# CSS bundle (once, or after style changes)
-npm install
-npm run build
-
-# Copy / edit config, then:
-go run . serve
-```
-
-Open `http://localhost:5500/dashboard` (port comes from `application.port`).
-
-Run a download pass:
-
-```bash
-go run . checks
-# or click the refresh button in the header
-```
 
 ## Configuration
 
@@ -183,6 +198,33 @@ Left empty, `mailbox` searches your whole `INBOX` on every refresh — slow on a
 
 Resolution order is `providers.<name>.mailbox` → `email.mailbox` → `INBOX`: a per-provider label overrides the shared `email.mailbox`, and an unset value falls back to it (then `INBOX`).
 
+## Run from source
+
+Prefer to run it without Docker? You'll need:
+
+- Go **1.26+**
+- Node **18+** (only to build CSS once)
+- A `config.json` in the project root (see [Configuration](#configuration))
+
+```bash
+git clone https://github.com/CerealKiller97/preuzmi.me.git
+cd preuzmi.me
+
+# CSS bundle (once, or after style changes)
+npm install
+npm run build
+
+# Copy / edit config, then:
+go run . serve
+```
+
+Open `http://localhost:5500/dashboard`, then run a download pass:
+
+```bash
+go run . checks
+# or click the refresh button in the header
+```
+
 ## CLI
 
 ```text
@@ -192,77 +234,6 @@ preuzmi.me help     Show usage
 ```
 
 `checks` is the same work as the header refresh button. Ideal for cron (see [Scheduling](#scheduling-cron)).
-
-## Docker
-
-The SQL schema (`database/schema.sql`) is embedded into the binary, so the image only needs the binary plus `templates/` and `assets/` (both served from disk). Mount `config.json` and the receipts folder as volumes so config and downloads survive rebuilds.
-
-### Dockerfile
-
-```dockerfile
-# ---- build CSS ----
-FROM node:20-alpine AS css
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY assets ./assets
-RUN npm run build
-
-# ---- build binary ----
-FROM golang:1.26-alpine AS build
-WORKDIR /src
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-COPY --from=css /app/assets/dist ./assets/dist
-RUN CGO_ENABLED=0 go build -trimpath -o /preuzmi .
-
-# ---- runtime ----
-FROM alpine:3.20
-WORKDIR /app
-COPY --from=build /preuzmi /app/preuzmi
-COPY templates ./templates
-COPY assets ./assets
-EXPOSE 5500
-ENTRYPOINT ["/app/preuzmi"]
-CMD ["serve"]
-```
-
-### Run
-
-Set `"download_path": "/data/receipts"` in `config.json`, then:
-
-```bash
-docker build -t preuzmi.me .
-
-docker run -d --name preuzmi \
-  -p 5500:5500 \
-  -v "$PWD/config.json:/app/config.json:ro" \
-  -v preuzmi-receipts:/data/receipts \
-  preuzmi.me
-```
-
-### docker compose
-
-```yaml
-services:
-  preuzmi:
-    build: .
-    container_name: preuzmi
-    ports:
-      - "5500:5500"
-    volumes:
-      - ./config.json:/app/config.json:ro
-      - preuzmi-receipts:/data/receipts   # or a bind mount: ./receipts:/data/receipts
-    restart: unless-stopped
-
-volumes:
-  preuzmi-receipts:
-```
-
-```bash
-docker compose up -d --build
-```
 
 ## Scheduling (cron)
 

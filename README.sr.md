@@ -14,12 +14,12 @@
 </p>
 
 <p align="center">
+  <a href="#brzi-start">Brzi start</a> ·
   <a href="#mogucnosti">Mogućnosti</a> ·
   <a href="#snimci-ekrana">Snimci ekrana</a> ·
-  <a href="#brzi-start">Brzi start</a> ·
   <a href="#konfiguracija">Konfiguracija</a> ·
   <a href="#cli">CLI</a> ·
-  <a href="#docker">Docker</a>
+  <a href="#pokretanje-iz-koda">Iz koda</a>
 </p>
 
 <p align="center">
@@ -43,6 +43,52 @@
 Svaki mesec: uloguj se na A1, mts, e.Sanduče… preuzmi PDF… zaboravi jedan… ponovi.
 
 **Preuzmi.me** to radi umesto tebe. Jedno dugme za osvežavanje (ili cron `checks`), pregled šta je stiglo i grafikoni koliko si potrošio.
+
+## Brzi start
+
+Najlakši način da pokreneš Preuzmi.me je preko Docker-a. Image je multi-arch i distroless — SQL šema je ugrađena, pa treba mapirati samo `config.json` i folder za preuzimanja.
+
+Prvo napravi `config.json` (vidi [Konfiguracija](#konfiguracija)) sa `"download_path": "/data/receipts"`.
+
+### docker run
+
+```bash
+docker run -d --name preuzmi \
+  -p 5500:5500 \
+  -v "$PWD/config.json:/app/config.json:ro" \
+  -v preuzmi-receipts:/data/receipts \
+  cerealkiller97/preuzmi.me:1.0.0
+```
+
+### docker compose
+
+```yaml
+services:
+  preuzmi:
+    image: cerealkiller97/preuzmi.me:1.0.0
+    container_name: preuzmi
+    ports:
+      - "5500:5500"
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - preuzmi-receipts:/data/receipts   # ili bind mount: ./receipts:/data/receipts
+    restart: unless-stopped
+
+volumes:
+  preuzmi-receipts:
+```
+
+```bash
+docker compose up -d
+```
+
+Otvori `http://localhost:5500/dashboard` (port je `application.port`).
+
+Pokreni preuzimanje (isti posao kao dugme za osvežavanje):
+
+```bash
+docker exec preuzmi /app/preuzmi checks
+```
 
 ## Mogućnosti
 
@@ -74,37 +120,6 @@ Svaki mesec: uloguj se na A1, mts, e.Sanduče… preuzmi PDF… zaboravi jedan�
 <p align="center">
   <img src="docs/screenshots/settings.png" alt="Stranica podešavanja" width="880" />
 </p>
-
-## Brzi start
-
-### Zahtevi
-
-- Go **1.26+**
-- Node **18+** (samo za jednokratni build CSS-a)
-- `config.json` u korenu projekta (vidi ispod)
-
-### Instalacija i pokretanje
-
-```bash
-git clone https://github.com/CerealKiller97/preuzmi.me.git
-cd preuzmi.me
-
-# CSS bundle (jednom, ili posle izmene stilova)
-npm install
-npm run build
-
-# Kopiraj / izmeni config, zatim:
-go run . serve
-```
-
-Otvori `http://localhost:5500/dashboard` (port je `application.port`).
-
-Pokreni preuzimanje:
-
-```bash
-go run . checks
-# ili klikni dugme za osvežavanje u headeru
-```
 
 ## Konfiguracija
 
@@ -183,6 +198,33 @@ Kada je prazno, `mailbox` na svakom osvežavanju pretražuje ceo `INBOX` — spo
 
 Redosled razrešavanja je `providers.<ime>.mailbox` → `email.mailbox` → `INBOX`: labela po provajderu ima prednost nad zajedničkim `email.mailbox`, a prazna vrednost pada na njega (pa na `INBOX`).
 
+## Pokretanje iz koda
+
+Više voliš bez Docker-a? Treba ti:
+
+- Go **1.26+**
+- Node **18+** (samo za jednokratni build CSS-a)
+- `config.json` u korenu projekta (vidi [Konfiguracija](#konfiguracija))
+
+```bash
+git clone https://github.com/CerealKiller97/preuzmi.me.git
+cd preuzmi.me
+
+# CSS bundle (jednom, ili posle izmene stilova)
+npm install
+npm run build
+
+# Kopiraj / izmeni config, zatim:
+go run . serve
+```
+
+Otvori `http://localhost:5500/dashboard`, zatim pokreni preuzimanje:
+
+```bash
+go run . checks
+# ili klikni dugme za osvežavanje u headeru
+```
+
 ## CLI
 
 ```text
@@ -192,77 +234,6 @@ preuzmi.me help     Prikazuje pomoć
 ```
 
 `checks` radi isto što i dugme za osvežavanje u headeru. Pogodno za cron (vidi [Zakazivanje](#zakazivanje-cron)).
-
-## Docker
-
-SQL šema (`database/schema.sql`) je ugrađena u binarni fajl, pa image treba samo binarni fajl plus `templates/` i `assets/` (oba se čitaju sa diska). Mapirajte `config.json` i folder sa računima kao volumene da config i preuzimanja prežive rebuild.
-
-### Dockerfile
-
-```dockerfile
-# ---- build CSS ----
-FROM node:20-alpine AS css
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY assets ./assets
-RUN npm run build
-
-# ---- build binarni fajl ----
-FROM golang:1.26-alpine AS build
-WORKDIR /src
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-COPY --from=css /app/assets/dist ./assets/dist
-RUN CGO_ENABLED=0 go build -trimpath -o /preuzmi .
-
-# ---- runtime ----
-FROM alpine:3.20
-WORKDIR /app
-COPY --from=build /preuzmi /app/preuzmi
-COPY templates ./templates
-COPY assets ./assets
-EXPOSE 5500
-ENTRYPOINT ["/app/preuzmi"]
-CMD ["serve"]
-```
-
-### Pokretanje
-
-Postavite `"download_path": "/data/receipts"` u `config.json`, zatim:
-
-```bash
-docker build -t preuzmi.me .
-
-docker run -d --name preuzmi \
-  -p 5500:5500 \
-  -v "$PWD/config.json:/app/config.json:ro" \
-  -v preuzmi-receipts:/data/receipts \
-  preuzmi.me
-```
-
-### docker compose
-
-```yaml
-services:
-  preuzmi:
-    build: .
-    container_name: preuzmi
-    ports:
-      - "5500:5500"
-    volumes:
-      - ./config.json:/app/config.json:ro
-      - preuzmi-receipts:/data/receipts   # ili bind mount: ./receipts:/data/receipts
-    restart: unless-stopped
-
-volumes:
-  preuzmi-receipts:
-```
-
-```bash
-docker compose up -d --build
-```
 
 ## Zakazivanje (cron)
 

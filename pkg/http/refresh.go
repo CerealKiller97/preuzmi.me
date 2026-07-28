@@ -21,6 +21,10 @@ func refreshStatusHandler(cfg *config.Config, svc *refresh.Service) Handler {
 			return
 		}
 
+		// The `checks` cron writes refresh.json from a separate process, so pull
+		// in any newer run before reporting the last-download time.
+		svc.SyncFromDisk()
+
 		writeJSON(w, svc.State().WithWindow(cfg.CheckUntil, cfg.RefreshAllowed()))
 	}
 }

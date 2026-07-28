@@ -33,8 +33,19 @@ func Checks(c *container.Container) {
 		log.Fatal().Msg("No providers with an implementation are configured")
 	}
 
+	// Record the run into refresh.json, the same file the UI reads for its
+	// "last download" time. A scheduled checks pass must advance it too, so the
+	// dashboard does not keep showing a stale time as if nothing had run.
+	svc, err := refresh.New(cfg.DownloadPath)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to load refresh state")
+	}
+
 	failed := 0
-	results := refresh.Run(providers)
+	results, err := svc.RunOnce(providers)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to run refresh")
+	}
 	for _, result := range results {
 		event := log.Info()
 		if !result.OK {

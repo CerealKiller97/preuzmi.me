@@ -10,16 +10,17 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+## [1.0.1] - 28.07.2026
+
 ### ✨ Added
 
 - ⏰ Automatic daily receipt check — the Docker image now runs `checks` on a built-in `crond` every day at 10:00 (defaults to `Europe/Belgrade`; override with `TZ`), gated by `check_until` (default 20), so bills download with no host cron.
-
-### 🔧 Changed
 
 ### 🐛 Fixed
 
 - 🔕 No more duplicate notifications on repeated runs. A download is announced only the first time a receipt is fetched, so the daily cron no longer re-notifies about bills already on record. The `checks` command now also sends paid-confirmation messages, matching the UI refresh button — both now share one notification path.
 - 🧾 No false paid-confirmations for eUpravnik / Yettel. Their status comes from the *next* month's invoice, so a first run (with no previous receipt on record) no longer fires a "confirmed paid" message for a bill you never had — the confirmation now waits until the receipt exists and a later invoice settles it.
+- 🕒 The "last download" time now updates after a scheduled `checks` run, not just the UI refresh button. The daily cron previously downloaded bills without recording the run, so the dashboard kept showing a stale time as if nothing had happened; a running server now also picks up a cron run without needing a restart.
 
 ## [1.0.0] - 27.07.2026
 
@@ -42,5 +43,6 @@ stats, and notifications, so no bill goes unintentionally unpaid.
 - 🐳 Multi-arch (amd64 + arm64), distroless Docker image published to GHCR.
 - 🌐 Bilingual documentation — English and Serbian.
 
-[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/CerealKiller97/preuzmi.me/releases/tag/v1.0.0

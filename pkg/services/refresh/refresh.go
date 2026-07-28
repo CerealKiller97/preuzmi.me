@@ -137,13 +137,7 @@ func (s *Service) Start(providers map[string]provider.Interface, after func([]Re
 
 	go func() {
 		results := Run(providers)
-
-		s.mu.Lock()
-		s.state.Running = false
-		s.state.FinishedAt = time.Now().Unix()
-		s.state.Results = results
-		_ = s.persist()
-		s.mu.Unlock()
+		s.finish(results)
 
 		if after != nil {
 			after(results)
@@ -151,6 +145,75 @@ func (s *Service) Start(providers map[string]provider.Interface, after func([]Re
 	}()
 
 	return current, nil
+}
+
+// RunOnce downloads from every provider synchronously and records the run, so
+// the persisted "last refresh" time advances after the `checks` command too —
+// not only after the UI's refresh button. Without this, a scheduled `checks`
+// run would download bills yet leave the dashboard showing a stale time, making
+// it look as though nothing happened.
+//
+// Unlike Start it blocks until the run finishes and returns the results, which
+// suits the one-shot `checks` command that exits when it is done.
+func (s *Service) RunOnce(providers map[string]provider.Interface) ([]Result, error) {
+	s.mu.Lock()
+	if s.state.Running {
+		s.mu.Unlock()
+		return nil, ErrAlreadyRunning
+	}
+	s.state = State{
+		Running:   true,
+		StartedAt: time.Now().Unix(),
+	}
+	s.mu.Unlock()
+
+	results := Run(providers)
+	s.finish(results)
+
+	return results, nil
+}
+
+// finish records a completed run: it stamps the finish time, stores the results
+// and persists them to disk. Shared by Start and RunOnce so both entry points
+// leave identical state behind.
+func (s *Service) finish(results []Result) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.state.Running = false
+	s.state.FinishedAt = time.Now().Unix()
+	s.state.Results = results
+	_ = s.persist()
+}
+
+// SyncFromDisk reloads the persisted state when a newer run finished out of
+// process — the `checks` cron writes refresh.json from a separate process, and
+// a long-running server would otherwise keep serving the state it loaded at
+// startup. A run in flight in this process is authoritative and left untouched.
+func (s *Service) SyncFromDisk() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.state.Running {
+		return
+	}
+
+	b, err := os.ReadFile(s.path)
+	if err != nil || len(strings.TrimSpace(string(b))) == 0 {
+		return
+	}
+
+	var disk State
+	if err := json.Unmarshal(b, &disk); err != nil {
+		return
+	}
+
+	// Adopt the on-disk run only when it is newer, so we never regress to an
+	// older state or clobber a fresher in-memory one.
+	if disk.FinishedAt > s.state.FinishedAt {
+		disk.Running = false
+		s.state = disk
+	}
 }
 
 // Run downloads from every provider concurrently and reports each outcome.

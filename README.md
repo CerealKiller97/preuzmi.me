@@ -68,10 +68,10 @@ services:
     image: ghcr.io/cerealkiller97/preuzmi.me:1.0.2
     container_name: preuzmi.me
     ports:
-      - "5500:5500"
+      - '5500:5500'
     volumes:
       - ./config.json:/app/config.json:ro
-      - preuzmi-receipts:/data/receipts   # or a bind mount: ./receipts:/data/receipts
+      - preuzmi-receipts:/data/receipts # or a bind mount: ./receipts:/data/receipts
     restart: unless-stopped
 
 volumes:
@@ -157,27 +157,27 @@ docker exec preuzmi /app/preuzmi checks
     "mailbox": "INBOX"
   },
   "providers": {
-    "a1":        { "identifier": "", "password": "" },
-    "mts":       { "identifier": "", "password": "" },
-    "esanduce":  { "identifier": "", "password": "" },
-    "eps":       { "identifier": "", "password": "" },
-    "yettel":    { "identifier": "you@gmail.com", "password": "gmail-app-password", "mailbox": "Racuni/Yettel" },
+    "a1": { "identifier": "", "password": "" },
+    "mts": { "identifier": "", "password": "" },
+    "esanduce": { "identifier": "", "password": "" },
+    "eps": { "identifier": "", "password": "" },
+    "yettel": { "identifier": "you@gmail.com", "password": "gmail-app-password", "mailbox": "Racuni/Yettel" },
     "eupravnik": { "identifier": "you@gmail.com", "password": "gmail-app-password", "mailbox": "Racuni/Eupravnik" }
   }
 }
 ```
 
-| Key | Notes |
-| --- | --- |
-| `storage` | `local` or `s3` |
-| `download_path` | Where PDFs + `meta.json` / `payments.json` / `refresh.json` live. In Docker use an in-container path (e.g. `/data/receipts`) and bind-mount the host folder there. |
-| `check_until` | Last calendar day of the month refresh is allowed (default `20`) |
-| `notifications.mode` | `off` · `per_receipt` · `all_done` |
-| `notifications.driver` | `telegram` or `smtp` |
-| `email.provider` | Mailbox driver for the email-based providers (eUpravnik / Yettel). **Currently `gmail` only.** |
-| `providers.<name>.mailbox` | Gmail label to search for that provider's invoice. Empty → falls back to `email.mailbox`, then `INBOX`. |
+| Key                        | Notes                                                                                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `storage`                  | `local` or `s3`                                                                                                                                                    |
+| `download_path`            | Where PDFs + `meta.json` / `payments.json` / `refresh.json` live. In Docker use an in-container path (e.g. `/data/receipts`) and bind-mount the host folder there. |
+| `check_until`              | Last calendar day of the month refresh is allowed (default `20`)                                                                                                   |
+| `notifications.mode`       | `off` · `per_receipt` · `all_done`                                                                                                                                 |
+| `notifications.driver`     | `telegram` or `smtp`                                                                                                                                               |
+| `email.provider`           | Mailbox driver for the email-based providers (eUpravnik / Yettel). **Currently `gmail` only.**                                                                     |
+| `providers.<name>.mailbox` | Gmail label to search for that provider's invoice. Empty → falls back to `email.mailbox`, then `INBOX`.                                                            |
 
-> **Two login models.** **A1, mts, EPS and e.Sanduče** authenticate against each service's own platform, so their `identifier` / `password` are your **login for that provider**. **Yettel and eUpravnik** have no usable API, so — *for now* — the app reads the invoice PDF from your mailbox over IMAP; their `identifier` / `password` are your **Gmail address and a Google App Password**, not the provider login. See [eUpravnik & Yettel](#eupravnik--yettel--mailbox-based-gmail-only-for-now) below.
+> **Two login models.** **A1, mts, EPS and e.Sanduče** authenticate against each service's own platform, so their `identifier` / `password` are your **login for that provider**. **Yettel and eUpravnik** have no usable API, so — _for now_ — the app reads the invoice PDF from your mailbox over IMAP; their `identifier` / `password` are your **Gmail address and a Google App Password**, not the provider login. See [eUpravnik & Yettel](#eupravnik--yettel--mailbox-based-gmail-only-for-now) below.
 
 Host / port are **frozen while the process is running** — change them in `config.json` and restart. Everything else can be applied from **Settings → Apply changes**.
 
@@ -186,16 +186,16 @@ Host / port are **frozen while the process is running** — change them in `conf
 Unlike A1 / mts / EPS / e.Sanduče, which sign in to the provider's own platform, **eUpravnik and Yettel do not use platform credentials.** Neither exposes a usable API, so the app reads the invoice PDF **straight from your mailbox over IMAP**.
 
 - **Gmail is currently the only driver** (`email.provider: "gmail"`).
-- For these two providers, `identifier` / `password` are your **Gmail address and a Google [App Password](https://support.google.com/accounts/answer/185833)** — *not* your eUpravnik / Yettel login.
+- For these two providers, `identifier` / `password` are your **Gmail address and a Google [App Password](https://support.google.com/accounts/answer/185833)** — _not_ your eUpravnik / Yettel login.
 - `providers.<name>.mailbox` is the Gmail **label** to search (e.g. `Racuni/Yettel`); nested labels use `/`. Empty falls back to `email.mailbox`, then `INBOX`.
 
 #### Faster lookups with Gmail labels
 
-Left empty, `mailbox` searches your whole `INBOX` on every refresh — slow on a large mailbox, and likelier to match the wrong PDF. Give each email provider its own Gmail label and point `mailbox` at it, so the IMAP search scans only that label. On Gmail every label *is* an IMAP folder, so the app can select it directly.
+Left empty, `mailbox` searches your whole `INBOX` on every refresh — slow on a large mailbox, and likelier to match the wrong PDF. Give each email provider its own Gmail label and point `mailbox` at it, so the IMAP search scans only that label. On Gmail every label _is_ an IMAP folder, so the app can select it directly.
 
-1. **Create the label** — Gmail → *Settings* ⚙ → *See all settings* → *Labels* → *Create new label*. Use a nested name like `Racuni/Yettel` (the `/` nests it under `Racuni`).
-2. **Filter incoming invoices into it** — Gmail search bar → *Show search options* → match the invoice mail (e.g. `from:(no-reply@yettel.rs)` or a subject term) → *Create filter* → tick *Apply the label* and choose it. Tick *Also apply to matching conversations* to backfill existing mail.
-3. **Enable IMAP on the label** — back on the *Labels* screen, find the label and tick *Show in IMAP*. Without this the app can't open it over IMAP.
+1. **Create the label** — Gmail → _Settings_ ⚙ → _See all settings_ → _Labels_ → _Create new label_. Use a nested name like `Racuni/Yettel` (the `/` nests it under `Racuni`).
+2. **Filter incoming invoices into it** — Gmail search bar → _Show search options_ → match the invoice mail (e.g. `from:(no-reply@yettel.rs)` or a subject term) → _Create filter_ → tick _Apply the label_ and choose it. Tick _Also apply to matching conversations_ to backfill existing mail.
+3. **Enable IMAP on the label** — back on the _Labels_ screen, find the label and tick _Show in IMAP_. Without this the app can't open it over IMAP.
 4. **Point the config at it** — set the provider's `mailbox` to the exact label path: `"mailbox": "Racuni/Yettel"`.
 
 Resolution order is `providers.<name>.mailbox` → `email.mailbox` → `INBOX`: a per-provider label overrides the shared `email.mailbox`, and an unset value falls back to it (then `INBOX`).
@@ -270,5 +270,5 @@ Social previews use [`assets/img/og.png`](assets/img/og.png) (1200×630). Source
 
 ## License
 
-Copyright © 2025–2026 Stefan Bogdanović  
+Copyright © 2025–2026 Stefan Bogdanović
 Licensed under the terms of the **GNU Affero General Public License v3 only**.

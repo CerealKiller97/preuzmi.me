@@ -10,6 +10,10 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+### 🐛 Fixed
+
+- 🧾 e.Sanduče receipts now open as valid PDFs. The provider's print endpoint returns the PDF as base64 wrapped in a JSON string, but the raw response was being saved straight to `.pdf` — so the file was never a real PDF. It's now unwrapped and base64-decoded before saving, with a clear error instead of a broken file when the provider returns an empty document.
+
 ## [1.0.1] - 28.07.2026
 
 ### ✨ Added

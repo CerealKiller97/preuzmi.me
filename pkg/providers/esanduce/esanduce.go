@@ -3,6 +3,7 @@ package esanduce
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -252,9 +253,25 @@ func (s Service) downloadReceipt(token string, ident, ggmm int, period string) e
 		return fmt.Errorf("esanduce pdf download failed: %s", resp.Status)
 	}
 
-	data, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
+	}
+
+	// The stampa endpoint returns application/json: a JSON-encoded string
+	// holding the base64 PDF, not raw PDF bytes. Unwrap the string, then decode.
+	var encoded string
+	if err := json.Unmarshal(body, &encoded); err != nil {
+		return fmt.Errorf("esanduce pdf decode: unexpected response: %w", err)
+	}
+
+	if encoded == "" {
+		return fmt.Errorf("esanduce returned an empty pdf for ggmm %d", ggmm)
+	}
+
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return fmt.Errorf("esanduce pdf base64 decode: %w", err)
 	}
 
 	key := fmt.Sprintf("%s/%s.pdf", period, fileName)

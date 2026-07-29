@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-  ghcr.io/cerealkiller97/preuzmi.me:1.0.0
+  ghcr.io/cerealkiller97/preuzmi.me:1.0.2
 ```
 
 ### docker compose
@@ -65,7 +65,7 @@ docker run -d --name preuzmi \
 ```yaml
 services:
   preuzmi:
-    image: ghcr.io/cerealkiller97/preuzmi.me:1.0.0
+    image: ghcr.io/cerealkiller97/preuzmi.me:1.0.2
     container_name: preuzmi.me
     ports:
       - "5500:5500"
@@ -92,7 +92,7 @@ docker exec preuzmi /app/preuzmi checks
 
 ## Features
 
-- **Multi-provider downloads** — A1, mts, e.Sanduče (EPS / Yettel placeholders in config)
+- **Multi-provider downloads** — A1, mts, EPS and e.Sanduče sign in with each provider's own platform credentials; Yettel and eUpravnik read the invoice from your mailbox over IMAP (for now)
 - **Receipt dashboard** — search, filter by period / provider / paid status
 - **Paid tracking** — mark receipts paid without touching `meta.json`
 - **Stats** — yearly totals, monthly averages, per-provider charts
@@ -176,6 +176,8 @@ docker exec preuzmi /app/preuzmi checks
 | `notifications.driver` | `telegram` or `smtp` |
 | `email.provider` | Mailbox driver for the email-based providers (eUpravnik / Yettel). **Currently `gmail` only.** |
 | `providers.<name>.mailbox` | Gmail label to search for that provider's invoice. Empty → falls back to `email.mailbox`, then `INBOX`. |
+
+> **Two login models.** **A1, mts, EPS and e.Sanduče** authenticate against each service's own platform, so their `identifier` / `password` are your **login for that provider**. **Yettel and eUpravnik** have no usable API, so — *for now* — the app reads the invoice PDF from your mailbox over IMAP; their `identifier` / `password` are your **Gmail address and a Google App Password**, not the provider login. See [eUpravnik & Yettel](#eupravnik--yettel--mailbox-based-gmail-only-for-now) below.
 
 Host / port are **frozen while the process is running** — change them in `config.json` and restart. Everything else can be applied from **Settings → Apply changes**.
 

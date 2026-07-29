@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-  ghcr.io/cerealkiller97/preuzmi.me:1.0.0
+  ghcr.io/cerealkiller97/preuzmi.me:1.0.2
 ```
 
 ### docker compose
@@ -65,7 +65,7 @@ docker run -d --name preuzmi \
 ```yaml
 services:
   preuzmi:
-    image: ghcr.io/cerealkiller97/preuzmi.me:1.0.0
+    image: ghcr.io/cerealkiller97/preuzmi.me:1.0.2
     container_name: preuzmi.me
     ports:
       - "5500:5500"
@@ -92,7 +92,7 @@ docker exec preuzmi /app/preuzmi checks
 
 ## Mogućnosti
 
-- **Više provajdera** — A1, mts, e.Sanduče (EPS / Yettel kao mesta u configu)
+- **Više provajdera** — A1, mts, EPS i e.Sanduče se prijavljuju kredencijalima svoje platforme; Yettel i eUpravnik čitaju račun iz vašeg sandučeta preko IMAP-a (za sada)
 - **Dashboard računa** — pretraga, filter po periodu / provajderu / statusu plaćanja
 - **Praćenje plaćanja** — označi račun kao plaćen bez diranja `meta.json`
 - **Statistika** — godišnji zbir, mesečni prosek, grafikoni po provajderu
@@ -176,6 +176,8 @@ docker exec preuzmi /app/preuzmi checks
 | `notifications.driver` | `telegram` ili `smtp` |
 | `email.provider` | Drajver sandučeta za email provajdere (eUpravnik / Yettel). **Trenutno samo `gmail`.** |
 | `providers.<ime>.mailbox` | Gmail labela koja se pretražuje za račun tog provajdera. Prazno → pada na `email.mailbox`, pa na `INBOX`. |
+
+> **Dva načina prijave.** **A1, mts, EPS i e.Sanduče** se autentifikuju na sopstvenu platformu, pa su njihovi `identifier` / `password` vaša **prijava za tog provajdera**. **Yettel i eUpravnik** nemaju upotrebljiv API, pa — *za sada* — aplikacija čita PDF računa iz vašeg sandučeta preko IMAP-a; njihovi `identifier` / `password` su vaša **Gmail adresa i Google App Password**, a ne prijava za provajdera. Vidi [eUpravnik & Yettel](#eupravnik--yettel--preko-sandučeta-za-sada-samo-gmail) niže.
 
 Host / port su **zaključani dok proces radi** — menjaju se u `config.json` + restart. Sve ostalo ide preko **Podešavanja → Primeni promene**.
 

@@ -10,6 +10,8 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+## [1.0.2] - 29.07.2026
+
 ### 🐛 Fixed
 
 - 🧾 e.Sanduče receipts now open as valid PDFs. The provider's print endpoint returns the PDF as base64 wrapped in a JSON string, but the raw response was being saved straight to `.pdf` — so the file was never a real PDF. It's now unwrapped and base64-decoded before saving, with a clear error instead of a broken file when the provider returns an empty document.
@@ -47,6 +49,7 @@ stats, and notifications, so no bill goes unintentionally unpaid.
 - 🐳 Multi-arch (amd64 + arm64), distroless Docker image published to GHCR.
 - 🌐 Bilingual documentation — English and Serbian.
 
-[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/CerealKiller97/preuzmi.me/releases/tag/v1.0.0

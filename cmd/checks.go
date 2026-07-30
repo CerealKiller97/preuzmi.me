@@ -34,8 +34,8 @@ func Checks(c *container.Container) {
 	}
 
 	// Skip providers whose receipt for the current period is fully settled
-	// (downloaded, provider-confirmed paid, and paid_at set). Every provider
-	// bills for the previous month; once that month's bill is settled there is
+	// (paid_at != 0, status plaćeno, confirmed_at != 0). Every provider bills
+	// for the previous month; once that month's bill is settled there is
 	// nothing left to learn. When none are left, don't run at all — no login,
 	// no download, and the last-run time is left untouched.
 	providers = c.SkipAlreadyDownloaded(providers)

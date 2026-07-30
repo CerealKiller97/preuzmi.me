@@ -93,7 +93,7 @@ docker exec preuzmi /app/preuzmi checks
 ## Features
 
 - **Multi-provider downloads** — A1, mts, EPS and e.Sanduče sign in with each provider's own platform credentials; Yettel and eUpravnik read the invoice from your mailbox over IMAP (for now)
-- **Smart refresh** — skips providers whose previous-month receipt is settled (`confirmed_at` and `paid_at` set); unpaid or unverified bills keep running so status can flip
+- **Smart refresh** — skips providers whose previous-month receipt is settled (`paid_at` set, status `plaćeno`, and `confirmed_at` set); unpaid or unverified bills keep running so status can flip
 - **Receipt dashboard** — search, filter by period / provider / paid status
 - **Paid tracking** — mark receipts paid from the UI or the `receipts` CLI; tracked as two separate moments: *paid by you* and *confirmed by the provider*
 - **Stats** — yearly totals, monthly averages, per-provider charts

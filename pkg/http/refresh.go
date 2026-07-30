@@ -69,8 +69,8 @@ func startRefreshHandler(
 		}
 
 		// Skip providers whose receipt for the current period is fully settled
-		// (downloaded, provider-confirmed paid, and paid_at set), so clicking
-		// refresh does not re-login for bills that are already done. Unpaid or
+		// (paid_at != 0, status plaćeno, confirmed_at != 0), so clicking refresh
+		// does not re-login for bills that are already done. Unpaid or
 		// unverified bills still run so status can flip. Every provider bills
 		// for the previous month; with none left, return the last run's state
 		// without starting anything. A not-running state is how the client tells

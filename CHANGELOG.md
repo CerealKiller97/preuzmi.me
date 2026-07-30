@@ -25,7 +25,7 @@ Release, so keep the entries user-facing.
 
 ### ✨ Added
 
-- ⏭️ Smart refresh — skip providers whose previous-month receipt is settled. Settled means the PDF is on record, the provider has confirmed payment (`confirmed_at`), and the user has stamped `paid_at`. Both the UI refresh button and `checks` consult the receipts database first, so a repeat run does not re-login for bills that are already done. Unpaid or unverified bills still run so status can flip and paid-confirmation can fire; if every configured provider is settled, the run is skipped entirely (no login, no download).
+- ⏭️ Smart refresh — skip providers whose previous-month receipt is settled. Settled means `paid_at != 0`, status is `plaćeno`, and `confirmed_at != 0`. Both the UI refresh button and `checks` consult the receipts database first, so a repeat run does not re-login for bills that are already done. Unpaid or unverified bills still run so status can flip and paid-confirmation can fire; if every configured provider is settled, the run is skipped entirely (no login, no download).
 
 ### 🐛 Fixed
 

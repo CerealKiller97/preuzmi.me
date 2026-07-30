@@ -370,7 +370,7 @@ func TestIsSettled(t *testing.T) {
 		t.Fatal("IsSettled true for a downloaded unpaid receipt")
 	}
 
-	// Provider confirms paid, but the user has not stamped paid_at yet.
+	// Provider confirms paid (status + confirmed_at), but paid_at is still 0.
 	if err := store.SetStatus(ctx, "eps", "06-2026", StatusPaid); err != nil {
 		t.Fatalf("SetStatus: %v", err)
 	}
@@ -378,23 +378,26 @@ func TestIsSettled(t *testing.T) {
 		t.Fatal("IsSettled true without paid_at")
 	}
 
-	// User marks paid too — now settled.
+	// User marks paid too — now settled (paid_at != 0, status plaćeno, confirmed_at != 0).
 	if _, err := store.MarkPaid(ctx, "eps", "06-2026", true); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 	if !store.IsSettled(ctx, "eps", "06-2026") {
-		t.Fatal("IsSettled false after confirmed_at + paid_at")
+		t.Fatal("IsSettled false after paid_at + status paid + confirmed_at")
 	}
 
-	// paid_at alone on a stub (no real download) is not settled — PDF still needed.
+	// paid_at alone is not enough — status/confirmed_at must also be set.
 	if _, err := store.MarkPaid(ctx, "a1", "06-2026", true); err != nil {
 		t.Fatalf("MarkPaid stub: %v", err)
+	}
+	if store.IsSettled(ctx, "a1", "06-2026") {
+		t.Fatal("IsSettled true with only paid_at")
 	}
 	if err := store.SetStatus(ctx, "a1", "06-2026", StatusPaid); err != nil {
 		t.Fatalf("SetStatus stub: %v", err)
 	}
-	if store.IsSettled(ctx, "a1", "06-2026") {
-		t.Fatal("IsSettled true for a paid-only stub with no download")
+	if !store.IsSettled(ctx, "a1", "06-2026") {
+		t.Fatal("IsSettled false after paid_at + status paid + confirmed_at on stub")
 	}
 }
 

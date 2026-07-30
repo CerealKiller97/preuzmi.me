@@ -249,10 +249,10 @@ func IsImplemented(name string) bool {
 // SkipAlreadyDownloaded drops any provider whose receipt for the current billing
 // period is fully settled, returning only the providers still worth running.
 //
-// Settled means the PDF is on record, the provider has confirmed payment
-// (confirmed_at), and the user has stamped paid_at. Until all three are true a
-// refresh still runs — an unpaid bill may flip to paid on a later fetch, and
-// that flip is what triggers paid-confirmation notifications.
+// Settled means paid_at is set, status is "plaćeno", and confirmed_at is set.
+// Until all three are true a refresh still runs — an unpaid bill may flip to
+// paid on a later fetch, and that flip is what triggers paid-confirmation
+// notifications.
 //
 // A refresh otherwise logs back into every provider account and re-downloads
 // bills that are already done; consulting the receipts database first turns a
@@ -281,7 +281,7 @@ func (c *Container) SkipAlreadyDownloaded(providers map[string]provider.Interfac
 			c.Logger.Info().
 				Str("provider", name).
 				Str("period", period).
-				Msg("Skipping download: receipt settled (confirmed_at + paid_at) for this period")
+				Msg("Skipping download: receipt settled (paid_at + status plaćeno + confirmed_at)")
 
 			continue
 		}

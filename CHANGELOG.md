@@ -10,6 +10,8 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+## [1.1.0] - 30.07.2026
+
 ### ✨ Added
 
 - 🧾 `receipts` CLI to manage receipts from the terminal — no dashboard needed. `receipts list [MM/YYYY]` prints a bordered, colour-and-emoji table for a period (defaults to the previous month), and `receipts mark:as-paid` / `mark:as-unpaid` toggle a receipt's paid state. Colour respects `NO_COLOR` / `FORCE_COLOR` and turns off automatically when the output isn't a terminal.
@@ -58,7 +60,8 @@ stats, and notifications, so no bill goes unintentionally unpaid.
 - 🐳 Multi-arch (amd64 + arm64), distroless Docker image published to GHCR.
 - 🌐 Bilingual documentation — English and Serbian.
 
-[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/CerealKiller97/preuzmi.me/releases/tag/v1.0.0

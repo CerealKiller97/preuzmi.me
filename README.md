@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-  ghcr.io/cerealkiller97/preuzmi.me:1.0.2
+  ghcr.io/cerealkiller97/preuzmi.me:1.1.0
 ```
 
 ### docker compose
@@ -65,7 +65,7 @@ docker run -d --name preuzmi \
 ```yaml
 services:
   preuzmi:
-    image: ghcr.io/cerealkiller97/preuzmi.me:1.0.2
+    image: ghcr.io/cerealkiller97/preuzmi.me:1.1.0
     container_name: preuzmi.me
     ports:
       - '5500:5500'
@@ -252,7 +252,11 @@ preuzmi.me receipts mark:as-unpaid <key>  Clear the paid mark
   <img src="docs/screenshots/cli.svg" alt="receipts CLI" width="820" />
 </p>
 
-`list` shows two independent timestamps per receipt: **VERIFIKOVANO** — when the provider confirmed the payment — and **PLAĆENO** — when you marked it paid yourself. Colour and box drawing are auto-disabled when output isn't a terminal; it respects `NO_COLOR`, and `FORCE_COLOR` forces colour when piping.
+`list` shows a **STATUS** (as the provider reports it) plus two timestamps: **VERIFIKOVANO** — when the provider confirmed the payment — and **PLAĆENO** — when you marked it paid yourself.
+
+> **When is a receipt considered paid?** When the **provider confirms** it — i.e. STATUS is `plaćeno` / VERIFIKOVANO is set. STATUS and VERIFIKOVANO are the same signal (VERIFIKOVANO is just the date STATUS became `plaćeno`), so they always agree. **PLAĆENO** is your own record that you've sent the payment and is independent of the provider — a receipt can be PLAĆENO but not yet VERIFIKOVANO (as with `eps` above: paid by you, awaiting the provider's confirmation).
+
+Colour and box drawing are auto-disabled when output isn't a terminal; it respects `NO_COLOR`, and `FORCE_COLOR` forces colour when piping.
 
 ## Scheduling (cron)
 

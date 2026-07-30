@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-  ghcr.io/cerealkiller97/preuzmi.me:1.0.2
+  ghcr.io/cerealkiller97/preuzmi.me:1.1.0
 ```
 
 ### docker compose
@@ -65,7 +65,7 @@ docker run -d --name preuzmi \
 ```yaml
 services:
   preuzmi:
-    image: ghcr.io/cerealkiller97/preuzmi.me:1.0.2
+    image: ghcr.io/cerealkiller97/preuzmi.me:1.1.0
     container_name: preuzmi.me
     ports:
       - "5500:5500"
@@ -252,7 +252,11 @@ preuzmi.me receipts mark:as-unpaid <key>  Ukloni oznaku plaćeno
   <img src="docs/screenshots/cli.svg" alt="receipts CLI" width="820" />
 </p>
 
-`list` prikazuje dva nezavisna vremena po računu: **VERIFIKOVANO** — kada je provajder potvrdio uplatu — i **PLAĆENO** — kada si ti označio račun kao plaćen. Boje i okvir se automatski isključuju kada izlaz nije terminal; poštuje `NO_COLOR`, a `FORCE_COLOR` forsira boje pri prosleđivanju kroz pipe.
+`list` prikazuje **STATUS** (kako ga provajder prijavljuje) i dva vremena: **VERIFIKOVANO** — kada je provajder potvrdio uplatu — i **PLAĆENO** — kada si ti označio račun kao plaćen.
+
+> **Kada se račun smatra plaćenim?** Kada ga **provajder potvrdi** — tj. kada je STATUS `plaćeno` / VERIFIKOVANO postavljeno. STATUS i VERIFIKOVANO su isti signal (VERIFIKOVANO je samo datum kada je STATUS postao `plaćeno`), pa se uvek slažu. **PLAĆENO** je tvoja sopstvena beleška da si poslao uplatu i nezavisno je od provajdera — račun može biti PLAĆENO a još ne i VERIFIKOVANO (kao `eps` gore: ti si platio, čeka se potvrda provajdera).
+
+Boje i okvir se automatski isključuju kada izlaz nije terminal; poštuje `NO_COLOR`, a `FORCE_COLOR` forsira boje pri prosleđivanju kroz pipe.
 
 ## Zakazivanje (cron)
 

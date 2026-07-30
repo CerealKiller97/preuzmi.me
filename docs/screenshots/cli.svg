@@ -73,9 +73,9 @@
   <text x="679" y="274">✅ <tspan class="ok">30.07.2026</tspan></text>
 
   <!-- summary -->
-  <text x="34" y="316" class="dim">3 računa · 1 označen kao plaćen</text>
+  <text x="34" y="316" class="dim">3 račun(a) · 2 označeni kao plaćeni</text>
 
   <!-- second command + output -->
-  <text x="34" y="356"><tspan class="ok">$</tspan> <tspan class="cmd">preuzmi.me receipts mark:as-paid eps/06-2026</tspan></text>
-  <text x="34" y="388">✅ <tspan class="prov">eps/06-2026</tspan> <tspan class="fg">označen kao</tspan> <tspan class="ok">plaćen.</tspan></text>
+  <text x="34" y="356"><tspan class="ok">$</tspan> <tspan class="cmd">preuzmi.me receipts mark:as-paid a1/06-2026</tspan></text>
+  <text x="34" y="388">✅ <tspan class="prov">a1/06-2026</tspan> <tspan class="fg">označen kao</tspan> <tspan class="ok">plaćen.</tspan></text>
 </svg>

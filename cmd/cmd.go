@@ -8,15 +8,17 @@ import (
 )
 
 const (
-	serve  Command = "serve"
-	checks Command = "checks"
-	help   Command = "help"
+	serve    Command = "serve"
+	checks   Command = "checks"
+	receipts Command = "receipts"
+	help     Command = "help"
 )
 
 var (
 	commands = []Command{
 		serve,
 		checks,
+		receipts,
 		help,
 	}
 
@@ -35,6 +37,8 @@ func (c Command) Usage() string {
 		desc = "Start an HTTP server with the configured parameters"
 	case checks:
 		desc = "Checks that you have the configured parameters"
+	case receipts:
+		desc = "Manage receipts: 'receipts list', 'receipts mark:as-paid <key>', 'receipts mark:as-unpaid <key>'"
 	case help:
 		desc = "Print this help dialog"
 	}
@@ -85,6 +89,8 @@ func Run(c *container.Container) {
 		usage()
 	case checks:
 		Checks(c)
+	case receipts:
+		Receipts(c)
 	default:
 		fmt.Fprintf(os.Stderr, "Error: unknown command \"%s\"\n\n", command)
 		usage()

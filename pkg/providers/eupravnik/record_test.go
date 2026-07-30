@@ -2,6 +2,7 @@ package eupravnik
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/repositories/receipts"
@@ -29,8 +30,11 @@ func statusOf(t *testing.T, store *receipts.Repository, period string) string {
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
+	// The period column is stored slash-form ("05/2026"); the test seeds and
+	// queries dash-form, so compare without regard to the separator.
+	want := strings.ReplaceAll(period, "-", "/")
 	for _, r := range list {
-		if r.Period == period {
+		if strings.ReplaceAll(r.Period, "-", "/") == want {
 			return r.Status
 		}
 	}

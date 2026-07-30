@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/container"
-	"github.com/CerealKiller97/preuzmi.me/pkg/services/payments"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/refresh"
 	"github.com/rs/zerolog/log"
 )
@@ -14,34 +13,14 @@ import (
 type Handler func(http.ResponseWriter, *http.Request)
 
 func Routes(c *container.Container) {
-	// Path-aware caches so changing download_path in settings recreates these
-	// without requiring a process restart.
+	// Path-aware cache so changing download_path in settings recreates this
+	// without requiring a process restart. Paid state now lives in the receipts
+	// database (c.GetReceiptsStore), so it needs no separate store here.
 	var (
 		storeMu     sync.Mutex
-		paidPath    string
-		paidStore   *payments.Store
 		refreshPath string
 		refreshSvc  *refresh.Service
 	)
-
-	getPaidStore := func() *payments.Store {
-		storeMu.Lock()
-		defer storeMu.Unlock()
-
-		dir := c.GetConfig().DownloadPath
-		if paidStore == nil || paidPath != dir {
-			s, err := paymentsStore(dir)
-			if err != nil {
-				log.Err(err).Msg("Error loading payments store, paid state is unavailable")
-				paidStore = nil
-			} else {
-				paidStore = s
-			}
-			paidPath = dir
-		}
-
-		return paidStore
-	}
 
 	getRefresh := func() *refresh.Service {
 		storeMu.Lock()
@@ -62,8 +41,7 @@ func Routes(c *container.Container) {
 		return refreshSvc
 	}
 
-	// Warm caches once at startup so the first request is not colder.
-	_ = getPaidStore()
+	// Warm the cache once at startup so the first request is not colder.
 	_ = getRefresh()
 
 	http.Handle("GET /assets/", http.StripPrefix("/assets/", staticAssets()))
@@ -81,9 +59,9 @@ func Routes(c *container.Container) {
 	http.HandleFunc("GET /receipt/{period}/{provider}", receiptHandler(c.GetStorage()))
 	// API endpoints
 	http.HandleFunc("GET /api/providers", providersAPIHandler(c.GetConfig()))
-	http.HandleFunc("GET /api/receipts", receiptsAPIHandler(c.GetConfig(), c.GetReceiptsStore, getPaidStore))
+	http.HandleFunc("GET /api/receipts", receiptsAPIHandler(c.GetConfig(), c.GetReceiptsStore))
 	http.HandleFunc("PUT /api/receipts/{period}/{provider}/paid", func(w http.ResponseWriter, r *http.Request) {
-		markPaidHandler(getPaidStore(), c.GetReceiptsStore())(w, r)
+		markPaidHandler(c.GetReceiptsStore())(w, r)
 	})
 	http.HandleFunc("GET /api/stats", statsAPIHandler(c.GetConfig(), c.GetReceiptsStore))
 	http.HandleFunc("GET /api/expenses/monthly", expensesMonthlyAPIHandler(c.GetConfig(), c.GetReceiptsStore))
@@ -105,11 +83,6 @@ func writeJSON(w http.ResponseWriter, v any) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		log.Err(err).Msg("Error encoding response")
 	}
-}
-
-// paymentsStore opens the paid-receipts store inside the receipts directory.
-func paymentsStore(dir string) (*payments.Store, error) {
-	return payments.New(dir)
 }
 
 // staticAssets serves ./assets, forcing the browser to revalidate every time.

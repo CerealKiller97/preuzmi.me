@@ -1,6 +1,6 @@
 {
   "name": "preuzmi.me",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Tool for lazy people (Automated receipt download for many providers)",
   "main": "index.js",
   "scripts": {

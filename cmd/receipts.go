@@ -355,9 +355,9 @@ func receiptsMark(c *container.Container, args []string, paidState bool) {
 	p := newPainter()
 	label := fmt.Sprintf("%s/%s", provider, handlers.NormalizePeriod(period))
 	if paidState {
-		fmt.Printf("✅ Marked %s as %s.\n", p.c(ansiCyan, label), p.c(ansiGreen, "paid"))
+		fmt.Printf("✅ %s označen kao %s.\n", p.c(ansiCyan, label), p.c(ansiGreen, "plaćen"))
 	} else {
-		fmt.Printf("↩️  Marked %s as %s.\n", p.c(ansiCyan, label), p.c(ansiYellow, "unpaid"))
+		fmt.Printf("↩️  %s označen kao %s.\n", p.c(ansiCyan, label), p.c(ansiYellow, "neplaćen"))
 	}
 }
 

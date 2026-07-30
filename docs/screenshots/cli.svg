@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 430" width="900" height="430" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">
+  <style>
+    text { font-size: 15px; }
+    .dim { fill: #6e7681; }
+    .head { fill: #8b949e; }
+    .fg { fill: #c9d1d9; }
+    .prov { fill: #56d4dd; }
+    .amt { fill: #f0f6fc; font-weight: 700; }
+    .ok { fill: #56d364; }
+    .warn { fill: #e3b341; }
+    .cmd { fill: #d2a8ff; }
+    .grid { stroke: #30363d; stroke-width: 1; }
+  </style>
+
+  <!-- window -->
+  <rect x="10" y="10" width="880" height="410" rx="10" fill="#0d1117" stroke="#30363d"/>
+  <line x1="10" y1="48" x2="890" y2="48" class="grid"/>
+  <circle cx="34" cy="29" r="6" fill="#ff5f56"/>
+  <circle cx="54" cy="29" r="6" fill="#ffbd2e"/>
+  <circle cx="74" cy="29" r="6" fill="#27c93f"/>
+  <text x="450" y="34" text-anchor="middle" font-size="13" class="dim">preuzmi.me — receipts</text>
+
+  <!-- prompt -->
+  <text x="34" y="82"><tspan class="ok">$</tspan> <tspan class="cmd">preuzmi.me receipts ls 06/2026</tspan></text>
+
+  <!-- title -->
+  <text x="34" y="128" class="amt">🧾 Računi · 06/2026</text>
+
+  <!-- table grid (columns at x = 34,154,250,350,500,665,830) -->
+  <g class="grid" shape-rendering="crispEdges">
+    <line x1="34" y1="150" x2="830" y2="150"/>
+    <line x1="34" y1="184" x2="830" y2="184"/>
+    <line x1="34" y1="286" x2="830" y2="286"/>
+    <line x1="34" y1="150" x2="34" y2="286"/>
+    <line x1="154" y1="150" x2="154" y2="286"/>
+    <line x1="250" y1="150" x2="250" y2="286"/>
+    <line x1="350" y1="150" x2="350" y2="286"/>
+    <line x1="500" y1="150" x2="500" y2="286"/>
+    <line x1="665" y1="150" x2="665" y2="286"/>
+    <line x1="830" y1="150" x2="830" y2="286"/>
+  </g>
+
+  <!-- header (baseline 172) -->
+  <text x="48"  y="172" class="head">PROVAJDER</text>
+  <text x="168" y="172" class="head">PERIOD</text>
+  <text x="264" y="172" class="head">IZNOS</text>
+  <text x="364" y="172" class="head">STATUS</text>
+  <text x="514" y="172" class="head">VERIFIKOVANO</text>
+  <text x="679" y="172" class="head">PLAĆENO</text>
+
+  <!-- row 1: a1 (baseline 206) -->
+  <text x="48"  y="206" class="prov">a1</text>
+  <text x="168" y="206" class="fg">06/2026</text>
+  <text x="264" y="206" class="amt">3120.00</text>
+  <text x="364" y="206">🔴 <tspan class="warn">neplaćeno</tspan></text>
+  <text x="514" y="206">❌ <tspan class="dim">—</tspan></text>
+  <text x="679" y="206">❌ <tspan class="dim">—</tspan></text>
+
+  <!-- row 2: eps — paid by you, provider not yet confirmed (baseline 240) -->
+  <text x="48"  y="240" class="prov">eps</text>
+  <text x="168" y="240" class="fg">06/2026</text>
+  <text x="264" y="240" class="amt">2364.66</text>
+  <text x="364" y="240">🔴 <tspan class="warn">neplaćeno</tspan></text>
+  <text x="514" y="240">❌ <tspan class="dim">—</tspan></text>
+  <text x="679" y="240">✅ <tspan class="ok">30.07.2026</tspan></text>
+
+  <!-- row 3: esanduce (baseline 274) -->
+  <text x="48"  y="274" class="prov">esanduce</text>
+  <text x="168" y="274" class="fg">06/2026</text>
+  <text x="264" y="274" class="amt">4510.06</text>
+  <text x="364" y="274">🟢 <tspan class="ok">plaćeno</tspan></text>
+  <text x="514" y="274">✅ <tspan class="ok">30.07.2026</tspan></text>
+  <text x="679" y="274">✅ <tspan class="ok">30.07.2026</tspan></text>
+
+  <!-- summary -->
+  <text x="34" y="316" class="dim">3 računa · 1 označen kao plaćen</text>
+
+  <!-- second command + output -->
+  <text x="34" y="356"><tspan class="ok">$</tspan> <tspan class="cmd">preuzmi.me receipts mark:as-paid eps/06-2026</tspan></text>
+  <text x="34" y="388">✅ <tspan class="prov">eps/06-2026</tspan> <tspan class="fg">označen kao</tspan> <tspan class="ok">plaćen.</tspan></text>
+</svg>

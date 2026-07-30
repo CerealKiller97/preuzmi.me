@@ -94,7 +94,7 @@ docker exec preuzmi /app/preuzmi checks
 
 - **Multi-provider downloads** — A1, mts, EPS and e.Sanduče sign in with each provider's own platform credentials; Yettel and eUpravnik read the invoice from your mailbox over IMAP (for now)
 - **Receipt dashboard** — search, filter by period / provider / paid status
-- **Paid tracking** — mark receipts paid without touching `meta.json`
+- **Paid tracking** — mark receipts paid from the UI or the `receipts` CLI; tracked as two separate moments: *paid by you* and *confirmed by the provider*
 - **Stats** — yearly totals, monthly averages, per-provider charts
 - **Notifications** — Telegram or SMTP (`off` / `per_receipt` / `all_done`)
 - **Storage** — local folder or S3-compatible bucket
@@ -170,7 +170,7 @@ docker exec preuzmi /app/preuzmi checks
 | Key                        | Notes                                                                                                                                                              |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `storage`                  | `local` or `s3`                                                                                                                                                    |
-| `download_path`            | Where PDFs + `meta.json` / `payments.json` / `refresh.json` live. In Docker use an in-container path (e.g. `/data/receipts`) and bind-mount the host folder there. |
+| `download_path`            | Where PDFs + `meta.json` / `receipts.db` / `refresh.json` live. In Docker use an in-container path (e.g. `/data/receipts`) and bind-mount the host folder there. |
 | `check_until`              | Last calendar day of the month refresh is allowed (default `20`)                                                                                                   |
 | `notifications.mode`       | `off` · `per_receipt` · `all_done`                                                                                                                                 |
 | `notifications.driver`     | `telegram` or `smtp`                                                                                                                                               |
@@ -230,12 +230,29 @@ go run . checks
 ## CLI
 
 ```text
-preuzmi.me serve    Start the HTTP UI + API
-preuzmi.me checks   Download receipts from every configured provider
-preuzmi.me help     Show usage
+preuzmi.me serve      Start the HTTP UI + API
+preuzmi.me checks     Download receipts from every configured provider
+preuzmi.me receipts   List and update receipts from the terminal
+preuzmi.me help       Show usage
 ```
 
 `checks` is the same work as the header refresh button. Ideal for cron (see [Scheduling](#scheduling-cron)).
+
+### `receipts`
+
+Browse and update receipts without opening the dashboard — it reads and writes the same receipts database, so the terminal and the UI stay in sync.
+
+```text
+preuzmi.me receipts list [MM/YYYY]        List a period's receipts (defaults to the previous month)
+preuzmi.me receipts mark:as-paid   <key>  Mark a receipt paid (key is PROVIDER/PERIOD, e.g. eps/06-2026)
+preuzmi.me receipts mark:as-unpaid <key>  Clear the paid mark
+```
+
+<p align="center">
+  <img src="docs/screenshots/cli.svg" alt="receipts CLI" width="820" />
+</p>
+
+`list` shows two independent timestamps per receipt: **VERIFIKOVANO** — when the provider confirmed the payment — and **PLAĆENO** — when you marked it paid yourself. Colour and box drawing are auto-disabled when output isn't a terminal; it respects `NO_COLOR`, and `FORCE_COLOR` forces colour when piping.
 
 ## Scheduling (cron)
 

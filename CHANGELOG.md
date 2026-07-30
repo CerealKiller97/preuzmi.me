@@ -10,6 +10,15 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+### ✨ Added
+
+- 🧾 `receipts` CLI to manage receipts from the terminal — no dashboard needed. `receipts list [MM/YYYY]` prints a bordered, colour-and-emoji table for a period (defaults to the previous month), and `receipts mark:as-paid` / `mark:as-unpaid` toggle a receipt's paid state. Colour respects `NO_COLOR` / `FORCE_COLOR` and turns off automatically when the output isn't a terminal.
+- 🕒 Two separate paid moments per receipt, shown as their own columns: **VERIFIKOVANO** (when the provider confirmed the payment) and **PLAĆENO** (when you marked it paid yourself).
+
+### 🔧 Changed
+
+- 🗃️ Paid state now lives in the receipts database as the single source of truth, replacing `receipts/payments.json`. The old file is imported automatically on first run and set aside as `payments.json.migrated`, so nothing is lost — the CLI and the dashboard now always agree.
+
 ## [1.0.2] - 29.07.2026
 
 ### 🐛 Fixed

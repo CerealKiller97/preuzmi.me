@@ -302,7 +302,7 @@ func settingsHandler(cfg *config.Config, version string, notifier *notify.Servic
 		_, statErr := os.Stat(dir)
 		exists := statErr == nil
 
-		receipts, err := scanReceipts(dir, nil, nil)
+		receipts, err := scanReceipts(dir, nil)
 		if err != nil {
 			log.Err(err).Msg("Error counting receipts for settings")
 		}

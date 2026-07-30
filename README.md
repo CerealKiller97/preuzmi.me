@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-  ghcr.io/cerealkiller97/preuzmi.me:1.0.3
+  ghcr.io/cerealkiller97/preuzmi.me:1.1.0
 ```
 
 ### docker compose
@@ -65,7 +65,7 @@ docker run -d --name preuzmi \
 ```yaml
 services:
   preuzmi:
-    image: ghcr.io/cerealkiller97/preuzmi.me:1.0.3
+    image: ghcr.io/cerealkiller97/preuzmi.me:1.1.0
     container_name: preuzmi.me
     ports:
       - '5500:5500'
@@ -93,9 +93,9 @@ docker exec preuzmi /app/preuzmi checks
 ## Features
 
 - **Multi-provider downloads** — A1, mts, EPS and e.Sanduče sign in with each provider's own platform credentials; Yettel and eUpravnik read the invoice from your mailbox over IMAP (for now)
-- **Smart refresh** — skips providers whose previous-month receipt is settled (provider reports paid and `paid_at` is set); unpaid or unverified bills keep running so status can flip
+- **Smart refresh** — skips providers whose previous-month receipt is settled (`paid_at` set, status `plaćeno`, and `confirmed_at` set); unpaid or unverified bills keep running so status can flip
 - **Receipt dashboard** — search, filter by period / provider / paid status
-- **Paid tracking** — mark receipts paid without touching `meta.json`
+- **Paid tracking** — mark receipts paid from the UI or the `receipts` CLI; tracked as two separate moments: *paid by you* and *confirmed by the provider*
 - **Stats** — yearly totals, monthly averages, per-provider charts
 - **Notifications** — Telegram or SMTP (`off` / `per_receipt` / `all_done`)
 - **Storage** — local folder or S3-compatible bucket
@@ -171,7 +171,7 @@ docker exec preuzmi /app/preuzmi checks
 | Key                        | Notes                                                                                                                                                              |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `storage`                  | `local` or `s3`                                                                                                                                                    |
-| `download_path`            | Where PDFs + `meta.json` / `payments.json` / `refresh.json` live. In Docker use an in-container path (e.g. `/data/receipts`) and bind-mount the host folder there. |
+| `download_path`            | Where PDFs + `meta.json` / `receipts.db` / `refresh.json` live. In Docker use an in-container path (e.g. `/data/receipts`) and bind-mount the host folder there. |
 | `check_until`              | Last calendar day of the month refresh is allowed (default `20`)                                                                                                   |
 | `notifications.mode`       | `off` · `per_receipt` · `all_done`                                                                                                                                 |
 | `notifications.driver`     | `telegram` or `smtp`                                                                                                                                               |
@@ -231,12 +231,33 @@ go run . checks
 ## CLI
 
 ```text
-preuzmi.me serve    Start the HTTP UI + API
-preuzmi.me checks   Download receipts from every configured provider
-preuzmi.me help     Show usage
+preuzmi.me serve      Start the HTTP UI + API
+preuzmi.me checks     Download receipts from every configured provider
+preuzmi.me receipts   List and update receipts from the terminal
+preuzmi.me help       Show usage
 ```
 
 `checks` is the same work as the header refresh button. Ideal for cron (see [Scheduling](#scheduling-cron)).
+
+### `receipts`
+
+Browse and update receipts without opening the dashboard — it reads and writes the same receipts database, so the terminal and the UI stay in sync.
+
+```text
+preuzmi.me receipts list [MM/YYYY]        List a period's receipts (defaults to the previous month)
+preuzmi.me receipts mark:as-paid   <key>  Mark a receipt paid (key is PROVIDER/PERIOD, e.g. eps/06-2026)
+preuzmi.me receipts mark:as-unpaid <key>  Clear the paid mark
+```
+
+<p align="center">
+  <img src="docs/screenshots/cli.svg" alt="receipts CLI" width="820" />
+</p>
+
+`list` shows a **STATUS** (as the provider reports it) plus two timestamps: **VERIFIKOVANO** — when the provider confirmed the payment — and **PLAĆENO** — when you marked it paid yourself.
+
+> **When is a receipt considered paid?** When the **provider confirms** it — i.e. STATUS is `plaćeno` / VERIFIKOVANO is set. STATUS and VERIFIKOVANO are the same signal (VERIFIKOVANO is just the date STATUS became `plaćeno`), so they always agree. **PLAĆENO** is your own record that you've sent the payment and is independent of the provider — a receipt can be PLAĆENO but not yet VERIFIKOVANO (as with `eps` above: paid by you, awaiting the provider's confirmation).
+
+Colour and box drawing are auto-disabled when output isn't a terminal; it respects `NO_COLOR`, and `FORCE_COLOR` forces colour when piping.
 
 ## Scheduling (cron)
 

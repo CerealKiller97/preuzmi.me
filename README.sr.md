@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-  ghcr.io/cerealkiller97/preuzmi.me:1.0.3
+  ghcr.io/cerealkiller97/preuzmi.me:1.1.0
 ```
 
 ### docker compose
@@ -65,7 +65,7 @@ docker run -d --name preuzmi \
 ```yaml
 services:
   preuzmi:
-    image: ghcr.io/cerealkiller97/preuzmi.me:1.0.3
+    image: ghcr.io/cerealkiller97/preuzmi.me:1.1.0
     container_name: preuzmi.me
     ports:
       - "5500:5500"
@@ -93,9 +93,9 @@ docker exec preuzmi /app/preuzmi checks
 ## Mogućnosti
 
 - **Više provajdera** — A1, mts, EPS i e.Sanduče se prijavljuju kredencijalima svoje platforme; Yettel i eUpravnik čitaju račun iz vašeg sandučeta preko IMAP-a (za sada)
-- **Pametno osvežavanje** — preskače provajdere čiji je račun za prošli mesec završen (provajder javlja plaćeno i `paid_at` je postavljen); neplaćeni ili neverifikovani računi se i dalje proveravaju da bi status mogao da se promeni
+- **Pametno osvežavanje** — preskače provajdere čiji je račun za prošli mesec završen (`paid_at` postavljen, status `plaćeno` i `confirmed_at` postavljen); neplaćeni ili neverifikovani računi se i dalje proveravaju da bi status mogao da se promeni
 - **Dashboard računa** — pretraga, filter po periodu / provajderu / statusu plaćanja
-- **Praćenje plaćanja** — označi račun kao plaćen bez diranja `meta.json`
+- **Praćenje plaćanja** — označi račun kao plaćen iz UI-ja ili `receipts` CLI-ja; prati se kao dva odvojena trenutka: *ti platio* i *provajder potvrdio*
 - **Statistika** — godišnji zbir, mesečni prosek, grafikoni po provajderu
 - **Obaveštenja** — Telegram ili SMTP (`off` / `per_receipt` / `all_done`)
 - **Skladište** — lokalni folder ili S3-kompatibilni bucket
@@ -171,7 +171,7 @@ docker exec preuzmi /app/preuzmi checks
 | Ključ | Napomena |
 | --- | --- |
 | `storage` | `local` ili `s3` |
-| `download_path` | Gde idu PDF-ovi + `meta.json` / `payments.json` / `refresh.json`. U Dockeru koristi putanju unutar kontejnera (npr. `/data/receipts`) i mapiraj host folder tamo. |
+| `download_path` | Gde idu PDF-ovi + `meta.json` / `receipts.db` / `refresh.json`. U Dockeru koristi putanju unutar kontejnera (npr. `/data/receipts`) i mapiraj host folder tamo. |
 | `check_until` | Poslednji dan u mesecu kada je osvežavanje dozvoljeno (podrazumevano `20`) |
 | `notifications.mode` | `off` · `per_receipt` · `all_done` |
 | `notifications.driver` | `telegram` ili `smtp` |
@@ -231,12 +231,33 @@ go run . checks
 ## CLI
 
 ```text
-preuzmi.me serve    Pokreće HTTP UI + API
-preuzmi.me checks   Preuzima račune sa svih podešenih provajdera
-preuzmi.me help     Prikazuje pomoć
+preuzmi.me serve      Pokreće HTTP UI + API
+preuzmi.me checks     Preuzima račune sa svih podešenih provajdera
+preuzmi.me receipts   Pregled i izmena računa iz terminala
+preuzmi.me help       Prikazuje pomoć
 ```
 
 `checks` radi isto što i dugme za osvežavanje u headeru. Pogodno za cron (vidi [Zakazivanje](#zakazivanje-cron)).
+
+### `receipts`
+
+Pregledaj i menjaj račune bez otvaranja dashboard-a — čita i piše u istu bazu računa, pa su terminal i UI uvek usklađeni.
+
+```text
+preuzmi.me receipts list [MM/YYYY]        Ispiši račune za period (podrazumevano prethodni mesec)
+preuzmi.me receipts mark:as-paid   <key>  Označi račun kao plaćen (ključ je PROVAJDER/PERIOD, npr. eps/06-2026)
+preuzmi.me receipts mark:as-unpaid <key>  Ukloni oznaku plaćeno
+```
+
+<p align="center">
+  <img src="docs/screenshots/cli.svg" alt="receipts CLI" width="820" />
+</p>
+
+`list` prikazuje **STATUS** (kako ga provajder prijavljuje) i dva vremena: **VERIFIKOVANO** — kada je provajder potvrdio uplatu — i **PLAĆENO** — kada si ti označio račun kao plaćen.
+
+> **Kada se račun smatra plaćenim?** Kada ga **provajder potvrdi** — tj. kada je STATUS `plaćeno` / VERIFIKOVANO postavljeno. STATUS i VERIFIKOVANO su isti signal (VERIFIKOVANO je samo datum kada je STATUS postao `plaćeno`), pa se uvek slažu. **PLAĆENO** je tvoja sopstvena beleška da si poslao uplatu i nezavisno je od provajdera — račun može biti PLAĆENO a još ne i VERIFIKOVANO (kao `eps` gore: ti si platio, čeka se potvrda provajdera).
+
+Boje i okvir se automatski isključuju kada izlaz nije terminal; poštuje `NO_COLOR`, a `FORCE_COLOR` forsira boje pri prosleđivanju kroz pipe.
 
 ## Zakazivanje (cron)
 

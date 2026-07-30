@@ -106,11 +106,12 @@ func TestPriceAndPaid(t *testing.T) {
 	if err := store.SetPrice(ctx, "eps", "06-2026", 4212.55); err != nil {
 		t.Fatalf("SetPrice: %v", err)
 	}
-	if err := store.MarkPaid(ctx, "eps", "06-2026", 1700000000); err != nil {
+
+	if _, err := store.MarkPaid(ctx, "eps", "06-2026", true); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 
-	// A subsequent re-download must not wipe the price or paid_at.
+	// A subsequent re-download must not wipe the price or the paid_at stamp.
 	if err := store.Record(ctx, Receipt{Provider: "eps", Period: "06-2026", StorageKey: "06-2026/eps.pdf", SizeBytes: 250}); err != nil {
 		t.Fatalf("Record re-download: %v", err)
 	}
@@ -126,11 +127,11 @@ func TestPriceAndPaid(t *testing.T) {
 	if r.Price != 4212.55 {
 		t.Fatalf("price = %v, want 4212.55 (re-download must not clobber)", r.Price)
 	}
-	if r.PaidAt != 1700000000 {
-		t.Fatalf("paid_at = %d, want 1700000000 (re-download must not clobber)", r.PaidAt)
-	}
 	if r.SizeBytes != 250 {
 		t.Fatalf("size = %d, want 250 (re-download should refresh)", r.SizeBytes)
+	}
+	if r.PaidAt == 0 {
+		t.Fatalf("paid_at lost after re-download")
 	}
 }
 
@@ -195,7 +196,7 @@ func TestNewlyVerifiedTransition(t *testing.T) {
 	if len(verified) != 1 {
 		t.Fatalf("expected 1 newly verified, got %d", len(verified))
 	}
-	if verified[0].Provider != "mts" || verified[0].Period != "05-2026" || verified[0].Price != 1819.46 {
+	if verified[0].Provider != "mts" || verified[0].Period != "05/2026" || verified[0].Price != 1819.46 {
 		t.Fatalf("unexpected verified receipt: %+v", verified[0])
 	}
 	// Draining clears the queue.
@@ -264,9 +265,13 @@ func TestMarkPaidCreatesStubWhenUnrecorded(t *testing.T) {
 
 	ctx := context.Background()
 
-	// No prior Record: marking paid must still create a row.
-	if err := store.MarkPaid(ctx, "eps", "06-2026", 1700000000); err != nil {
+	// No prior Record: marking paid must still create a stub row carrying paid_at.
+	at, err := store.MarkPaid(ctx, "eps", "06-2026", true)
+	if err != nil {
 		t.Fatalf("MarkPaid: %v", err)
+	}
+	if at == 0 {
+		t.Fatalf("MarkPaid returned zero timestamp")
 	}
 
 	got, err := store.List(ctx)
@@ -276,8 +281,8 @@ func TestMarkPaidCreatesStubWhenUnrecorded(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 stub receipt, got %d", len(got))
 	}
-	if got[0].PaidAt != 1700000000 {
-		t.Fatalf("paid_at = %d, want 1700000000", got[0].PaidAt)
+	if got[0].PaidAt != at {
+		t.Fatalf("paid_at = %d, want %d", got[0].PaidAt, at)
 	}
 	if got[0].StorageKey != "06-2026/eps.pdf" {
 		t.Fatalf("storage_key = %q, want 06-2026/eps.pdf", got[0].StorageKey)
@@ -288,7 +293,7 @@ func TestMarkPaidCreatesStubWhenUnrecorded(t *testing.T) {
 		t.Fatalf("Record: %v", err)
 	}
 	got, _ = store.List(ctx)
-	if got[0].PaidAt != 1700000000 {
+	if got[0].PaidAt != at {
 		t.Fatalf("paid_at cleared by later Record: got %d", got[0].PaidAt)
 	}
 	if got[0].SizeBytes != 512 {
@@ -296,7 +301,7 @@ func TestMarkPaidCreatesStubWhenUnrecorded(t *testing.T) {
 	}
 
 	// Unmarking clears paid_at.
-	if err := store.MarkPaid(ctx, "eps", "06-2026", 0); err != nil {
+	if _, err := store.MarkPaid(ctx, "eps", "06-2026", false); err != nil {
 		t.Fatalf("MarkPaid unmark: %v", err)
 	}
 	got, _ = store.List(ctx)
@@ -321,7 +326,7 @@ func TestHasDownloaded(t *testing.T) {
 
 	// A paid-only stub has no real download time, so it must not count as
 	// downloaded — the PDF still needs fetching.
-	if err := store.MarkPaid(ctx, "eps", "06-2026", 1700000000); err != nil {
+	if _, err := store.MarkPaid(ctx, "eps", "06-2026", true); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 	if store.HasDownloaded(ctx, "eps", "06-2026") {
@@ -365,7 +370,7 @@ func TestIsSettled(t *testing.T) {
 		t.Fatal("IsSettled true for a downloaded unpaid receipt")
 	}
 
-	// Provider confirms paid, but the user has not stamped paid_at yet.
+	// Provider confirms paid (status + confirmed_at), but paid_at is still 0.
 	if err := store.SetStatus(ctx, "eps", "06-2026", StatusPaid); err != nil {
 		t.Fatalf("SetStatus: %v", err)
 	}
@@ -373,23 +378,26 @@ func TestIsSettled(t *testing.T) {
 		t.Fatal("IsSettled true without paid_at")
 	}
 
-	// User marks paid too — now settled.
-	if err := store.MarkPaid(ctx, "eps", "06-2026", 1700000000); err != nil {
+	// User marks paid too — now settled (paid_at != 0, status plaćeno, confirmed_at != 0).
+	if _, err := store.MarkPaid(ctx, "eps", "06-2026", true); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 	if !store.IsSettled(ctx, "eps", "06-2026") {
-		t.Fatal("IsSettled false after status paid + paid_at")
+		t.Fatal("IsSettled false after paid_at + status paid + confirmed_at")
 	}
 
-	// paid_at alone on a stub (no real download) is not settled — PDF still needed.
-	if err := store.MarkPaid(ctx, "a1", "06-2026", 1700000000); err != nil {
+	// paid_at alone is not enough — status/confirmed_at must also be set.
+	if _, err := store.MarkPaid(ctx, "a1", "06-2026", true); err != nil {
 		t.Fatalf("MarkPaid stub: %v", err)
+	}
+	if store.IsSettled(ctx, "a1", "06-2026") {
+		t.Fatal("IsSettled true with only paid_at")
 	}
 	if err := store.SetStatus(ctx, "a1", "06-2026", StatusPaid); err != nil {
 		t.Fatalf("SetStatus stub: %v", err)
 	}
-	if store.IsSettled(ctx, "a1", "06-2026") {
-		t.Fatal("IsSettled true for a paid-only stub with no download")
+	if !store.IsSettled(ctx, "a1", "06-2026") {
+		t.Fatal("IsSettled false after paid_at + status paid + confirmed_at on stub")
 	}
 }
 

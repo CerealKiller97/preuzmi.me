@@ -33,7 +33,9 @@ type APIReceipt struct {
 	DownloadedAt int64   `json:"downloaded_at"`
 	Amount       float64 `json:"amount"`
 	PaidAt       int64   `json:"paid_at"`
+	ConfirmedAt  int64   `json:"confirmed_at"`
 	Paid         bool    `json:"paid"`
+	Confirmed    bool    `json:"confirmed"`
 }
 
 // collectReceipts returns the dashboard's view of every receipt, choosing the
@@ -44,19 +46,32 @@ type APIReceipt struct {
 // holds only the index, so walking disk finds nothing — the receipts database
 // becomes the source instead. Both paths annotate amounts from meta.json and
 // paid state from the payments store, so the UI sees an identical shape.
-func collectReceipts(cfg *config.Config, paid *payments.Store, rec *receipts.Repository) ([]APIReceipt, error) {
+func collectReceipts(cfg *config.Config, rec *receipts.Repository) ([]APIReceipt, error) {
 	if cfg.Storage == config.StorageS3 {
-		return scanReceiptsDB(cfg.DownloadPath, paid, rec)
+		return scanReceiptsDB(cfg.DownloadPath, rec)
 	}
 
-	return scanReceipts(cfg.DownloadPath, paid, rec)
+	return scanReceipts(cfg.DownloadPath, rec)
+}
+
+// CollectReceipts exposes the dashboard's receipt view to out-of-band callers
+// (the receipts CLI), so a listing on the command line matches the UI exactly:
+// same source per backend, same meta.json amounts, same paid state.
+func CollectReceipts(cfg *config.Config, rec *receipts.Repository) ([]APIReceipt, error) {
+	return collectReceipts(cfg, rec)
+}
+
+// NormalizePeriod exposes the canonical "MM-YYYY" period form used to build
+// receipt keys, so the CLI and the UI agree on the paid-state key for a period.
+func NormalizePeriod(p string) string {
+	return normalizePeriod(p)
 }
 
 // scanReceiptsDB builds the receipt list from the database rather than the
 // filesystem, for backends (S3) whose objects are not on local disk. A nil
 // store yields an empty list: without the index there is nothing to enumerate,
 // since the PDFs are remote.
-func scanReceiptsDB(dir string, paid *payments.Store, rec *receipts.Repository) ([]APIReceipt, error) {
+func scanReceiptsDB(dir string, rec *receipts.Repository) ([]APIReceipt, error) {
 	if rec == nil {
 		return []APIReceipt{}, nil
 	}
@@ -86,15 +101,21 @@ func scanReceiptsDB(dir string, paid *payments.Store, rec *receipts.Repository) 
 		}
 
 		receipt := APIReceipt{
-			Provider:     row.Provider,
-			Period:       normalizePeriod(row.Period),
-			URL:          fmt.Sprintf("/receipt/%s/%s", row.Period, row.Provider),
+			Provider: row.Provider,
+			Period:   normalizePeriod(row.Period),
+			// The period column is slash-form; the route embeds it as a path
+			// segment, so build the URL with the dash form.
+			URL:          fmt.Sprintf("/receipt/%s/%s", normalizePeriod(row.Period), row.Provider),
 			FileName:     fmt.Sprintf("%s.pdf", row.Provider),
 			Status:       row.Status,
 			Size:         row.SizeBytes,
 			Modified:     row.DownloadedAt,
 			DownloadedAt: row.DownloadedAt,
 			Amount:       row.Price,
+			Paid:         row.PaidAt > 0,
+			PaidAt:       row.PaidAt,
+			Confirmed:    row.ConfirmedAt > 0,
+			ConfirmedAt:  row.ConfirmedAt,
 		}
 
 		key := metaKey(row.Period, row.Provider)
@@ -107,13 +128,6 @@ func scanReceiptsDB(dir string, paid *payments.Store, rec *receipts.Repository) 
 			receipt.Currency = m.Currency
 		}
 
-		if paid != nil {
-			if at, ok := paid.PaidAt(key); ok {
-				receipt.Paid = true
-				receipt.PaidAt = at
-			}
-		}
-
 		entries = append(entries, receipt)
 	}
 
@@ -121,10 +135,11 @@ func scanReceiptsDB(dir string, paid *payments.Store, rec *receipts.Repository) 
 }
 
 // scanReceipts walks the ./receipts directory and returns all available
-// receipts. A nil paid store simply leaves every receipt marked unpaid; a nil
-// receipts store simply leaves the provider-reported status empty.
-func scanReceipts(dir string, paid *payments.Store, rec *receipts.Repository) ([]APIReceipt, error) {
+// receipts. A nil receipts store simply leaves every receipt unpaid and its
+// provider-reported status empty.
+func scanReceipts(dir string, rec *receipts.Repository) ([]APIReceipt, error) {
 	root := dir
+	ctx := context.Background()
 
 	// Index the metadata so each receipt can be annotated with its amount.
 	meta, err := loadReceiptMeta(dir)
@@ -140,7 +155,7 @@ func scanReceipts(dir string, paid *payments.Store, rec *receipts.Repository) ([
 	// status (and price, when metadata does not provide one).
 	dbByKey := map[string]receipts.Receipt{}
 	if rec != nil {
-		rows, listErr := rec.List(context.Background())
+		rows, listErr := rec.List(ctx)
 		if listErr != nil {
 			return nil, listErr
 		}
@@ -196,13 +211,10 @@ func scanReceipts(dir string, paid *payments.Store, rec *receipts.Repository) ([
 			if receipt.Amount == 0 {
 				receipt.Amount = row.Price
 			}
-		}
-
-		if paid != nil {
-			if at, ok := paid.PaidAt(key); ok {
-				receipt.Paid = true
-				receipt.PaidAt = at
-			}
+			receipt.Paid = row.PaidAt > 0
+			receipt.PaidAt = row.PaidAt
+			receipt.Confirmed = row.ConfirmedAt > 0
+			receipt.ConfirmedAt = row.ConfirmedAt
 		}
 
 		entries = append(entries, receipt)
@@ -217,7 +229,9 @@ func scanReceipts(dir string, paid *payments.Store, rec *receipts.Repository) ([
 
 // parsePeriod parses a period like "04-2025" or "010-2025" into (month, year). Returns (0,0) on error.
 func parsePeriod(p string) (int, int) {
-	parts := strings.Split(p, "-")
+	// Periods may arrive dash-separated ("06-2026", from folders/meta.json) or
+	// slash-separated ("06/2026", from the database column); accept both.
+	parts := strings.Split(strings.ReplaceAll(p, "/", "-"), "-")
 	if len(parts) != 2 {
 		return 0, 0
 	}
@@ -296,9 +310,9 @@ func providersAPIHandler(cfg *config.Config) Handler {
 }
 
 // receiptsAPIHandler returns the list of receipts; optional query params: provider (comma-separated), period
-func receiptsAPIHandler(cfg *config.Config, receiptsStore func() *receipts.Repository, paidFn func() *payments.Store) Handler {
+func receiptsAPIHandler(cfg *config.Config, receiptsStore func() *receipts.Repository) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
-		items, err := collectReceipts(cfg, paidFn(), receiptsStore())
+		items, err := collectReceipts(cfg, receiptsStore())
 		if err != nil {
 			log.Err(err).Msg("Error scanning receipts")
 			w.WriteHeader(http.StatusInternalServerError)
@@ -346,11 +360,11 @@ func receiptsAPIHandler(cfg *config.Config, receiptsStore func() *receipts.Repos
 //
 // Body: {"paid": true|false}. Responds with the stored state so the client does
 // not have to guess the timestamp it was given.
-func markPaidHandler(paid *payments.Store, rec *receipts.Repository) Handler {
+func markPaidHandler(rec *receipts.Repository) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if paid == nil {
-			log.Error().Msg("Payments store unavailable, cannot record paid state")
-			http.Error(w, "payments store unavailable", http.StatusServiceUnavailable)
+		if rec == nil {
+			log.Error().Msg("Receipts database unavailable, cannot record paid state")
+			http.Error(w, "receipts database unavailable", http.StatusServiceUnavailable)
 			return
 		}
 
@@ -368,7 +382,7 @@ func markPaidHandler(paid *payments.Store, rec *receipts.Repository) Handler {
 			return
 		}
 
-		at, err := paid.Set(metaKey(period, provider), body.Paid)
+		at, err := rec.MarkPaid(r.Context(), provider, period, body.Paid)
 		if err != nil {
 			log.Err(err).
 				Str("provider", provider).
@@ -377,18 +391,6 @@ func markPaidHandler(paid *payments.Store, rec *receipts.Repository) Handler {
 			http.Error(w, "could not persist paid state", http.StatusInternalServerError)
 
 			return
-		}
-
-		// Mirror the paid state into the receipts database (paid_at). Best-effort:
-		// the JSON store above is the UI's source of truth, so a database hiccup
-		// must not fail the click. at is 0 when unmarking, which clears paid_at.
-		if rec != nil {
-			if err := rec.MarkPaid(r.Context(), provider, period, at); err != nil {
-				log.Err(err).
-					Str("provider", provider).
-					Str("period", period).
-					Msg("Error recording paid_at in receipts database")
-			}
 		}
 
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")

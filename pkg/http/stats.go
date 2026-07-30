@@ -42,7 +42,7 @@ func statsAPIHandler(cfg *config.Config, receiptsStore func() *receipts.Reposito
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Amounts come from the receipts database (price), joined onto the
 		// receipts by collectReceipts.
-		items, err := collectReceipts(cfg, nil, receiptsStore())
+		items, err := collectReceipts(cfg, receiptsStore())
 		if err != nil {
 			log.Err(err).Msg("Error scanning receipts for stats")
 			w.WriteHeader(http.StatusInternalServerError)
@@ -156,7 +156,7 @@ func statsAPIHandler(cfg *config.Config, receiptsStore func() *receipts.Reposito
 // receipts database (price), joined onto the on-disk receipts.
 func expensesMonthlyAPIHandler(cfg *config.Config, receiptsStore func() *receipts.Repository) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
-		items, err := collectReceipts(cfg, nil, receiptsStore())
+		items, err := collectReceipts(cfg, receiptsStore())
 		if err != nil {
 			log.Err(err).Msg("Error scanning receipts for expenses")
 			w.WriteHeader(http.StatusInternalServerError)

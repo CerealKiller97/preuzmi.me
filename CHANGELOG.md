@@ -10,11 +10,22 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+## [1.1.0] - 30.07.2026
+
+### ✨ Added
+
+- 🧾 `receipts` CLI to manage receipts from the terminal — no dashboard needed. `receipts list [MM/YYYY]` prints a bordered, colour-and-emoji table for a period (defaults to the previous month), and `receipts mark:as-paid` / `mark:as-unpaid` toggle a receipt's paid state. Colour respects `NO_COLOR` / `FORCE_COLOR` and turns off automatically when the output isn't a terminal.
+- 🕒 Two separate paid moments per receipt, shown as their own columns: **VERIFIKOVANO** (when the provider confirmed the payment) and **PLAĆENO** (when you marked it paid yourself).
+
+### 🔧 Changed
+
+- 🗃️ Paid state now lives in the receipts database as the single source of truth, replacing `receipts/payments.json`. The old file is imported automatically on first run and set aside as `payments.json.migrated`, so nothing is lost — the CLI and the dashboard now always agree.
+
 ## [1.0.3] - 30.07.2026
 
 ### ✨ Added
 
-- ⏭️ Smart refresh — skip providers whose previous-month receipt is settled. Settled means the PDF is on record, the provider reports it paid (`plaćeno`), and the user has stamped `paid_at`. Both the UI refresh button and `checks` consult the receipts database first, so a repeat run does not re-login for bills that are already done. Unpaid or unverified bills still run so status can flip and paid-confirmation can fire; if every configured provider is settled, the run is skipped entirely (no login, no download).
+- ⏭️ Smart refresh — skip providers whose previous-month receipt is settled. Settled means `paid_at != 0`, status is `plaćeno`, and `confirmed_at != 0`. Both the UI refresh button and `checks` consult the receipts database first, so a repeat run does not re-login for bills that are already done. Unpaid or unverified bills still run so status can flip and paid-confirmation can fire; if every configured provider is settled, the run is skipped entirely (no login, no download).
 
 ### 🐛 Fixed
 
@@ -59,7 +70,8 @@ stats, and notifications, so no bill goes unintentionally unpaid.
 - 🐳 Multi-arch (amd64 + arm64), distroless Docker image published to GHCR.
 - 🌐 Bilingual documentation — English and Serbian.
 
-[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.3...HEAD
+[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.3...v1.1.0
 [1.0.3]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.0...v1.0.1

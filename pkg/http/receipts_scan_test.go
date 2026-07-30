@@ -42,7 +42,7 @@ func TestScanReceiptsJoinsStatus(t *testing.T) {
 		t.Fatalf("SetPrice: %v", err)
 	}
 
-	items, err := scanReceipts(dir, nil, store)
+	items, err := scanReceipts(dir, store)
 	if err != nil {
 		t.Fatalf("scanReceipts: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestCollectReceiptsS3ListsFromDB(t *testing.T) {
 	cfg.Storage = config.StorageS3
 	cfg.DownloadPath = dir
 
-	items, err := collectReceipts(cfg, nil, store)
+	items, err := collectReceipts(cfg, store)
 	if err != nil {
 		t.Fatalf("collectReceipts: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestCollectReceiptsS3ListsFromDB(t *testing.T) {
 	}
 
 	// Sanity: the local walk really would have returned nothing here.
-	fsItems, err := scanReceipts(dir, nil, store)
+	fsItems, err := scanReceipts(dir, store)
 	if err != nil {
 		t.Fatalf("scanReceipts: %v", err)
 	}

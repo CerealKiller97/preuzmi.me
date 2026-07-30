@@ -105,9 +105,13 @@ document.addEventListener('alpine:init', () => {
         return when;
       }
 
-      const lines = this.results.map(r =>
-        `${r.provider.toUpperCase()}: ${r.ok ? 'uspešno' : (r.error || 'greška')}`
-      );
+      const lines = this.results.map(r => {
+        const status = r.ok
+          ? (r.empty ? 'nema mejla' : 'uspešno')
+          : (r.error || 'greška');
+
+        return `${r.provider.toUpperCase()}: ${status}`;
+      });
 
       return `${when}\n${lines.join('\n')}`;
     },
@@ -167,6 +171,14 @@ document.addEventListener('alpine:init', () => {
         }
 
         this.apply(await res.json());
+
+        // A not-running state means the server started nothing: every provider
+        // already has the previous month's receipt, so there was nothing to do.
+        if (!this.running) {
+          this.showFlash(true, 'Računi su ažurni', 'Svi računi za prošli mesec su već preuzeti.');
+          return;
+        }
+
         this.schedulePoll();
         this.showFlash(true, 'Preuzimanje pokrenuto', 'Računi se preuzimaju u pozadini.');
       } catch (e) {
@@ -207,21 +219,30 @@ document.addEventListener('alpine:init', () => {
         return;
       }
 
+      // Email-based providers (Yettel, eUpravnik) report "no receipt" when their
+      // invoice email has not arrived yet. That is not a failure, but it explains
+      // why fewer receipts were downloaded, so name them in the message.
+      const noMail = this.results.filter(r => r.ok && r.empty).map(r => r.provider.toUpperCase());
+      const noMailNote = noMail.length
+        ? ` ${noMail.join(', ')}: nije pronađen mejl sa računom.`
+        : '';
+
       if (failed === 0) {
-        this.showFlash(
-          true,
-          'Preuzimanje završeno',
-          total === 1
+        const downloaded = total - noMail.length;
+        const base = noMail.length === 0
+          ? (total === 1
             ? 'Provajder je uspešno obrađen.'
-            : `Svih ${total} provajdera je uspešno obrađeno.`
-        );
+            : `Svih ${total} provajdera je uspešno obrađeno.`)
+          : `Preuzeto ${downloaded} od ${total} računa.`;
+
+        this.showFlash(true, 'Preuzimanje završeno', base + noMailNote);
         return;
       }
 
       this.showFlash(
         false,
         'Preuzimanje završeno sa greškama',
-        `${failed} od ${total} provajdera nije uspelo.`
+        `${failed} od ${total} provajdera nije uspelo.` + noMailNote
       );
     },
 

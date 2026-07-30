@@ -37,6 +37,7 @@ func refreshStatusHandler(cfg *config.Config, svc *refresh.Service) Handler {
 func startRefreshHandler(
 	cfg *config.Config,
 	getProviders func([]string) map[string]provider.Interface,
+	skip func(map[string]provider.Interface) map[string]provider.Interface,
 	svc *refresh.Service,
 	after func([]refresh.Result),
 ) Handler {
@@ -64,6 +65,21 @@ func startRefreshHandler(
 		providers := getProviders(pairs)
 		if len(providers) == 0 {
 			http.Error(w, "no providers with an implementation are configured", http.StatusBadRequest)
+			return
+		}
+
+		// Skip providers whose receipt for the current period is already on
+		// record, so clicking refresh does not re-login and re-download bills we
+		// already hold. Every provider bills for the previous month, so once that
+		// receipt is downloaded there is nothing to fetch: with none left, return
+		// the last run's state without starting anything. A not-running state is
+		// how the client tells "already up to date" from a freshly started run.
+		providers = skip(providers)
+		if len(providers) == 0 {
+			log.Info().Msg("Refresh requested but every provider already has the previous month's receipt")
+
+			writeJSON(w, svc.State().WithWindow(cfg.CheckUntil, true))
+
 			return
 		}
 

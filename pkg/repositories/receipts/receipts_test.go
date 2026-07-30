@@ -305,6 +305,44 @@ func TestMarkPaidCreatesStubWhenUnrecorded(t *testing.T) {
 	}
 }
 
+func TestHasDownloaded(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer store.Close() //nolint:errcheck
+
+	ctx := context.Background()
+
+	// Never recorded: nothing to skip.
+	if store.HasDownloaded(ctx, "eps", "06-2026") {
+		t.Fatal("HasDownloaded true for an unrecorded receipt")
+	}
+
+	// A paid-only stub has no real download time, so it must not count as
+	// downloaded — the PDF still needs fetching.
+	if err := store.MarkPaid(ctx, "eps", "06-2026", 1700000000); err != nil {
+		t.Fatalf("MarkPaid: %v", err)
+	}
+	if store.HasDownloaded(ctx, "eps", "06-2026") {
+		t.Fatal("HasDownloaded true for a paid-only stub (downloaded_at 0)")
+	}
+
+	// An actual download counts.
+	if err := store.Record(ctx, Receipt{Provider: "eps", Period: "06-2026", StorageKey: "06-2026/eps.pdf", SizeBytes: 100}); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	if !store.HasDownloaded(ctx, "eps", "06-2026") {
+		t.Fatal("HasDownloaded false after a real download")
+	}
+
+	// The check is scoped to the exact (provider, period): a different period is
+	// still unfetched.
+	if store.HasDownloaded(ctx, "eps", "07-2026") {
+		t.Fatal("HasDownloaded true for a period that was never downloaded")
+	}
+}
+
 func TestParseKey(t *testing.T) {
 	provider, period := parseKey("07-2026/eps.pdf")
 	if provider != "eps" || period != "07-2026" {

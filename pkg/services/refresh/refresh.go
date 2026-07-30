@@ -36,6 +36,11 @@ type Result struct {
 	// run (from the receipts database) and drives the download notification, so a
 	// daily re-run does not re-announce an already-downloaded bill.
 	New bool `json:"new,omitempty"`
+	// Empty reports that the provider ran fine but had nothing to fetch — an
+	// email-based provider whose invoice email has not arrived yet. It is a
+	// success (OK stays true), distinguished so the UI can explain why the run
+	// produced no receipt for this provider.
+	Empty bool `json:"empty,omitempty"`
 }
 
 // State is what the UI needs to render the refresh control.
@@ -239,10 +244,18 @@ func Run(providers map[string]provider.Interface) []Result {
 
 			result := Result{
 				Provider:   name,
-				OK:         err == nil,
 				DurationMS: time.Since(started).Milliseconds(),
 			}
-			if err != nil {
+
+			switch {
+			case err == nil:
+				result.OK = true
+			case errors.Is(err, provider.ErrNoReceipt):
+				// Ran fine, just nothing to fetch (no invoice email yet): a success,
+				// flagged so the UI can say the provider had no receipt this run.
+				result.OK = true
+				result.Empty = true
+			default:
 				result.Error = err.Error()
 			}
 

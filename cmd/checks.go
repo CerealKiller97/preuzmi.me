@@ -33,6 +33,16 @@ func Checks(c *container.Container) {
 		log.Fatal().Msg("No providers with an implementation are configured")
 	}
 
+	// Skip providers whose receipt for the current period is already on record.
+	// Every provider bills for the previous month, so once that month's receipt
+	// is downloaded there is nothing to fetch: when none are left, don't run at
+	// all — no login, no download, and the last-run time is left untouched.
+	providers = c.SkipAlreadyDownloaded(providers)
+	if len(providers) == 0 {
+		log.Info().Msg("Every provider already has the previous month's receipt; nothing to download")
+		return
+	}
+
 	// Record the run into refresh.json, the same file the UI reads for its
 	// "last download" time. A scheduled checks pass must advance it too, so the
 	// dashboard does not keep showing a stale time as if nothing had run.

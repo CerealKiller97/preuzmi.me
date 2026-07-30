@@ -15,6 +15,7 @@ import (
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/mailbox"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/provider"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/storage"
+	"github.com/CerealKiller97/preuzmi.me/pkg/utils"
 	"github.com/rs/zerolog"
 )
 
@@ -243,6 +244,47 @@ var implemented = []string{"mts", "a1", "esanduce", "eps", "yettel", "eupravnik"
 // IsImplemented reports whether a provider can actually download anything yet.
 func IsImplemented(name string) bool {
 	return slices.Contains(implemented, strings.ToLower(name))
+}
+
+// SkipAlreadyDownloaded drops any provider whose receipt for the current billing
+// period is already on record, returning only the providers still worth running.
+//
+// A refresh otherwise logs back into every provider account and re-downloads
+// bills it already holds; consulting the receipts database first turns a repeat
+// run (the daily `checks` cron, or an eager click of the refresh button) into a
+// no-op for providers that have nothing new.
+//
+// The period checked is the previous calendar month — the month whose bill a run
+// now publishes, and the folder every provider files its latest receipt under.
+// The check is conservative: it only ever skips a provider whose bill for that
+// exact period was genuinely downloaded, so it can miss an optimization (an
+// email bill filed under a different month) but never skips a receipt we lack.
+//
+// With no receipts database to consult it returns the providers untouched, so
+// downloads still happen — just without the optimization.
+func (c *Container) SkipAlreadyDownloaded(providers map[string]provider.Interface) map[string]provider.Interface {
+	store := c.GetReceiptsStore()
+	if store == nil {
+		return providers
+	}
+
+	period := utils.PreviousMonthFolder()
+
+	pending := make(map[string]provider.Interface, len(providers))
+	for name, p := range providers {
+		if store.HasDownloaded(c.Ctx, name, period) {
+			c.Logger.Info().
+				Str("provider", name).
+				Str("period", period).
+				Msg("Skipping download: receipt already on record for this period")
+
+			continue
+		}
+
+		pending[name] = p
+	}
+
+	return pending
 }
 
 // GetProviders resolves configured provider names to their implementations,

@@ -188,6 +188,19 @@ func (s *Repository) Record(ctx context.Context, r Receipt) error {
 	return nil
 }
 
+// HasDownloaded reports whether the receipt for (provider, period) is already on
+// record — a row exists with a real download time. A paid-only stub, which
+// carries downloaded_at 0, does not count, so its PDF is still fetched.
+//
+// This lets a refresh skip a provider whose current bill it already holds,
+// rather than logging back into the account to re-download the same PDF.
+func (s *Repository) HasDownloaded(ctx context.Context, provider, period string) bool {
+	var downloadedAt int64
+	err := s.db.QueryRowContext(ctx, selectDownloadedAtQuery, provider, period).Scan(&downloadedAt)
+
+	return err == nil && downloadedAt > 0
+}
+
 // DrainNewlyDownloaded returns and clears the receipts downloaded for the first
 // time since the last drain.
 func (s *Repository) DrainNewlyDownloaded() []Receipt {

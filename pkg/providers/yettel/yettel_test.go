@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/mailbox"
+	"github.com/CerealKiller97/preuzmi.me/pkg/services/provider"
 	"github.com/rs/zerolog"
 )
 
@@ -77,7 +78,7 @@ func TestDownloadReceiptSavesLatestPDF(t *testing.T) {
 	}
 }
 
-func TestDownloadReceiptErrorsWithoutPDF(t *testing.T) {
+func TestDownloadReceiptNoPDFIsNoOp(t *testing.T) {
 	msg := mailbox.Message{
 		From:        "eracun@yettel.rs",
 		Date:        time.Now(),
@@ -86,9 +87,11 @@ func TestDownloadReceiptErrorsWithoutPDF(t *testing.T) {
 	reader := &fakeReader{messages: []mailbox.Message{msg}}
 	store := &memStorage{}
 
+	// No invoice PDF in the mailbox is a normal "nothing to fetch yet", reported
+	// as the ErrNoReceipt sentinel (not a failure), and nothing is saved.
 	s := New(reader, zerolog.Nop(), store, nil)
-	if err := s.DownloadReceipt(); err == nil {
-		t.Fatal("expected an error when no PDF attachment is present")
+	if err := s.DownloadReceipt(); !errors.Is(err, provider.ErrNoReceipt) {
+		t.Fatalf("no PDF should report ErrNoReceipt, got: %v", err)
 	}
 	if store.key != "" {
 		t.Errorf("nothing should have been saved, got key %q", store.key)

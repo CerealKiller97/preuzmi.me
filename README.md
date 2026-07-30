@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-  ghcr.io/cerealkiller97/preuzmi.me:1.0.2
+  ghcr.io/cerealkiller97/preuzmi.me:1.0.3
 ```
 
 ### docker compose
@@ -65,7 +65,7 @@ docker run -d --name preuzmi \
 ```yaml
 services:
   preuzmi:
-    image: ghcr.io/cerealkiller97/preuzmi.me:1.0.2
+    image: ghcr.io/cerealkiller97/preuzmi.me:1.0.3
     container_name: preuzmi.me
     ports:
       - '5500:5500'
@@ -93,6 +93,7 @@ docker exec preuzmi /app/preuzmi checks
 ## Features
 
 - **Multi-provider downloads** — A1, mts, EPS and e.Sanduče sign in with each provider's own platform credentials; Yettel and eUpravnik read the invoice from your mailbox over IMAP (for now)
+- **Smart refresh** — skips providers whose previous-month receipt is settled (provider reports paid and `paid_at` is set); unpaid or unverified bills keep running so status can flip
 - **Receipt dashboard** — search, filter by period / provider / paid status
 - **Paid tracking** — mark receipts paid without touching `meta.json`
 - **Stats** — yearly totals, monthly averages, per-provider charts

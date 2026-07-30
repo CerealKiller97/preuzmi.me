@@ -68,15 +68,16 @@ func startRefreshHandler(
 			return
 		}
 
-		// Skip providers whose receipt for the current period is already on
-		// record, so clicking refresh does not re-login and re-download bills we
-		// already hold. Every provider bills for the previous month, so once that
-		// receipt is downloaded there is nothing to fetch: with none left, return
-		// the last run's state without starting anything. A not-running state is
-		// how the client tells "already up to date" from a freshly started run.
+		// Skip providers whose receipt for the current period is fully settled
+		// (downloaded, provider-confirmed paid, and paid_at set), so clicking
+		// refresh does not re-login for bills that are already done. Unpaid or
+		// unverified bills still run so status can flip. Every provider bills
+		// for the previous month; with none left, return the last run's state
+		// without starting anything. A not-running state is how the client tells
+		// "already up to date" from a freshly started run.
 		providers = skip(providers)
 		if len(providers) == 0 {
-			log.Info().Msg("Refresh requested but every provider already has the previous month's receipt")
+			log.Info().Msg("Refresh requested but every provider's previous-month receipt is settled")
 
 			writeJSON(w, svc.State().WithWindow(cfg.CheckUntil, true))
 

@@ -62,6 +62,11 @@ LIMIT 1;`
 	// next Record is a first download.
 	selectDownloadedAtQuery = `SELECT downloaded_at FROM receipts WHERE provider = ? AND period = ?;`
 
+	// selectSettledQuery reads the fields that decide whether a refresh can skip
+	// a provider: a real download, provider-confirmed paid status, and a user
+	// paid_at stamp.
+	selectSettledQuery = `SELECT downloaded_at, status, paid_at FROM receipts WHERE provider = ? AND period = ?;`
+
 	// setStatusQuery updates the provider-reported paid state.
 	setStatusQuery = `UPDATE receipts SET status = ? WHERE provider = ? AND period = ?;`
 
@@ -191,14 +196,27 @@ func (s *Repository) Record(ctx context.Context, r Receipt) error {
 // HasDownloaded reports whether the receipt for (provider, period) is already on
 // record — a row exists with a real download time. A paid-only stub, which
 // carries downloaded_at 0, does not count, so its PDF is still fetched.
-//
-// This lets a refresh skip a provider whose current bill it already holds,
-// rather than logging back into the account to re-download the same PDF.
 func (s *Repository) HasDownloaded(ctx context.Context, provider, period string) bool {
 	var downloadedAt int64
 	err := s.db.QueryRowContext(ctx, selectDownloadedAtQuery, provider, period).Scan(&downloadedAt)
 
 	return err == nil && downloadedAt > 0
+}
+
+// IsSettled reports whether the receipt for (provider, period) is fully done:
+// the PDF is on record, the provider reports it paid ("plaćeno"), and the user
+// has stamped paid_at. Only then is there nothing left for a refresh to learn
+// or fetch — an unpaid or unverified bill is still worth re-checking so status
+// can flip and paid-confirmation can fire.
+func (s *Repository) IsSettled(ctx context.Context, provider, period string) bool {
+	var downloadedAt, paidAt int64
+	var status string
+	err := s.db.QueryRowContext(ctx, selectSettledQuery, provider, period).Scan(&downloadedAt, &status, &paidAt)
+	if err != nil {
+		return false
+	}
+
+	return downloadedAt > 0 && status == StatusPaid && paidAt > 0
 }
 
 // DrainNewlyDownloaded returns and clears the receipts downloaded for the first

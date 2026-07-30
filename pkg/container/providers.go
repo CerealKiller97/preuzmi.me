@@ -247,18 +247,23 @@ func IsImplemented(name string) bool {
 }
 
 // SkipAlreadyDownloaded drops any provider whose receipt for the current billing
-// period is already on record, returning only the providers still worth running.
+// period is fully settled, returning only the providers still worth running.
+//
+// Settled means the PDF is on record, the provider reports it paid ("plaćeno"),
+// and the user has stamped paid_at. Until all three are true a refresh still
+// runs — an unpaid bill may flip to paid on a later fetch, and that flip is what
+// triggers paid-confirmation notifications.
 //
 // A refresh otherwise logs back into every provider account and re-downloads
-// bills it already holds; consulting the receipts database first turns a repeat
-// run (the daily `checks` cron, or an eager click of the refresh button) into a
-// no-op for providers that have nothing new.
+// bills that are already done; consulting the receipts database first turns a
+// repeat run (the daily `checks` cron, or an eager click of the refresh button)
+// into a no-op for providers that have nothing left to learn.
 //
 // The period checked is the previous calendar month — the month whose bill a run
 // now publishes, and the folder every provider files its latest receipt under.
 // The check is conservative: it only ever skips a provider whose bill for that
-// exact period was genuinely downloaded, so it can miss an optimization (an
-// email bill filed under a different month) but never skips a receipt we lack.
+// exact period is genuinely settled, so it can miss an optimization but never
+// skips a receipt we still need to fetch or verify.
 //
 // With no receipts database to consult it returns the providers untouched, so
 // downloads still happen — just without the optimization.
@@ -272,11 +277,11 @@ func (c *Container) SkipAlreadyDownloaded(providers map[string]provider.Interfac
 
 	pending := make(map[string]provider.Interface, len(providers))
 	for name, p := range providers {
-		if store.HasDownloaded(c.Ctx, name, period) {
+		if store.IsSettled(c.Ctx, name, period) {
 			c.Logger.Info().
 				Str("provider", name).
 				Str("period", period).
-				Msg("Skipping download: receipt already on record for this period")
+				Msg("Skipping download: receipt settled (provider paid + paid_at) for this period")
 
 			continue
 		}

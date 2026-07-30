@@ -343,6 +343,56 @@ func TestHasDownloaded(t *testing.T) {
 	}
 }
 
+func TestIsSettled(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer store.Close() //nolint:errcheck
+
+	ctx := context.Background()
+
+	// Never recorded.
+	if store.IsSettled(ctx, "eps", "06-2026") {
+		t.Fatal("IsSettled true for an unrecorded receipt")
+	}
+
+	// Downloaded but unpaid and unmarked — still worth re-checking.
+	if err := store.Record(ctx, Receipt{Provider: "eps", Period: "06-2026", StorageKey: "06-2026/eps.pdf", SizeBytes: 100}); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	if store.IsSettled(ctx, "eps", "06-2026") {
+		t.Fatal("IsSettled true for a downloaded unpaid receipt")
+	}
+
+	// Provider confirms paid, but the user has not stamped paid_at yet.
+	if err := store.SetStatus(ctx, "eps", "06-2026", StatusPaid); err != nil {
+		t.Fatalf("SetStatus: %v", err)
+	}
+	if store.IsSettled(ctx, "eps", "06-2026") {
+		t.Fatal("IsSettled true without paid_at")
+	}
+
+	// User marks paid too — now settled.
+	if err := store.MarkPaid(ctx, "eps", "06-2026", 1700000000); err != nil {
+		t.Fatalf("MarkPaid: %v", err)
+	}
+	if !store.IsSettled(ctx, "eps", "06-2026") {
+		t.Fatal("IsSettled false after status paid + paid_at")
+	}
+
+	// paid_at alone on a stub (no real download) is not settled — PDF still needed.
+	if err := store.MarkPaid(ctx, "a1", "06-2026", 1700000000); err != nil {
+		t.Fatalf("MarkPaid stub: %v", err)
+	}
+	if err := store.SetStatus(ctx, "a1", "06-2026", StatusPaid); err != nil {
+		t.Fatalf("SetStatus stub: %v", err)
+	}
+	if store.IsSettled(ctx, "a1", "06-2026") {
+		t.Fatal("IsSettled true for a paid-only stub with no download")
+	}
+}
+
 func TestParseKey(t *testing.T) {
 	provider, period := parseKey("07-2026/eps.pdf")
 	if provider != "eps" || period != "07-2026" {

@@ -33,13 +33,14 @@ func Checks(c *container.Container) {
 		log.Fatal().Msg("No providers with an implementation are configured")
 	}
 
-	// Skip providers whose receipt for the current period is already on record.
-	// Every provider bills for the previous month, so once that month's receipt
-	// is downloaded there is nothing to fetch: when none are left, don't run at
-	// all — no login, no download, and the last-run time is left untouched.
+	// Skip providers whose receipt for the current period is fully settled
+	// (downloaded, provider-confirmed paid, and paid_at set). Every provider
+	// bills for the previous month; once that month's bill is settled there is
+	// nothing left to learn. When none are left, don't run at all — no login,
+	// no download, and the last-run time is left untouched.
 	providers = c.SkipAlreadyDownloaded(providers)
 	if len(providers) == 0 {
-		log.Info().Msg("Every provider already has the previous month's receipt; nothing to download")
+		log.Info().Msg("Every provider's previous-month receipt is settled; nothing to download")
 		return
 	}
 

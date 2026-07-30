@@ -93,6 +93,7 @@ docker exec preuzmi /app/preuzmi checks
 ## Mogućnosti
 
 - **Više provajdera** — A1, mts, EPS i e.Sanduče se prijavljuju kredencijalima svoje platforme; Yettel i eUpravnik čitaju račun iz vašeg sandučeta preko IMAP-a (za sada)
+- **Pametno osvežavanje** — preskače provajdere čiji je račun za prošli mesec završen (`confirmed_at` i `paid_at` postavljeni); neplaćeni ili neverifikovani računi se i dalje proveravaju da bi status mogao da se promeni
 - **Dashboard računa** — pretraga, filter po periodu / provajderu / statusu plaćanja
 - **Praćenje plaćanja** — označi račun kao plaćen iz UI-ja ili `receipts` CLI-ja; prati se kao dva odvojena trenutka: *ti platio* i *provajder potvrdio*
 - **Statistika** — godišnji zbir, mesečni prosek, grafikoni po provajderu

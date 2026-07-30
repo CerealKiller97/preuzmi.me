@@ -112,6 +112,11 @@ LIMIT 1;`
 	// next Record is a first download.
 	selectDownloadedAtQuery = `SELECT downloaded_at FROM receipts WHERE provider = ? AND period = ?;`
 
+	// selectSettledQuery reads the fields that decide whether a refresh can skip
+	// a provider: a real download, provider confirmation (confirmed_at), and a
+	// user paid_at stamp.
+	selectSettledQuery = `SELECT downloaded_at, paid_at, confirmed_at FROM receipts WHERE provider = ? AND period = ?;`
+
 	// setStatusPaidQuery marks a receipt paid by the provider, stamping
 	// confirmed_at only on the first confirmation so the timestamp is stable.
 	setStatusPaidQuery = `
@@ -483,6 +488,35 @@ func (s *Repository) Record(ctx context.Context, r Receipt) error {
 	}
 
 	return nil
+}
+
+// HasDownloaded reports whether the receipt for (provider, period) is already on
+// record — a row exists with a real download time. A paid-only stub, which
+// carries downloaded_at 0, does not count, so its PDF is still fetched.
+func (s *Repository) HasDownloaded(ctx context.Context, provider, period string) bool {
+	period = slashPeriod(period)
+
+	var downloadedAt int64
+	err := s.db.QueryRowContext(ctx, selectDownloadedAtQuery, provider, period).Scan(&downloadedAt)
+
+	return err == nil && downloadedAt > 0
+}
+
+// IsSettled reports whether the receipt for (provider, period) is fully done:
+// the PDF is on record, the provider has confirmed payment (confirmed_at), and
+// the user has stamped paid_at. Only then is there nothing left for a refresh to
+// learn or fetch — an unpaid or unverified bill is still worth re-checking so
+// status can flip and paid-confirmation can fire.
+func (s *Repository) IsSettled(ctx context.Context, provider, period string) bool {
+	period = slashPeriod(period)
+
+	var downloadedAt, paidAt, confirmedAt int64
+	err := s.db.QueryRowContext(ctx, selectSettledQuery, provider, period).Scan(&downloadedAt, &paidAt, &confirmedAt)
+	if err != nil {
+		return false
+	}
+
+	return downloadedAt > 0 && confirmedAt > 0 && paidAt > 0
 }
 
 // DrainNewlyDownloaded returns and clears the receipts downloaded for the first

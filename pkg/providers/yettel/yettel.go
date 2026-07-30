@@ -75,7 +75,12 @@ func (s *Service) DownloadReceipt() error {
 
 	msg, attachment, ok := latestPDF(messages)
 	if !ok {
-		return fmt.Errorf("yettel: no email with a PDF attachment found in the configured mailbox")
+		// No invoice email waiting yet — the mailbox is empty or the bill has not
+		// arrived. That is a normal "nothing to fetch", not a failure: the sentinel
+		// lets the refresh runner mark this provider as "no email" rather than an
+		// error, so the UI can say so and a scheduled run stays quiet.
+		s.logger.Info().Msg("No Yettel invoice email found yet; nothing to download")
+		return provider.ErrNoReceipt
 	}
 
 	// Parse the PDF up front so the billing period it names decides the folder,

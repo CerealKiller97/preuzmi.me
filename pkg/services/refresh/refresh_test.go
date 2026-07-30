@@ -53,6 +53,29 @@ func TestRunReportsEveryProviderIndependently(t *testing.T) {
 	assert.Empty(results[1].Error)
 }
 
+func TestRunMarksNoReceiptAsEmptyNotFailed(t *testing.T) {
+	// Arrange: an email provider with no invoice email yet reports ErrNoReceipt.
+	assert := require.New(t)
+	providers := map[string]provider.Interface{
+		"eps":    &fakeProvider{},
+		"yettel": &fakeProvider{err: provider.ErrNoReceipt},
+	}
+
+	// Act
+	results := refresh.Run(providers)
+
+	// Assert: "no receipt" is a success flagged Empty, not a failure with an error.
+	assert.Len(results, 2)
+	assert.Equal("eps", results[0].Provider)
+	assert.True(results[0].OK)
+	assert.False(results[0].Empty)
+
+	assert.Equal("yettel", results[1].Provider)
+	assert.True(results[1].OK)
+	assert.True(results[1].Empty)
+	assert.Empty(results[1].Error)
+}
+
 func TestStartRefusesConcurrentRuns(t *testing.T) {
 	// Arrange
 	assert := require.New(t)

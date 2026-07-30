@@ -10,6 +10,16 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+## [1.0.3] - 30.07.2026
+
+### ✨ Added
+
+- ⏭️ Smart refresh — skip providers whose previous-month receipt is settled. Settled means the PDF is on record, the provider reports it paid (`plaćeno`), and the user has stamped `paid_at`. Both the UI refresh button and `checks` consult the receipts database first, so a repeat run does not re-login for bills that are already done. Unpaid or unverified bills still run so status can flip and paid-confirmation can fire; if every configured provider is settled, the run is skipped entirely (no login, no download).
+
+### 🐛 Fixed
+
+- 📭 Empty mailboxes are no longer errors. When Yettel or eUpravnik find no invoice email yet, refresh treats that as "nothing to fetch" instead of a red failure — the UI names the provider (e.g. "YETTEL: nije pronađen mejl sa računom.") so an empty inbox reads as waiting, not broken.
+
 ## [1.0.2] - 29.07.2026
 
 ### 🐛 Fixed
@@ -49,7 +59,8 @@ stats, and notifications, so no bill goes unintentionally unpaid.
 - 🐳 Multi-arch (amd64 + arm64), distroless Docker image published to GHCR.
 - 🌐 Bilingual documentation — English and Serbian.
 
-[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/CerealKiller97/preuzmi.me/releases/tag/v1.0.0

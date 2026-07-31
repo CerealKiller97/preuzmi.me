@@ -93,6 +93,80 @@ document.addEventListener('alpine:init', () => {
     },
 
     /**
+     * Whole calendar days from today to the receipt's due date. Negative when
+     * overdue; null when the deadline is unknown.
+     *
+     * @param {object} item
+     * @returns {number|null}
+     */
+    daysUntilDue(item) {
+      const due = Number(item.due_at) || 0;
+      if (due <= 0) {
+        return null;
+      }
+
+      const dueDay = new Date(due * 1000);
+      dueDay.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      return Math.round((dueDay - today) / 86400000);
+    },
+
+    /**
+     * @param {object} item
+     * @returns {boolean}
+     */
+    isOverdue(item) {
+      const days = this.daysUntilDue(item);
+      return days !== null && days < 0;
+    },
+
+    /**
+     * Short badge label for unpaid receipts with a known deadline.
+     * Empty string hides the badge.
+     *
+     * @param {object} item
+     * @returns {string}
+     */
+    dueLabel(item) {
+      const days = this.daysUntilDue(item);
+      if (days === null) {
+        return '';
+      }
+      if (days < 0) {
+        return 'Dospeo';
+      }
+      if (days === 0) {
+        return 'Danas';
+      }
+      if (days === 1) {
+        return 'Sutra';
+      }
+      if (days <= 3) {
+        return `Za ${days} dana`;
+      }
+
+      return '';
+    },
+
+    /**
+     * @param {object} item
+     * @returns {string}
+     */
+    dueTitle(item) {
+      const due = this.formatDate(item.due_at);
+      if (!due) {
+        return '';
+      }
+      if (this.isOverdue(item)) {
+        return `Dospeo ${due}`;
+      }
+
+      return `Dospeće ${due}`;
+    },
+
+    /**
      * Unpaid receipts across the whole set, not just the filtered view, so the
      * number does not change as filters are applied.
      *

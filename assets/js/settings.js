@@ -216,6 +216,12 @@ document.addEventListener('alpine:init', () => {
       if (!form.notifications.driver) {
         form.notifications.driver = 'smtp';
       }
+      if (typeof form.notifications.paid_confirmation !== 'boolean') {
+        form.notifications.paid_confirmation = !!form.notifications.paid_confirmation;
+      }
+      if (typeof form.notifications.due_reminders !== 'boolean') {
+        form.notifications.due_reminders = !!form.notifications.due_reminders;
+      }
       if (!form.s3) {
         form.s3 = {};
       }

@@ -3,6 +3,7 @@ package notify_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/notify"
@@ -124,6 +125,65 @@ func TestHandleVerifiedSilentWhenPaidConfirmationOff(t *testing.T) {
 	svc := notify.New(config.Notifications{Mode: config.NotifyModePerReceipt, Driver: config.NotifyDriverTelegram}, sender, zerolog.Nop())
 	svc.HandleVerified([]notify.VerifiedReceipt{{Provider: "eps", Period: "06-2026"}})
 	assert.Equal(t, 0, count)
+}
+
+func TestHandleDueRemindersSummary(t *testing.T) {
+	var sent []struct{ subject, body string }
+	sender := senderFunc(func(subject, body string) error {
+		sent = append(sent, struct{ subject, body string }{subject, body})
+		return nil
+	})
+
+	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.Local)
+	inTwoDays := time.Date(2026, 7, 31, 0, 0, 0, 0, time.Local).Unix()
+
+	svc := notify.New(config.Notifications{
+		Mode:         config.NotifyModeOff,
+		Driver:       config.NotifyDriverTelegram,
+		DueReminders: true,
+	}, sender, zerolog.Nop())
+
+	announced := svc.HandleDueReminders([]notify.DueReceipt{
+		{Provider: "mts", Period: "06/2026", Price: 1819.46, DueAt: inTwoDays},
+		{Provider: "eps", Period: "06/2026", Price: 2364.66, DueAt: inTwoDays},
+		{Provider: "a1", Period: "06/2026", Price: 4215.88, DueAt: inTwoDays},
+	}, now)
+
+	require.Len(t, announced, 3)
+	require.Len(t, sent, 1)
+	assert.True(t, strings.HasPrefix(sent[0].subject, "⏰ "))
+	assert.Contains(t, sent[0].body, "3 računa dospevaju za 2 dana")
+	assert.Contains(t, sent[0].body, "8.400,00 RSD")
+}
+
+func TestHandleDueRemindersSilentWhenOff(t *testing.T) {
+	var count int
+	sender := senderFunc(func(string, string) error { count++; return nil })
+	svc := notify.New(config.Notifications{Mode: config.NotifyModePerReceipt, Driver: config.NotifyDriverTelegram}, sender, zerolog.Nop())
+
+	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.Local)
+	due := time.Date(2026, 7, 31, 0, 0, 0, 0, time.Local).Unix()
+	assert.Empty(t, svc.HandleDueReminders([]notify.DueReceipt{
+		{Provider: "mts", DueAt: due, Price: 100},
+	}, now))
+	assert.Equal(t, 0, count)
+}
+
+func TestFilterDueRemindersWindow(t *testing.T) {
+	now := time.Date(2026, 7, 29, 15, 0, 0, 0, time.Local)
+	items := []notify.DueReceipt{
+		{Provider: "overdue", DueAt: time.Date(2026, 7, 20, 0, 0, 0, 0, time.Local).Unix()},
+		{Provider: "today", DueAt: time.Date(2026, 7, 29, 0, 0, 0, 0, time.Local).Unix()},
+		{Provider: "in3", DueAt: time.Date(2026, 8, 1, 0, 0, 0, 0, time.Local).Unix()},
+		{Provider: "in4", DueAt: time.Date(2026, 8, 2, 0, 0, 0, 0, time.Local).Unix()},
+		{Provider: "none", DueAt: 0},
+	}
+
+	got := notify.FilterDueReminders(items, now)
+	require.Len(t, got, 3)
+	assert.Equal(t, "overdue", got[0].Provider)
+	assert.Equal(t, "today", got[1].Provider)
+	assert.Equal(t, "in3", got[2].Provider)
 }
 
 func TestMessagesOffSendsNothing(t *testing.T) {

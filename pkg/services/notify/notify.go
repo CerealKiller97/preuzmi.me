@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/refresh"
@@ -147,8 +148,140 @@ const (
 	emojiReceipt = "🧾" // a receipt was downloaded
 	emojiAllDone = "✅" // every provider in the run succeeded
 	emojiPaid    = "✅" // a receipt was confirmed paid
+	emojiDue     = "⏰" // unpaid receipts are due soon / overdue
 	emojiTest    = "🔔" // manual test probe
 )
+
+// DueReminderWindowDays is how far ahead of the deadline a due-soon
+// notification will fire (inclusive of today).
+const DueReminderWindowDays = 3
+
+// DueReceipt is one unpaid receipt included in a due-soon reminder.
+type DueReceipt struct {
+	Provider string
+	Period   string
+	Price    float64
+	DueAt    int64
+}
+
+// DueReminderEnabled reports whether due-soon notifications will fire. It is
+// independent of the download-notification Mode.
+func (s *Service) DueReminderEnabled() bool {
+	return s != nil && s.sender != nil && s.cfg.DueReminders
+}
+
+// HandleDueReminders sends one summary when unpaid receipts are overdue or due
+// within DueReminderWindowDays. Failures are logged and never bubbled up.
+// Returns the receipts that were announced so the caller can stamp them as
+// reminded and avoid re-sending.
+func (s *Service) HandleDueReminders(items []DueReceipt, now time.Time) []DueReceipt {
+	if !s.DueReminderEnabled() {
+		return nil
+	}
+
+	due := FilterDueReminders(items, now)
+	if len(due) == 0 {
+		return nil
+	}
+
+	msg := dueReminderMessage(due, now)
+	if err := s.send(msg); err != nil {
+		s.log.Err(err).
+			Str("subject", msg.Subject).
+			Msg("Failed to send due reminder")
+		return nil
+	}
+
+	s.log.Info().
+		Str("subject", msg.Subject).
+		Int("count", len(due)).
+		Msg("Due reminder sent")
+
+	return due
+}
+
+// FilterDueReminders keeps receipts whose deadline is overdue or within
+// DueReminderWindowDays. Callers should already exclude paid receipts and
+// ones that were reminded for the current due_at.
+func FilterDueReminders(items []DueReceipt, now time.Time) []DueReceipt {
+	out := make([]DueReceipt, 0, len(items))
+	for _, it := range items {
+		if it.DueAt <= 0 {
+			continue
+		}
+		days := DaysUntilDue(it.DueAt, now)
+		if days > DueReminderWindowDays {
+			continue
+		}
+		out = append(out, it)
+	}
+
+	return out
+}
+
+// DaysUntilDue returns whole calendar days from today to the due date
+// (negative when overdue).
+func DaysUntilDue(dueAt int64, now time.Time) int {
+	due := time.Unix(dueAt, 0).In(now.Location())
+	dueDay := time.Date(due.Year(), due.Month(), due.Day(), 0, 0, 0, 0, now.Location())
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+
+	return int(dueDay.Sub(today).Hours() / 24)
+}
+
+// dueReminderMessage builds the summary: "3 računa dospevaju za 2 dana — 8.400 RSD."
+func dueReminderMessage(items []DueReceipt, now time.Time) Message {
+	var total float64
+	soonest := DaysUntilDue(items[0].DueAt, now)
+	for _, it := range items {
+		total += it.Price
+		if d := DaysUntilDue(it.DueAt, now); d < soonest {
+			soonest = d
+		}
+	}
+
+	count := len(items)
+	noun := "računa"
+	if count == 1 {
+		noun = "račun"
+	}
+
+	var when string
+	switch {
+	case soonest < 0:
+		when = "su dospela"
+		if count == 1 {
+			when = "je dospeo"
+		}
+	case soonest == 0:
+		when = "dospevaju danas"
+		if count == 1 {
+			when = "dospeva danas"
+		}
+	default:
+		when = fmt.Sprintf("dospevaju za %d %s", soonest, dayWord(soonest))
+		if count == 1 {
+			when = fmt.Sprintf("dospeva za %d %s", soonest, dayWord(soonest))
+		}
+	}
+
+	body := fmt.Sprintf("%d %s %s — %s.\n", count, noun, when, formatPrice(total))
+
+	return Message{
+		Emoji:   emojiDue,
+		Subject: "preuzmi.me: dospeće računa",
+		Body:    body,
+	}
+}
+
+// dayWord picks the Serbian plural form for a day count.
+func dayWord(n int) string {
+	if n == 1 {
+		return "dan"
+	}
+
+	return "dana"
+}
 
 // Message is one outbound notification. Emoji, when set, is prepended to the
 // subject for Telegram deliveries only.

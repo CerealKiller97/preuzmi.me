@@ -13,5 +13,11 @@ CREATE TABLE IF NOT EXISTS receipts (
     -- Both are 0 when not set.
     paid_at       INTEGER NOT NULL DEFAULT 0,
     confirmed_at  INTEGER NOT NULL DEFAULT 0,
+    -- due_at: payment deadline parsed from the PDF (datum dospeća / rok za
+    -- plaćanje / datum valute), unix seconds at local midnight. 0 when unknown.
+    -- due_reminded_at: when a due-soon notification last covered this receipt,
+    -- so the daily check does not re-nag about the same deadline.
+    due_at          INTEGER NOT NULL DEFAULT 0,
+    due_reminded_at INTEGER NOT NULL DEFAULT 0,
     UNIQUE (provider, period)
 );

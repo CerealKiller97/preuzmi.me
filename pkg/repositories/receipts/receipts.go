@@ -95,7 +95,7 @@ ON CONFLICT(provider, period) DO UPDATE SET
 	// latestReceiptQuery returns the most recently downloaded receipt for a
 	// provider.
 	latestReceiptQuery = `
-SELECT id, provider, period, storage_key, size_bytes, price, status, downloaded_at, paid_at, confirmed_at
+SELECT id, provider, period, storage_key, size_bytes, price, status, downloaded_at, paid_at, confirmed_at, due_at, due_reminded_at
 FROM receipts
 WHERE provider = ?
 ORDER BY downloaded_at DESC, id DESC
@@ -103,6 +103,18 @@ LIMIT 1;`
 
 	// setPriceQuery updates the amount owed for an already-recorded receipt.
 	setPriceQuery = `UPDATE receipts SET price = ? WHERE provider = ? AND period = ?;`
+
+	// setDueAtQuery stores the payment deadline. A changed due_at clears
+	// due_reminded_at so a revised deadline can notify again.
+	setDueAtQuery = `
+UPDATE receipts
+SET due_at = ?,
+    due_reminded_at = CASE WHEN due_at = ? THEN due_reminded_at ELSE 0 END
+WHERE provider = ? AND period = ?;`
+
+	// markDueRemindedQuery stamps the receipts that were just included in a
+	// due-soon notification.
+	markDueRemindedQuery = `UPDATE receipts SET due_reminded_at = ? WHERE provider = ? AND period = ?;`
 
 	// selectStatusQuery reads the current status for a (provider, period).
 	selectStatusQuery = `SELECT status FROM receipts WHERE provider = ? AND period = ?;`
@@ -139,22 +151,24 @@ ON CONFLICT(provider, period) DO UPDATE SET
 
 	// listReceiptsQuery returns every recorded receipt, newest download first.
 	listReceiptsQuery = `
-SELECT id, provider, period, storage_key, size_bytes, price, status, downloaded_at, paid_at, confirmed_at
+SELECT id, provider, period, storage_key, size_bytes, price, status, downloaded_at, paid_at, confirmed_at, due_at, due_reminded_at
 FROM receipts
 ORDER BY downloaded_at DESC, id DESC;`
 )
 
 type Receipt struct {
-	Provider     string  `json:"provider"`
-	Period       string  `json:"period"`
-	StorageKey   string  `json:"storage_key"`
-	Status       string  `json:"status"`
-	Price        float64 `json:"price"`
-	SizeBytes    int64   `json:"size_bytes"`
-	DownloadedAt int64   `json:"downloaded_at"`
-	PaidAt       int64   `json:"paid_at"`
-	ConfirmedAt  int64   `json:"confirmed_at"`
-	ID           int64   `json:"id"`
+	Provider      string  `json:"provider"`
+	Period        string  `json:"period"`
+	StorageKey    string  `json:"storage_key"`
+	Status        string  `json:"status"`
+	Price         float64 `json:"price"`
+	SizeBytes     int64   `json:"size_bytes"`
+	DownloadedAt  int64   `json:"downloaded_at"`
+	PaidAt        int64   `json:"paid_at"`
+	ConfirmedAt   int64   `json:"confirmed_at"`
+	DueAt         int64   `json:"due_at"`
+	DueRemindedAt int64   `json:"due_reminded_at,omitempty"`
+	ID            int64   `json:"id"`
 }
 
 // Repository is a SQLite-backed index of downloaded receipts.
@@ -216,6 +230,12 @@ func migrate(db *sql.DB, dir string) error {
 	}
 	if err := ensureColumn(db, "receipts", "confirmed_at", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return fmt.Errorf("receipts: adding confirmed_at: %w", err)
+	}
+	if err := ensureColumn(db, "receipts", "due_at", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return fmt.Errorf("receipts: adding due_at: %w", err)
+	}
+	if err := ensureColumn(db, "receipts", "due_reminded_at", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return fmt.Errorf("receipts: adding due_reminded_at: %w", err)
 	}
 
 	// Fold any earlier separate paid-state stores back into the receipts row.
@@ -545,6 +565,8 @@ func (s *Repository) Latest(ctx context.Context, provider string) (Receipt, bool
 		&r.DownloadedAt,
 		&r.PaidAt,
 		&r.ConfirmedAt,
+		&r.DueAt,
+		&r.DueRemindedAt,
 	)
 	if err != nil {
 		return Receipt{}, false
@@ -564,6 +586,37 @@ func (s *Repository) SetPrice(ctx context.Context, provider, period string, pric
 	)
 
 	return err
+}
+
+// SetDueAt stores the payment deadline for an already-recorded receipt. Passing
+// 0 clears it. A changed deadline resets due_reminded_at so reminders can fire
+// again for the new date.
+func (s *Repository) SetDueAt(ctx context.Context, provider, period string, dueAt int64) error {
+	_, err := s.db.ExecContext(
+		ctx,
+		setDueAtQuery,
+		dueAt,
+		dueAt,
+		provider,
+		slashPeriod(period),
+	)
+
+	return err
+}
+
+// MarkDueReminded stamps due_reminded_at on each (provider, period) so a later
+// refresh does not re-send the same due-soon notification.
+func (s *Repository) MarkDueReminded(ctx context.Context, items []Receipt, at int64) error {
+	if at == 0 {
+		at = time.Now().Unix()
+	}
+	for _, it := range items {
+		if _, err := s.db.ExecContext(ctx, markDueRemindedQuery, at, it.Provider, slashPeriod(it.Period)); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // SetStatus updates the provider-reported paid state ("plaćeno" / "neplaćeno")
@@ -656,7 +709,7 @@ func (s *Repository) List(ctx context.Context) ([]Receipt, error) {
 	var out []Receipt
 	for rows.Next() {
 		var r Receipt
-		if err := rows.Scan(&r.ID, &r.Provider, &r.Period, &r.StorageKey, &r.SizeBytes, &r.Price, &r.Status, &r.DownloadedAt, &r.PaidAt, &r.ConfirmedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.Provider, &r.Period, &r.StorageKey, &r.SizeBytes, &r.Price, &r.Status, &r.DownloadedAt, &r.PaidAt, &r.ConfirmedAt, &r.DueAt, &r.DueRemindedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

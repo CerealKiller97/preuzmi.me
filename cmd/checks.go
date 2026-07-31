@@ -41,6 +41,9 @@ func Checks(c *container.Container) {
 	providers = c.SkipAlreadyDownloaded(providers)
 	if len(providers) == 0 {
 		log.Info().Msg("Every provider's previous-month receipt is settled; nothing to download")
+		// Still run due-soon reminders: settled providers do not mean every bill
+		// on record is paid, and a quiet refresh day should still nag.
+		c.NotifyRefreshResults(nil)
 		return
 	}
 

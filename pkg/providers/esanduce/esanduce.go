@@ -14,6 +14,7 @@ import (
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
 	"github.com/CerealKiller97/preuzmi.me/pkg/repositories/receipts"
+	"github.com/CerealKiller97/preuzmi.me/pkg/services/pdftext"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/provider"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/storage"
 	"github.com/CerealKiller97/preuzmi.me/pkg/utils"
@@ -184,6 +185,11 @@ func (s Service) DownloadReceipt() error {
 		if err := s.receipts.SetStatus(ctx, fileName, period, billStatus(bill)); err != nil {
 			s.logger.Err(err).Str("period", period).Msg("Failed to record esanduce receipt status")
 		}
+		if due, ok := parseDueDate(bill.DatumValute); ok {
+			if err := s.receipts.SetDueAt(ctx, fileName, period, due.Unix()); err != nil {
+				s.logger.Err(err).Str("period", period).Msg("Failed to record esanduce receipt due date")
+			}
+		}
 	}
 
 	return nil
@@ -306,6 +312,29 @@ func billStatus(bill Bill) string {
 	}
 
 	return receipts.StatusUnpaid
+}
+
+// parseDueDate turns the API's datum_valute into a local midnight time. The
+// field arrives as either a Serbian "DD.MM.YYYY" string or an ISO date.
+func parseDueDate(raw string) (time.Time, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, false
+	}
+	if t, ok := pdftext.ParseDate(raw); ok {
+		return t, true
+	}
+	for _, layout := range []string{
+		time.RFC3339,
+		"2006-01-02T15:04:05",
+		"2006-01-02",
+	} {
+		if t, err := time.ParseInLocation(layout, raw, time.Local); err == nil {
+			return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.Local), true
+		}
+	}
+
+	return time.Time{}, false
 }
 
 // getIdent fetches the account's idents and returns the first one, which later

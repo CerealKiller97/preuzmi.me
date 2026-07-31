@@ -10,6 +10,10 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+### ✨ Added
+
+- ⏰ Due-date tracking — `datum dospeća` / `rok za plaćanje` / `datum valute` is parsed from each PDF (and from e.Sanduče's API) into `due_at`. Unpaid cards show an overdue / due-soon badge, and optional due reminders fire a summary like "3 računa dospevaju za 2 dana — 8.400 RSD" (Settings → Obaveštenja).
+
 ## [1.1.0] - 30.07.2026
 
 ### ✨ Added

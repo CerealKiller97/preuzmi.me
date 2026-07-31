@@ -88,9 +88,13 @@ type (
 		// newly confirms a receipt as paid ("plaćeno"). It is independent of
 		// Mode: paid-confirmation messages can fire even when Mode is off, as
 		// long as the driver is configured.
-		PaidConfirmation bool     `json:"paid_confirmation"`
-		SMTP             SMTP     `json:"smtp"`
-		Telegram         Telegram `json:"telegram"`
+		PaidConfirmation bool `json:"paid_confirmation"`
+		// DueReminders, when true, sends a summary when unpaid receipts are
+		// overdue or due within a few days (e.g. "3 računa dospevaju za 2
+		// dana — 8.400 RSD"). Independent of Mode, same as PaidConfirmation.
+		DueReminders bool     `json:"due_reminders"`
+		SMTP         SMTP     `json:"smtp"`
+		Telegram     Telegram `json:"telegram"`
 	}
 
 	Providers struct {
@@ -322,8 +326,8 @@ func (c *Config) validateNotifications() error {
 	}
 
 	// A driver is only required when something will actually be delivered:
-	// an active download mode, or paid-confirmation messages.
-	if !n.NotifyEnabled() && !n.PaidConfirmation {
+	// an active download mode, paid-confirmation, or due-reminder messages.
+	if !n.NotifyEnabled() && !n.PaidConfirmation && !n.DueReminders {
 		return nil
 	}
 
@@ -365,9 +369,10 @@ func (n Notifications) NotifyEnabled() bool {
 }
 
 // DeliveryEnabled reports whether any message will be sent at all: a download
-// mode, paid-confirmation, or both. It governs when a driver must be configured.
+// mode, paid-confirmation, due reminders, or a combination. It governs when a
+// driver must be configured.
 func (n Notifications) DeliveryEnabled() bool {
-	return n.NotifyEnabled() || n.PaidConfirmation
+	return n.NotifyEnabled() || n.PaidConfirmation || n.DueReminders
 }
 
 // RefreshAllowed reports whether today is still within the check_until window

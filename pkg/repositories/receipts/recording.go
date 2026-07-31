@@ -5,6 +5,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/CerealKiller97/preuzmi.me/pkg/services/pdftext"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/storage"
 	"github.com/rs/zerolog"
 )
@@ -56,6 +57,15 @@ func (r *recordingStorage) Save(ctx context.Context, key string, data []byte) er
 
 	if err := r.store.Record(ctx, rec); err != nil {
 		r.logger.Err(err).Str("key", key).Msg("Failed to record downloaded receipt in database")
+		return nil
+	}
+
+	// Pull the payment deadline out of the PDF once the row exists. Best-effort:
+	// a missing label or a broken content stream just leaves due_at unset.
+	if due, ok := pdftext.DueDate(data); ok {
+		if err := r.store.SetDueAt(ctx, provider, period, due.Unix()); err != nil {
+			r.logger.Err(err).Str("key", key).Msg("Failed to record receipt due date")
+		}
 	}
 
 	return nil

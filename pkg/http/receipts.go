@@ -34,6 +34,7 @@ type APIReceipt struct {
 	Amount       float64 `json:"amount"`
 	PaidAt       int64   `json:"paid_at"`
 	ConfirmedAt  int64   `json:"confirmed_at"`
+	DueAt        int64   `json:"due_at"`
 	Paid         bool    `json:"paid"`
 	Confirmed    bool    `json:"confirmed"`
 }
@@ -116,6 +117,7 @@ func scanReceiptsDB(dir string, rec *receipts.Repository) ([]APIReceipt, error) 
 			PaidAt:       row.PaidAt,
 			Confirmed:    row.ConfirmedAt > 0,
 			ConfirmedAt:  row.ConfirmedAt,
+			DueAt:        row.DueAt,
 		}
 
 		key := metaKey(row.Period, row.Provider)
@@ -215,6 +217,7 @@ func scanReceipts(dir string, rec *receipts.Repository) ([]APIReceipt, error) {
 			receipt.PaidAt = row.PaidAt
 			receipt.Confirmed = row.ConfirmedAt > 0
 			receipt.ConfirmedAt = row.ConfirmedAt
+			receipt.DueAt = row.DueAt
 		}
 
 		entries = append(entries, receipt)

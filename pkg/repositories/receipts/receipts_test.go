@@ -3,6 +3,7 @@ package receipts
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestRecordAndList(t *testing.T) {
@@ -132,6 +133,59 @@ func TestPriceAndPaid(t *testing.T) {
 	}
 	if r.PaidAt == 0 {
 		t.Fatalf("paid_at lost after re-download")
+	}
+}
+
+func TestDueAt(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer store.Close() //nolint:errcheck
+
+	ctx := context.Background()
+	if err := store.Record(ctx, Receipt{Provider: "mts", Period: "06-2026", StorageKey: "06-2026/mts.pdf", SizeBytes: 100}); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	due := time.Date(2026, 7, 15, 0, 0, 0, 0, time.Local).Unix()
+	if err := store.SetDueAt(ctx, "mts", "06-2026", due); err != nil {
+		t.Fatalf("SetDueAt: %v", err)
+	}
+
+	got, err := store.List(ctx)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got) != 1 || got[0].DueAt != due {
+		t.Fatalf("due_at = %d, want %d", got[0].DueAt, due)
+	}
+
+	if err := store.MarkDueReminded(ctx, []Receipt{{Provider: "mts", Period: "06-2026"}}, 100); err != nil {
+		t.Fatalf("MarkDueReminded: %v", err)
+	}
+	got, err = store.List(ctx)
+	if err != nil {
+		t.Fatalf("List after remind: %v", err)
+	}
+	if got[0].DueRemindedAt != 100 {
+		t.Fatalf("due_reminded_at = %d, want 100", got[0].DueRemindedAt)
+	}
+
+	// A changed deadline clears the reminder stamp so it can fire again.
+	newDue := due + 86400
+	if err := store.SetDueAt(ctx, "mts", "06-2026", newDue); err != nil {
+		t.Fatalf("SetDueAt change: %v", err)
+	}
+	got, err = store.List(ctx)
+	if err != nil {
+		t.Fatalf("List after due change: %v", err)
+	}
+	if got[0].DueAt != newDue {
+		t.Fatalf("due_at = %d, want %d", got[0].DueAt, newDue)
+	}
+	if got[0].DueRemindedAt != 0 {
+		t.Fatalf("due_reminded_at = %d, want 0 after deadline change", got[0].DueRemindedAt)
 	}
 }
 

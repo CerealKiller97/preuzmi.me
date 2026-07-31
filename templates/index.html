@@ -5,7 +5,8 @@
 </head>
 
 <body class="h-full">
-<div x-data="receiptsPage" class="flex min-h-screen flex-col">
+<div x-data="receiptsPage" class="flex min-h-screen flex-col"
+     @keydown.escape.window="if (qrOpen) closeQR()">
   {{template "header" .}}
 
   <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
@@ -121,39 +122,27 @@
     <section x-show="!loading && filteredReceipts.length > 0"
              class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       <template x-for="(item, index) in filteredReceipts" :key="item.url">
-        <article class="card animate-fade-in-up flex flex-col p-5 transition-shadow hover:shadow-md"
+        <article class="card animate-fade-in-up flex h-full flex-col p-5 transition-shadow hover:shadow-md"
                  :style="`--stagger: ${index}`">
           <div class="flex items-center justify-between gap-2">
             <span class="badge badge-secondary shrink-0" x-text="item.provider.toUpperCase()"></span>
-              {{/* Colours cross-fade via .badge's transition; the pop only fires
-                   on an actual toggle, not on every re-render. */}}
-              <span class="badge shrink-0" :class="{ 'badge-success': isPaid(item), 'badge-warning': !isPaid(item), 'animate-pop': item.pulse }"
-                    :title="isProviderPaid(item) ? 'Plaćeno (provajder)' : (item.paid ? 'Plaćeno ' + formatDate(item.paid_at) : 'Još nije plaćeno')">
-                <svg x-show="isPaid(item)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="mr-1 h-3 w-3" :class="{ 'animate-check': item.pulse }">
-                  <path d="M20 6 9 17l-5-5" />
-                </svg>
-                <svg x-show="!isPaid(item)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="mr-1 h-3 w-3">
-                  <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
-                </svg>
-                <span x-text="isPaid(item) ? 'Plaćeno' : 'Neplaćeno'"></span>
-              </span>
+            {{/* Colours cross-fade via .badge's transition; the pop only fires
+                 on an actual toggle, not on every re-render. */}}
+            <span class="badge shrink-0" :class="{ 'badge-success': isPaid(item), 'badge-warning': !isPaid(item), 'animate-pop': item.pulse }"
+                  :title="isProviderPaid(item) ? 'Plaćeno (provajder)' : (item.paid ? 'Plaćeno ' + formatDate(item.paid_at) : 'Još nije plaćeno')">
+              <svg x-show="isPaid(item)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="mr-1 h-3 w-3" :class="{ 'animate-check': item.pulse }">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+              <svg x-show="!isPaid(item)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="mr-1 h-3 w-3">
+                <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+              </svg>
+              <span x-text="isPaid(item) ? 'Plaćeno' : 'Neplaćeno'"></span>
+            </span>
           </div>
 
-          <div class="mt-4 flex-1">
-            <div class="flex items-start justify-between gap-2">
-              <div class="text-2xl font-semibold tracking-tight"
-                   x-text="item.amount ? formatMoney(item.amount, item.currency) : '—'"></div>
-              {{/* Provider-confirmed payment: the user's self-marked paid state
-                   is backed by the provider reporting the receipt as paid. */}}
-              <span x-show="isVerified(item)" class="badge badge-success shrink-0"
-                    title="Provajder je potvrdio plaćanje">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1 h-3 w-3">
-                  <path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z" />
-                  <path d="m9 12 2 2 4-4" />
-                </svg>
-                <span>Verifikovano</span>
-              </span>
-            </div>
+          <div class="mt-4">
+            <div class="text-2xl font-semibold tracking-tight"
+                 x-text="item.amount ? formatMoney(item.amount, item.currency) : '—'"></div>
             <div class="mt-1 text-sm text-muted-foreground" x-text="item.period"></div>
           </div>
 
@@ -168,33 +157,170 @@
                   x-text="formatDate(item.downloaded_at || item.modified)"></span>
           </div>
 
-          {{/* Paid date: when the user marked the receipt paid here. */}}
-          <div x-show="item.paid_at > 0"
-               class="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+          {{/* Always in the layout (invisible when unpaid) so mark-as-paid
+               does not change card height. Verified state is a success badge
+               here, not a second header badge. */}}
+          <div class="mt-2 flex min-h-5 items-center gap-1.5 text-xs text-muted-foreground"
+               :class="{ 'invisible': !(isPaid(item) && (item.paid_at > 0 || item.confirmed_at > 0)) }"
+               :aria-hidden="!(isPaid(item) && (item.paid_at > 0 || item.confirmed_at > 0))">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5 shrink-0">
               <rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18M8 2v4M16 2v4" /><path d="m9 16 2 2 4-4" />
             </svg>
-            <span>Plaćeno <span x-text="formatDate(item.paid_at)"></span></span>
+            <span class="min-w-0 truncate">Plaćeno <span x-text="formatDate(item.paid_at || item.confirmed_at)"></span></span>
+            <span class="badge badge-success ml-auto shrink-0"
+                  title="Provajder je potvrdio plaćanje"
+                  :class="{ 'invisible': !isVerified(item) }"
+                  :aria-hidden="!isVerified(item)">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1 h-3 w-3">
+                <path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z" />
+                <path d="m9 12 2 2 4-4" />
+              </svg>
+              <span>Verifikovano</span>
+            </span>
           </div>
 
-          <div class="mt-4 flex flex-col gap-2">
+          <div class="mt-auto flex flex-col gap-2 pt-4">
+            {{/* Always reserve the QR row; hide visually when paid so height
+                stays stable after Označi kao plaćeno. */}}
+            <button type="button" class="btn btn-outline w-full"
+                    :class="{ 'invisible pointer-events-none': isPaid(item) }"
+                    :tabindex="isPaid(item) ? -1 : 0"
+                    :aria-hidden="isPaid(item)"
+                    :disabled="isPaid(item)"
+                    @click="openQR(item)">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1.5 h-4 w-4 shrink-0">
+                <rect width="5" height="5" x="3" y="3" rx="1" /><rect width="5" height="5" x="16" y="3" rx="1" /><rect width="5" height="5" x="3" y="16" rx="1" /><path d="M21 16h-3a2 2 0 0 0-2 2v3M21 21v.01M12 7v3a2 2 0 0 1-2 2H7M3 12h.01M12 3h.01M12 16v.01M16 12h1M21 12v.01M12 21v-1" />
+              </svg>
+              <span>Plati skeniranjem (QR)</span>
+            </button>
+
             <a :href="item.url" target="_blank" rel="noopener" class="btn btn-primary w-full">
               Pogledaj račun
             </a>
-            <button type="button" class="btn btn-outline w-full"
-                    :disabled="saving.includes(item.url) || isProviderPaid(item)"
-                    :title="isProviderPaid(item) ? 'Provajder je označio račun kao plaćen' : ''"
-                    @click="togglePaid(item)">
-              <span x-show="!saving.includes(item.url) && isProviderPaid(item)">Plaćeno</span>
-              <span x-show="!saving.includes(item.url) && !isProviderPaid(item)"
-                    x-text="item.paid ? 'Označi kao neplaćeno' : 'Označi kao plaćeno'"></span>
-              <span x-show="saving.includes(item.url)">Čuvanje...</span>
-            </button>
           </div>
         </article>
       </template>
     </section>
   </main>
+
+  <template x-teleport="body">
+    <div class="modal-backdrop" x-show="qrOpen" x-cloak
+         x-transition.opacity.duration.200ms
+         @click.self="closeQR()"
+         role="dialog" aria-modal="true"
+         aria-labelledby="qr-modal-title">
+      <div class="modal-panel max-w-xl"
+           x-show="qrOpen"
+           x-transition:enter="transition ease-out duration-200"
+           x-transition:enter-start="opacity-0 translate-y-2"
+           x-transition:enter-end="opacity-100 translate-y-0"
+           @click.stop>
+        <div class="flex shrink-0 items-start justify-between gap-3 border-b px-5 py-4">
+          <div class="min-w-0">
+            <h3 id="qr-modal-title" class="text-base font-semibold tracking-tight">
+              Plati skeniranjem
+            </h3>
+            <p class="mt-0.5 truncate text-sm text-muted-foreground"
+               x-text="qrItem ? (qrItem.provider.toUpperCase() + ' · ' + qrItem.period) : ''"></p>
+          </div>
+          <button type="button" class="btn btn-ghost btn-icon shrink-0" @click="closeQR()" aria-label="Zatvori">
+            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {{/* Scrollable body — header/footer stay pinned so actions stay reachable. */}}
+        <div class="min-h-0 flex-1 overflow-y-auto">
+          <div class="px-5 py-4">
+            {{/* Receipt summary — amount first, then file / download meta. */}}
+            <div x-show="qrItem" class="space-y-2.5 text-sm">
+              <div class="flex items-baseline justify-between gap-3">
+                <span class="text-muted-foreground">Iznos</span>
+                <span class="text-lg font-semibold tracking-tight"
+                      x-text="qrItem && qrItem.amount ? formatMoney(qrItem.amount, qrItem.currency) : '—'"></span>
+              </div>
+              <div class="flex items-baseline justify-between gap-3">
+                <span class="text-muted-foreground">Period</span>
+                <span class="font-medium" x-text="qrItem ? qrItem.period : ''"></span>
+              </div>
+              <div class="flex items-baseline justify-between gap-3">
+                <span class="shrink-0 text-muted-foreground">Fajl</span>
+                <span class="truncate text-right font-medium"
+                      x-text="qrItem ? (qrItem.filename + (qrItem.size > 0 ? ' · ' + formatSize(qrItem.size) : '')) : ''"></span>
+              </div>
+              <div class="flex items-baseline justify-between gap-3">
+                <span class="text-muted-foreground">Preuzeto</span>
+                <span class="font-medium"
+                      x-text="qrItem ? formatDate(qrItem.downloaded_at || qrItem.modified) : ''"></span>
+              </div>
+            </div>
+
+            {{/* IPS payment fields decoded from the QR payload (when present). */}}
+            <div x-show="qrIPS && (qrIPS.recipient || qrIPS.account || qrIPS.reference)"
+                 class="mt-4 space-y-2.5 border-t pt-4 text-sm">
+              <div x-show="qrIPS && qrIPS.recipient" class="flex items-start justify-between gap-3">
+                <span class="shrink-0 text-muted-foreground">Primalac</span>
+                <span class="text-right font-medium" x-text="qrIPS ? qrIPS.recipient : ''"></span>
+              </div>
+              <div x-show="qrIPS && qrIPS.account" class="flex items-start justify-between gap-3">
+                <span class="shrink-0 text-muted-foreground">Račun</span>
+                <span class="break-all text-right font-medium font-mono text-xs"
+                      x-text="qrIPS ? qrIPS.account : ''"></span>
+              </div>
+              <div x-show="qrIPS && qrIPS.reference" class="flex items-start justify-between gap-3">
+                <span class="shrink-0 text-muted-foreground">Poziv na broj</span>
+                <span class="break-all text-right font-medium font-mono text-xs"
+                      x-text="qrIPS ? qrIPS.reference : ''"></span>
+              </div>
+              <div x-show="qrIPS && qrIPS.code" class="flex items-start justify-between gap-3">
+                <span class="shrink-0 text-muted-foreground">Šifra plaćanja</span>
+                <span class="font-medium font-mono text-xs" x-text="qrIPS ? qrIPS.code : ''"></span>
+              </div>
+              <div x-show="qrIPS && qrIPS.purpose" class="flex items-start justify-between gap-3">
+                <span class="shrink-0 text-muted-foreground">Svrha</span>
+                <span class="text-right font-medium" x-text="qrIPS ? qrIPS.purpose : ''"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex flex-col items-center gap-3 border-t px-5 py-5">
+            <template x-if="qrOpen && qrItem && !qrMissing">
+              <img :src="qrImgUrl(qrItem)" @error="qrMissing = true"
+                   alt="NBS IPS QR kôd za plaćanje" width="240" height="240"
+                   class="h-60 w-60 rounded-md bg-white p-2" />
+            </template>
+
+            <p x-show="!qrMissing" class="text-center text-sm text-muted-foreground">
+              Skenirajte kôd u mobilnoj aplikaciji banke da platite ovaj račun.
+            </p>
+            <p x-show="qrMissing" class="text-center text-sm text-muted-foreground">
+              Ovaj račun nema čitljiv QR kôd za plaćanje.
+            </p>
+
+            <button type="button" x-show="!qrMissing" class="btn btn-ghost text-xs" @click="copyIPS()">
+              <span x-show="!qrCopied">Kopiraj IPS podatke</span>
+              <span x-show="qrCopied">Kopirano ✓</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex shrink-0 flex-col gap-2 border-t px-5 py-4 sm:flex-row sm:justify-end">
+          <button type="button" class="btn btn-outline h-9 px-4 text-sm order-2 sm:order-1"
+                  @click="closeQR()">
+            Zatvori
+          </button>
+          <button type="button" class="btn btn-primary h-9 px-4 text-sm order-1 sm:order-2"
+                  :disabled="!qrItem || saving.includes(qrItem.url) || isPaid(qrItem)"
+                  @click="markPaidAndClose()">
+            <span x-show="qrItem && !saving.includes(qrItem.url)">Označi kao plaćeno</span>
+            <span x-show="qrItem && saving.includes(qrItem.url)">Čuvanje...</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </template>
 </div>
 
 <script src="/assets/js/app.js"></script>

@@ -57,6 +57,10 @@ func Routes(c *container.Container) {
 	http.HandleFunc("GET /stats", statsHandler(c.GetConfig(), c.GetVersion()))
 	http.HandleFunc("GET /settings", settingsHandler(c.GetConfig(), c.GetVersion(), c.GetNotifier()))
 	http.HandleFunc("GET /receipt/{period}/{provider}", receiptHandler(c.GetStorage()))
+	// The IPS payment QR lifted from the bill PDF: a rendered PNG for the card,
+	// and the raw payload as a copy/deep-link fallback for phone-only users.
+	http.HandleFunc("GET /receipt/{period}/{provider}/qr.png", receiptQRImageHandler(c.GetStorage(), c.GetReceiptsStore))
+	http.HandleFunc("GET /receipt/{period}/{provider}/qr.txt", receiptQRPayloadHandler(c.GetStorage(), c.GetReceiptsStore))
 	// API endpoints
 	http.HandleFunc("GET /api/providers", providersAPIHandler(c.GetConfig()))
 	http.HandleFunc("GET /api/receipts", receiptsAPIHandler(c.GetConfig(), c.GetReceiptsStore))

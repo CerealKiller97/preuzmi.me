@@ -329,7 +329,7 @@
   }
 
   .modal-panel {
-    @apply flex max-h-[min(90vh,40rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl border
+    @apply flex max-h-[min(92vh,48rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl border
            bg-card text-card-foreground shadow-2xl;
   }
 

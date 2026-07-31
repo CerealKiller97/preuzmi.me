@@ -31,7 +31,12 @@ config.json
 # Downloaded-receipt output dir at the repo root only — not the
 # pkg/services/receipts source package.
 /receipts/
+# Real utility-bill PDFs used as local IPS-QR extraction fixtures. They carry
+# personal data (name, address, account number), so they stay out of git; the
+# tests that use them skip when the files are absent.
+/pkg/services/ipsqr/testdata/
 node_modules
 tmp
 .idea
 .DS_Store
+plans

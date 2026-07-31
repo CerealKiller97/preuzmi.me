@@ -137,6 +137,14 @@ VALUES (?, ?, ?, 0, 0, ?, 0, ?)
 ON CONFLICT(provider, period) DO UPDATE SET
 	paid_at = excluded.paid_at;`
 
+	// selectIPSQRQuery reads the cached IPS QR payload and whether extraction has
+	// already been attempted for a (provider, period).
+	selectIPSQRQuery = `SELECT ips_qr, ips_checked FROM receipts WHERE provider = ? AND period = ?;`
+
+	// setIPSQRQuery stores the decoded IPS QR payload (possibly empty) and marks
+	// extraction as done, so a bill with no QR is not re-parsed on every render.
+	setIPSQRQuery = `UPDATE receipts SET ips_qr = ?, ips_checked = 1 WHERE provider = ? AND period = ?;`
+
 	// listReceiptsQuery returns every recorded receipt, newest download first.
 	listReceiptsQuery = `
 SELECT id, provider, period, storage_key, size_bytes, price, status, downloaded_at, paid_at, confirmed_at
@@ -216,6 +224,15 @@ func migrate(db *sql.DB, dir string) error {
 	}
 	if err := ensureColumn(db, "receipts", "confirmed_at", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return fmt.Errorf("receipts: adding confirmed_at: %w", err)
+	}
+
+	// Ensure the IPS QR cache columns exist on databases created before the
+	// payment-QR feature was added.
+	if err := ensureColumn(db, "receipts", "ips_qr", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return fmt.Errorf("receipts: adding ips_qr: %w", err)
+	}
+	if err := ensureColumn(db, "receipts", "ips_checked", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return fmt.Errorf("receipts: adding ips_checked: %w", err)
 	}
 
 	// Fold any earlier separate paid-state stores back into the receipts row.
@@ -643,6 +660,34 @@ func (s *Repository) MarkPaid(ctx context.Context, provider, period string, paid
 	}
 
 	return at, nil
+}
+
+// IPSQR returns the cached NBS IPS QR payload for a receipt and whether
+// extraction has already been attempted. checked is true once we have tried to
+// parse the PDF, even if it carried no QR (payload is then ""), so callers can
+// avoid re-parsing a bill that has none.
+func (s *Repository) IPSQR(ctx context.Context, provider, period string) (payload string, checked bool, err error) {
+	period = slashPeriod(period)
+
+	var checkedInt int64
+	err = s.db.QueryRowContext(ctx, selectIPSQRQuery, provider, period).Scan(&payload, &checkedInt)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+
+	return payload, checkedInt != 0, nil
+}
+
+// SetIPSQR caches the decoded IPS QR payload for a receipt (empty when the bill
+// has none) and marks extraction as done. It is a no-op when no receipt row
+// exists for the (provider, period) yet.
+func (s *Repository) SetIPSQR(ctx context.Context, provider, period, payload string) error {
+	_, err := s.db.ExecContext(ctx, setIPSQRQuery, payload, provider, slashPeriod(period))
+
+	return err
 }
 
 // List returns every recorded receipt, newest download first.

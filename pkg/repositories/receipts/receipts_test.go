@@ -2,6 +2,8 @@ package receipts
 
 import (
 	"context"
+	"database/sql"
+	"path/filepath"
 	"testing"
 )
 
@@ -405,5 +407,112 @@ func TestParseKey(t *testing.T) {
 	provider, period := parseKey("07-2026/eps.pdf")
 	if provider != "eps" || period != "07-2026" {
 		t.Fatalf("parseKey = (%q, %q), want (eps, 07-2026)", provider, period)
+	}
+}
+
+// TestMigrateAddsIPSQRColumnsFromV110 proves a receipts.db created by v1.1.0
+// (no ips_qr / ips_checked) upgrades cleanly on open: existing rows survive and
+// the new columns are usable for the payment-QR cache.
+func TestMigrateAddsIPSQRColumnsFromV110(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, fileName)
+
+	// Build a v1.1.0-shaped database without going through New/migrate.
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatalf("open legacy db: %v", err)
+	}
+	const legacySchema = `
+CREATE TABLE receipts (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider      TEXT    NOT NULL,
+    period        TEXT    NOT NULL,
+    storage_key   TEXT    NOT NULL,
+    size_bytes    INTEGER NOT NULL,
+    price         REAL    NOT NULL DEFAULT 0.00,
+    status        TEXT    NOT NULL DEFAULT 'neplaćeno',
+    downloaded_at INTEGER NOT NULL,
+    paid_at       INTEGER NOT NULL DEFAULT 0,
+    confirmed_at  INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (provider, period)
+);`
+	if _, err := db.Exec(legacySchema); err != nil {
+		_ = db.Close()
+		t.Fatalf("create legacy schema: %v", err)
+	}
+	if _, err := db.Exec(`
+INSERT INTO receipts (provider, period, storage_key, size_bytes, price, status, downloaded_at, paid_at, confirmed_at)
+VALUES ('eps', '06/2026', '06-2026/eps.pdf', 1234, 2365.0, 'neplaćeno', 1720000000, 0, 0)`); err != nil {
+		_ = db.Close()
+		t.Fatalf("insert legacy row: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close legacy db: %v", err)
+	}
+
+	store, err := New(dir)
+	if err != nil {
+		t.Fatalf("New (upgrade): %v", err)
+	}
+	defer store.Close() //nolint:errcheck
+
+	for _, col := range []string{"ips_qr", "ips_checked"} {
+		has, err := hasColumn(store.db, "receipts", col)
+		if err != nil {
+			t.Fatalf("hasColumn(%s): %v", col, err)
+		}
+		if !has {
+			t.Fatalf("expected column %s after upgrade from v1.1.0", col)
+		}
+	}
+
+	ctx := context.Background()
+	got, err := store.List(ctx)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("List len = %d, want 1 (legacy row preserved)", len(got))
+	}
+	if got[0].Provider != "eps" || got[0].Period != "06/2026" || got[0].Price != 2365.0 {
+		t.Fatalf("legacy row mutated: %+v", got[0])
+	}
+
+	payload, checked, err := store.IPSQR(ctx, "eps", "06/2026")
+	if err != nil {
+		t.Fatalf("IPSQR before set: %v", err)
+	}
+	if payload != "" || checked {
+		t.Fatalf("IPSQR = (%q, %v), want empty/unchecked defaults", payload, checked)
+	}
+
+	const wantPayload = "K:PR|V:01|C:1|R:160000000000000000|N:EPS|I:RSD2365,00|RO:97123"
+	if err := store.SetIPSQR(ctx, "eps", "06/2026", wantPayload); err != nil {
+		t.Fatalf("SetIPSQR: %v", err)
+	}
+	payload, checked, err = store.IPSQR(ctx, "eps", "06/2026")
+	if err != nil {
+		t.Fatalf("IPSQR after set: %v", err)
+	}
+	if !checked || payload != wantPayload {
+		t.Fatalf("IPSQR = (%q, %v), want (%q, true)", payload, checked, wantPayload)
+	}
+
+	// Re-open: migration must stay idempotent and keep the cached payload.
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	store, err = New(dir)
+	if err != nil {
+		t.Fatalf("New (re-open): %v", err)
+	}
+	defer store.Close() //nolint:errcheck
+
+	payload, checked, err = store.IPSQR(ctx, "eps", "06/2026")
+	if err != nil {
+		t.Fatalf("IPSQR after re-open: %v", err)
+	}
+	if !checked || payload != wantPayload {
+		t.Fatalf("IPSQR after re-open = (%q, %v), want (%q, true)", payload, checked, wantPayload)
 	}
 }

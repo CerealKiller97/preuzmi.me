@@ -226,13 +226,9 @@ func migrate(db *sql.DB, dir string) error {
 		return fmt.Errorf("receipts: adding confirmed_at: %w", err)
 	}
 
-	// Ensure the IPS QR cache columns exist on databases created before the
-	// payment-QR feature was added.
-	if err := ensureColumn(db, "receipts", "ips_qr", "TEXT NOT NULL DEFAULT ''"); err != nil {
-		return fmt.Errorf("receipts: adding ips_qr: %w", err)
-	}
-	if err := ensureColumn(db, "receipts", "ips_checked", "INTEGER NOT NULL DEFAULT 0"); err != nil {
-		return fmt.Errorf("receipts: adding ips_checked: %w", err)
+	// Bring pre-QR databases forward with the IPS payment-QR cache columns.
+	if err := migrateAddIPSQRColumns(db); err != nil {
+		return fmt.Errorf("receipts: migrating IPS QR columns: %w", err)
 	}
 
 	// Fold any earlier separate paid-state stores back into the receipts row.
@@ -251,6 +247,21 @@ func migrate(db *sql.DB, dir string) error {
 		StatusPaid,
 	); err != nil {
 		return fmt.Errorf("receipts: backfilling confirmed_at: %w", err)
+	}
+
+	return nil
+}
+
+// migrateAddIPSQRColumns adds the IPS payment-QR cache columns to databases
+// created before that feature (e.g. v1.1.0). Idempotent: a fresh install already
+// has them from schema.sql, so this is a no-op there. Existing receipt rows keep
+// their data; new columns default to empty / not-yet-checked.
+func migrateAddIPSQRColumns(db *sql.DB) error {
+	if err := ensureColumn(db, "receipts", "ips_qr", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return fmt.Errorf("adding ips_qr: %w", err)
+	}
+	if err := ensureColumn(db, "receipts", "ips_checked", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return fmt.Errorf("adding ips_checked: %w", err)
 	}
 
 	return nil

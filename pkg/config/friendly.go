@@ -25,6 +25,8 @@ func FriendlyError(err error) string {
 		return "Dan za osvežavanje mora biti između 1 i 31."
 	case strings.Contains(msg, "invalid log_level"):
 		return "Nivo logovanja nije ispravan (debug, info, warn, error…)."
+	case strings.Contains(msg, "invalid lang"):
+		return "Pismo mora biti „latin“ ili „cyrillic“."
 	case strings.Contains(msg, "notifications.mode"):
 		return "Režim obaveštenja mora biti off, per_receipt ili all_done."
 	case strings.Contains(msg, "notifications.driver"):

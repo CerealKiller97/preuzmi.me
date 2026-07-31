@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="sr" class="h-full">
+<html lang="{{ .HTMLLang }}" data-lang="{{ .Lang }}" class="h-full">
 <head>
   {{template "head" .}}
 </head>
@@ -10,9 +10,9 @@
 
   <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
     <div class="animate-fade-in-up flex flex-col gap-1">
-      <h1 class="text-2xl font-semibold tracking-tight">Računi</h1>
+      <h1 class="text-2xl font-semibold tracking-tight">{{t "Računi"}}</h1>
       <p class="text-sm text-muted-foreground">
-        Svi preuzeti računi, grupisani po provajderu i periodu.
+        {{t "Svi preuzeti računi, grupisani po provajderu i periodu."}}
       </p>
     </div>
 
@@ -20,7 +20,7 @@
     <section class="animate-fade-in-up mt-6 flex flex-col gap-4" style="--stagger: 1">
       <div class="flex flex-wrap items-end gap-3">
         <div class="flex min-w-[240px] flex-1 flex-col gap-1.5">
-          <label for="search" class="text-sm font-medium leading-none">Pretraga</label>
+          <label for="search" class="text-sm font-medium leading-none">{{t "Pretraga"}}</label>
           <div class="relative">
             <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
@@ -28,15 +28,15 @@
               </svg>
             </span>
             <input id="search" type="text" x-model.debounce.300ms="query" class="input pl-9"
-                   placeholder="Provajder, period, naziv fajla..." />
+                   placeholder="{{t "Provajder, period, naziv fajla..."}}" />
           </div>
         </div>
 
         <div class="flex w-full flex-col gap-1.5 sm:w-44">
-          <label for="period" class="text-sm font-medium leading-none">Period</label>
+          <label for="period" class="text-sm font-medium leading-none">{{t "Period"}}</label>
           <div class="relative">
             <select id="period" x-model="selectedPeriod" class="input appearance-none pr-9">
-              <option value="">Svi periodi</option>
+              <option value="">{{t "Svi periodi"}}</option>
               <template x-for="per in periods" :key="per">
                 <option :value="per" x-text="per"></option>
               </template>
@@ -53,12 +53,12 @@
       <div class="flex flex-wrap items-center gap-2">
         <button type="button" @click="clearProviders()"
                 :class="selectedProviders.length === 0 ? 'pill-active' : 'pill-inactive'" class="pill">
-          Svi provajderi
+          {{t "Svi provajderi"}}
         </button>
         <template x-for="p in providers" :key="p">
           <button type="button" @click="toggleProvider(p)"
                   :class="selectedProviders.includes(p) ? 'pill-active' : 'pill-inactive'" class="pill">
-            <span x-text="p.toUpperCase()"></span>
+            <span x-text="providerLabel(p)"></span>
           </button>
         </template>
 
@@ -75,15 +75,15 @@
 
     <div class="mt-6 flex items-center justify-between border-t pt-4 text-sm text-muted-foreground">
       <span>
-        Prikazano <span class="font-medium text-foreground" x-text="filteredReceipts.length"></span>
-        od <span class="font-medium text-foreground" x-text="receipts.length"></span> računa
+        {{t "Prikazano"}} <span class="font-medium text-foreground" x-text="filteredReceipts.length"></span>
+        {{t "od"}} <span class="font-medium text-foreground" x-text="receipts.length"></span> {{t "računa"}}
         <span x-show="unpaidCount > 0">
-          · <span class="font-medium text-warning" x-text="unpaidCount"></span> neplaćeno
+          · <span class="font-medium text-warning" x-text="unpaidCount"></span> {{t "neplaćeno"}}
         </span>
       </span>
       <button type="button" x-show="hasActiveFilters" @click="resetFilters()"
               class="btn btn-ghost h-8 px-2 text-xs">
-        Poništi filtere
+        {{t "Poništi filtere"}}
       </button>
     </div>
 
@@ -107,12 +107,12 @@
             <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /><path d="M14 2v5h5" />
           </svg>
         </div>
-        <h3 class="mt-4 text-sm font-semibold">Nema računa</h3>
+        <h3 class="mt-4 text-sm font-semibold">{{t "Nema računa"}}</h3>
         <p class="mt-1 max-w-sm text-sm text-muted-foreground">
-          Nijedan račun ne odgovara izabranim filterima. Pokušajte da promenite pretragu ili period.
+          {{t "Nijedan račun ne odgovara izabranim filterima. Pokušajte da promenite pretragu ili period."}}
         </p>
         <button type="button" x-show="hasActiveFilters" @click="resetFilters()" class="btn btn-outline mt-4">
-          Poništi filtere
+          {{t "Poništi filtere"}}
         </button>
       </div>
     </section>
@@ -124,18 +124,18 @@
         <article class="card animate-fade-in-up flex flex-col p-5 transition-shadow hover:shadow-md"
                  :style="`--stagger: ${index}`">
           <div class="flex items-center justify-between gap-2">
-            <span class="badge badge-secondary shrink-0" x-text="item.provider.toUpperCase()"></span>
+            <span class="badge badge-secondary shrink-0" x-text="providerLabel(item.provider)"></span>
               {{/* Colours cross-fade via .badge's transition; the pop only fires
                    on an actual toggle, not on every re-render. */}}
               <span class="badge shrink-0" :class="{ 'badge-success': isPaid(item), 'badge-warning': !isPaid(item), 'animate-pop': item.pulse }"
-                    :title="isProviderPaid(item) ? 'Plaćeno (provajder)' : (item.paid ? 'Plaćeno ' + formatDate(item.paid_at) : 'Još nije plaćeno')">
+                    :title="isProviderPaid(item) ? '{{t "Plaćeno (provajder)"}}' : (item.paid ? '{{t "Plaćeno"}} ' + formatDate(item.paid_at) : '{{t "Još nije plaćeno"}}')">
                 <svg x-show="isPaid(item)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="mr-1 h-3 w-3" :class="{ 'animate-check': item.pulse }">
                   <path d="M20 6 9 17l-5-5" />
                 </svg>
                 <svg x-show="!isPaid(item)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="mr-1 h-3 w-3">
                   <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
                 </svg>
-                <span x-text="isPaid(item) ? 'Plaćeno' : 'Neplaćeno'"></span>
+                <span x-text="isPaid(item) ? '{{t "Plaćeno"}}' : '{{t "Neplaćeno"}}'"></span>
               </span>
           </div>
 
@@ -146,12 +146,12 @@
               {{/* Provider-confirmed payment: the user's self-marked paid state
                    is backed by the provider reporting the receipt as paid. */}}
               <span x-show="isVerified(item)" class="badge badge-success shrink-0"
-                    title="Provajder je potvrdio plaćanje">
+                    title="{{t "Provajder je potvrdio plaćanje"}}">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1 h-3 w-3">
                   <path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z" />
                   <path d="m9 12 2 2 4-4" />
                 </svg>
-                <span>Verifikovano</span>
+                <span>{{t "Verifikovano"}}</span>
               </span>
             </div>
             <div class="mt-1 text-sm text-muted-foreground" x-text="item.period"></div>
@@ -164,7 +164,7 @@
             <span class="truncate" x-text="item.filename"></span>
             <span x-show="item.size > 0" class="shrink-0" x-text="'· ' + formatSize(item.size)"></span>
             <span class="ml-auto shrink-0 pl-2"
-                  title="Datum preuzimanja"
+                  title="{{t "Datum preuzimanja"}}"
                   x-text="formatDate(item.downloaded_at || item.modified)"></span>
           </div>
 
@@ -174,21 +174,21 @@
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5 shrink-0">
               <rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18M8 2v4M16 2v4" /><path d="m9 16 2 2 4-4" />
             </svg>
-            <span>Plaćeno <span x-text="formatDate(item.paid_at)"></span></span>
+            <span>{{t "Plaćeno"}} <span x-text="formatDate(item.paid_at)"></span></span>
           </div>
 
           <div class="mt-4 flex flex-col gap-2">
             <a :href="item.url" target="_blank" rel="noopener" class="btn btn-primary w-full">
-              Pogledaj račun
+              {{t "Pogledaj račun"}}
             </a>
             <button type="button" class="btn btn-outline w-full"
                     :disabled="saving.includes(item.url) || isProviderPaid(item)"
-                    :title="isProviderPaid(item) ? 'Provajder je označio račun kao plaćen' : ''"
+                    :title="isProviderPaid(item) ? '{{t "Provajder je označio račun kao plaćen"}}' : ''"
                     @click="togglePaid(item)">
-              <span x-show="!saving.includes(item.url) && isProviderPaid(item)">Plaćeno</span>
+              <span x-show="!saving.includes(item.url) && isProviderPaid(item)">{{t "Plaćeno"}}</span>
               <span x-show="!saving.includes(item.url) && !isProviderPaid(item)"
-                    x-text="item.paid ? 'Označi kao neplaćeno' : 'Označi kao plaćeno'"></span>
-              <span x-show="saving.includes(item.url)">Čuvanje...</span>
+                    x-text="item.paid ? '{{t "Označi kao neplaćeno"}}' : '{{t "Označi kao plaćeno"}}'"></span>
+              <span x-show="saving.includes(item.url)">{{t "Čuvanje..."}}</span>
             </button>
           </div>
         </article>

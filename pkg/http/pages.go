@@ -3,7 +3,6 @@ package http
 import (
 	"errors"
 	"fmt"
-	"html/template"
 	"net/http"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
@@ -21,6 +20,12 @@ type PageData struct {
 	BaseURL     string
 	Version     string
 	Pairs       []string
+	// Lang is the config.json script: latin | cyrillic.
+	Lang string
+	// HTMLLang is the BCP 47 tag for <html lang> (sr-Latn / sr-Cyrl).
+	HTMLLang string
+	// Locale is the Intl locale (sr-Latn-RS / sr-Cyrl-RS).
+	Locale string
 }
 
 // baseURL reconstructs the absolute origin of the current request, honouring
@@ -51,7 +56,8 @@ func indexHandler() Handler {
 
 func dashboardHandler(cfg *config.Config, version string) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
-		template, err := template.ParseFiles(
+		tmpl, err := parseTemplates(
+			cfg.Lang,
 			"./templates/index.html",
 			"./templates/partials.html",
 		)
@@ -78,11 +84,9 @@ func dashboardHandler(cfg *config.Config, version string) Handler {
 			BaseURL:     baseURL(r),
 			Version:     version,
 		}
+		withPageScript(&viewModel, cfg.Lang)
 
-		if err := template.Execute(w, viewModel); err != nil {
-			log.Err(err).Msg("Error executing template")
-			return
-		}
+		renderTemplate(w, tmpl, viewModel)
 	}
 }
 
@@ -146,7 +150,8 @@ type StatsPageData = PageData
 
 func statsHandler(cfg *config.Config, version string) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tmpl, err := template.ParseFiles(
+		tmpl, err := parseTemplates(
+			cfg.Lang,
 			"./templates/stats.html",
 			"./templates/partials.html",
 		)
@@ -172,10 +177,7 @@ func statsHandler(cfg *config.Config, version string) Handler {
 			BaseURL:     baseURL(r),
 			Version:     version,
 		}
-		if err := tmpl.Execute(w, viewModel); err != nil {
-			log.Err(err).Msg("Error executing stats template")
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
+		withPageScript(&viewModel, cfg.Lang)
+		renderTemplate(w, tmpl, viewModel)
 	}
 }

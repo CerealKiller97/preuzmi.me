@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
+	"github.com/CerealKiller97/preuzmi.me/pkg/script"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/refresh"
 	"github.com/rs/zerolog"
 )
@@ -33,15 +34,22 @@ type Service struct {
 	log    zerolog.Logger
 	sender Sender
 	cfg    config.Notifications
+	lang   string
 }
 
 // New builds a Service from config. When mode is off, sender may still be set
 // so Test works against the configured driver.
 func New(cfg config.Notifications, sender Sender, log zerolog.Logger) *Service {
+	return NewWithLang(cfg, sender, log, config.LangLatin)
+}
+
+// NewWithLang is like New but applies the given Serbian script to message text.
+func NewWithLang(cfg config.Notifications, sender Sender, log zerolog.Logger, lang string) *Service {
 	return &Service{
 		cfg:    cfg,
 		sender: sender,
 		log:    log,
+		lang:   lang,
 	}
 }
 
@@ -58,7 +66,7 @@ func NewFromConfig(cfg *config.Config, log zerolog.Logger) (*Service, error) {
 		return nil, fmt.Errorf("notifications are enabled but driver %q is not configured", n.Driver)
 	}
 
-	return New(n, sender, log), nil
+	return NewWithLang(n, sender, log, cfg.Lang), nil
 }
 
 func buildSender(n config.Notifications) (Sender, error) {
@@ -110,14 +118,15 @@ func (s *Service) Test() error {
 
 // send delivers one message through the configured driver. The message's emoji
 // is prepended to the subject to make notifications scannable, for both Telegram
-// chats and email inboxes.
+// chats and email inboxes. Subject and body are transliterated when lang is
+// cyrillic so Telegram and SMTP stay in sync with the UI script.
 func (s *Service) send(m Message) error {
-	subject := m.Subject
+	subject := script.ApplyReplacing(s.lang, m.Subject, m.Repl)
 	if m.Emoji != "" {
 		subject = m.Emoji + " " + subject
 	}
 
-	return s.sender.Send(subject, m.Body)
+	return s.sender.Send(subject, script.ApplyReplacing(s.lang, m.Body, m.Repl))
 }
 
 // HandleResults sends the configured notifications for a finished refresh.
@@ -150,12 +159,59 @@ const (
 	emojiTest    = "🔔" // manual test probe
 )
 
+// providerNames overrides the Latin display name for provider keys whose plain
+// uppercased form would read wrong: the Serbian-word providers need an explicit
+// "E-" spelling so they render as "E-SANDUČE" / "E-UPRAVNIK". Providers not
+// listed here use the uppercased key.
+var providerNames = map[string]string{
+	"esanduce":  "E-SANDUČE",
+	"eupravnik": "E-UPRAVNIK",
+}
+
+// providerCyrillic pins the Cyrillic form for providers whose name does not
+// simply transliterate: a foreign brand kept in Latin (A1 → A1) or a custom
+// spelling (Yettel → ЈЕТЕЛ, since transliterating "YETTEL" mangles the Y). Every
+// other provider transliterates normally, including Serbian acronyms (MTS → МТС,
+// EPS → ЕПС).
+var providerCyrillic = map[string]string{
+	"a1":     "A1",
+	"yettel": "ЈЕТЕЛ",
+}
+
+// displayName returns the Latin display name for a provider key: an explicit
+// override, or the uppercased key otherwise. send transliterates it, except for
+// the fixed Cyrillic forms in providerCyrillic (see addRepl / Message.Repl).
+func displayName(provider string) string {
+	if name, ok := providerNames[strings.ToLower(provider)]; ok {
+		return name
+	}
+	return strings.ToUpper(provider)
+}
+
+// addRepl records the Latin→Cyrillic substitution for a provider whose Cyrillic
+// name is fixed (providerCyrillic). Providers that transliterate normally add
+// nothing and leave repl untouched.
+func addRepl(repl map[string]string, provider, name string) map[string]string {
+	c, ok := providerCyrillic[strings.ToLower(provider)]
+	if !ok {
+		return repl
+	}
+	if repl == nil {
+		repl = make(map[string]string, 1)
+	}
+	repl[name] = c
+	return repl
+}
+
 // Message is one outbound notification. Emoji, when set, is prepended to the
 // subject for Telegram deliveries only.
 type Message struct {
 	Emoji   string
 	Subject string
 	Body    string
+	// Repl maps a Latin provider name to its fixed Cyrillic form, applied when
+	// the message is transliterated (see providerCyrillic).
+	Repl map[string]string
 }
 
 // Messages builds the outbound set for the given mode and results without
@@ -174,11 +230,12 @@ func Messages(cfg config.Notifications, results []refresh.Result) []Message {
 			if !r.OK || !r.New {
 				continue
 			}
-			name := strings.ToUpper(r.Provider)
+			name := displayName(r.Provider)
 			out = append(out, Message{
 				Emoji:   emojiReceipt,
 				Subject: fmt.Sprintf("preuzmi.me: račun %s preuzet", name),
 				Body:    perReceiptBody(name, r),
+				Repl:    addRepl(nil, r.Provider, name),
 			})
 		}
 		return out
@@ -191,8 +248,11 @@ func Messages(cfg config.Notifications, results []refresh.Result) []Message {
 			return nil
 		}
 		names := make([]string, 0, len(results))
+		var repl map[string]string
 		for _, r := range results {
-			names = append(names, strings.ToUpper(r.Provider))
+			name := displayName(r.Provider)
+			names = append(names, name)
+			repl = addRepl(repl, r.Provider, name)
 		}
 		return []Message{{
 			Emoji:   emojiAllDone,
@@ -201,6 +261,7 @@ func Messages(cfg config.Notifications, results []refresh.Result) []Message {
 				"Svi konfigurisani provajderi su uspešno preuzeti: %s.\n",
 				strings.Join(names, ", "),
 			),
+			Repl: repl,
 		}}
 
 	default:
@@ -237,7 +298,7 @@ func (s *Service) HandleVerified(items []VerifiedReceipt) {
 
 // verifiedMessage builds the message for a payment-confirmed receipt.
 func verifiedMessage(it VerifiedReceipt) Message {
-	name := strings.ToUpper(it.Provider)
+	name := displayName(it.Provider)
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "Račun za %s za %s je potvrđen kao plaćen.", name, formatPeriod(it.Period))
@@ -250,6 +311,7 @@ func verifiedMessage(it VerifiedReceipt) Message {
 		Emoji:   emojiPaid,
 		Subject: fmt.Sprintf("preuzmi.me: račun %s potvrđen", name),
 		Body:    b.String(),
+		Repl:    addRepl(nil, it.Provider, name),
 	}
 }
 

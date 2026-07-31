@@ -9,9 +9,9 @@ document.addEventListener('alpine:init', () => {
     // 'all' | 'paid' | 'unpaid'
     paidFilter: 'all',
     paidFilters: [
-      { value: 'all', label: 'Sve' },
-      { value: 'paid', label: 'Plaćeno' },
-      { value: 'unpaid', label: 'Neplaćeno' },
+      { value: 'all', label: t('Sve') },
+      { value: 'paid', label: t('Plaćeno') },
+      { value: 'unpaid', label: t('Neplaćeno') },
     ],
     // URLs of receipts with an in-flight paid toggle, so their button can show
     // progress and cannot be double-submitted.
@@ -293,7 +293,7 @@ document.addEventListener('alpine:init', () => {
       const sym = currency || 'RSD';
 
       try {
-        return new Intl.NumberFormat('sr-Latn-RS', {
+        return new Intl.NumberFormat(srLocale(), {
           style: 'currency',
           currency: sym,
           maximumFractionDigits: 0,

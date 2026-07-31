@@ -54,6 +54,7 @@ func Routes(c *container.Container) {
 
 	http.HandleFunc("GET /", indexHandler())
 	http.HandleFunc("GET /dashboard", dashboardHandler(c.GetConfig(), c.GetVersion()))
+	http.HandleFunc("GET /pay", payHandler(c.GetConfig(), c.GetVersion()))
 	http.HandleFunc("GET /stats", statsHandler(c.GetConfig(), c.GetVersion()))
 	http.HandleFunc("GET /settings", settingsHandler(c.GetConfig(), c.GetVersion(), c.GetNotifier()))
 	http.HandleFunc("GET /receipt/{period}/{provider}", receiptHandler(c.GetStorage()))

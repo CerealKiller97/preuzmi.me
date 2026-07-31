@@ -179,3 +179,40 @@ func statsHandler(cfg *config.Config, version string) Handler {
 		}
 	}
 }
+
+// payHandler renders the monthly "Plati sve" batch-payment view: every unpaid
+// receipt with its IPS QR, a running total, and one-tap paid marking.
+func payHandler(cfg *config.Config, version string) Handler {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tmpl, err := template.ParseFiles(
+			"./templates/pay.html",
+			"./templates/partials.html",
+		)
+		if err != nil {
+			log.Err(err).Msg("Error parsing pay template")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		pairs, err := utils.GetPairs(cfg)
+		if err != nil {
+			log.Err(err).Msg("Error getting pairs for pay page")
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		viewModel := PageData{
+			URL:         "/pay",
+			Pairs:       pairs,
+			Active:      "pay",
+			Title:       "Preuzmi.me — Plati sve",
+			Description: "Svi neplaćeni računi sa QR kodovima — skeniraj, plati, označi.",
+			BaseURL:     baseURL(r),
+			Version:     version,
+		}
+		if err := tmpl.Execute(w, viewModel); err != nil {
+			log.Err(err).Msg("Error executing pay template")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	}
+}

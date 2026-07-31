@@ -79,7 +79,9 @@
         Prikazano <span class="font-medium text-foreground" x-text="filteredReceipts.length"></span>
         od <span class="font-medium text-foreground" x-text="receipts.length"></span> računa
         <span x-show="unpaidCount > 0">
-          · <span class="font-medium text-warning" x-text="unpaidCount"></span> neplaćeno
+          · <a href="/pay" class="font-medium text-warning underline-offset-2 hover:underline">
+            <span x-text="unpaidCount"></span> neplaćeno — Plati sve
+          </a>
         </span>
       </span>
       <button type="button" x-show="hasActiveFilters" @click="resetFilters()"

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="sr" class="h-full">
+<head>
+  {{template "head" .}}
+</head>
+
+<body class="h-full">
+<div x-data="payPage" class="flex min-h-screen flex-col">
+  {{template "header" .}}
+
+  <main class="mx-auto w-full max-w-2xl flex-1 px-4 py-8 sm:px-6 lg:px-8 pb-28">
+    <div class="animate-fade-in-up flex flex-col gap-1">
+      <h1 class="text-2xl font-semibold tracking-tight">Plati sve</h1>
+      <p class="text-sm text-muted-foreground">
+        Skeniraj QR, plati u banci, označi. Jedan po jedan.
+      </p>
+    </div>
+
+    <section class="animate-fade-in-up mt-6 flex flex-wrap items-end gap-3" style="--stagger: 1">
+      <div class="flex w-full flex-col gap-1.5 sm:w-44">
+        <label for="period" class="text-sm font-medium leading-none">Period</label>
+        <div class="relative">
+          <select id="period" x-model="selectedPeriod" class="input appearance-none pr-9">
+            <option value="">Svi periodi</option>
+            <template x-for="per in periods" :key="per">
+              <option :value="per" x-text="per"></option>
+            </template>
+          </select>
+          <span class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <section x-show="loading" class="mt-8 flex flex-col gap-3">
+      <template x-for="i in 3" :key="'skeleton-' + i">
+        <div class="card flex animate-pulse gap-4 p-4">
+          <div class="h-40 w-40 shrink-0 rounded-md bg-muted"></div>
+          <div class="flex flex-1 flex-col justify-between py-1">
+            <div class="h-4 w-24 rounded bg-muted"></div>
+            <div class="h-7 w-28 rounded bg-muted"></div>
+            <div class="h-9 w-40 rounded-md bg-muted"></div>
+          </div>
+        </div>
+      </template>
+    </section>
+
+    <section x-show="!loading && unpaid.length === 0" class="mt-8">
+      <div class="flex flex-col items-center justify-center rounded-xl border border-dashed px-6 py-16 text-center">
+        <div class="flex h-11 w-11 items-center justify-center rounded-full bg-success/15 text-success">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+            <path d="M20 6 9 17l-5-5" />
+          </svg>
+        </div>
+        <h3 class="mt-4 text-sm font-semibold">Sve je plaćeno</h3>
+        <p class="mt-1 max-w-sm text-sm text-muted-foreground">
+          Nema neplaćenih računa
+          <span x-show="selectedPeriod" x-text="' za ' + selectedPeriod"></span>.
+        </p>
+        <a href="/dashboard" class="btn btn-outline mt-4">Nazad na račune</a>
+      </div>
+    </section>
+
+    <section x-show="!loading && unpaid.length > 0" class="mt-8 flex flex-col gap-3">
+      <template x-for="(item, index) in unpaid" :key="item.url">
+        <article class="card animate-fade-in-up flex gap-4 p-4"
+                 :class="{ 'opacity-50': saving.includes(item.url) }"
+                 :style="`--stagger: ${index}`">
+          {{/* Fixed QR size — scannable, never grows with the card. */}}
+          <div class="h-40 w-40 shrink-0">
+            <template x-if="!isQRMissing(item)">
+              <img :src="qrImgUrl(item)"
+                   @error="markQRMissing(item)"
+                   :alt="'IPS QR — ' + item.provider.toUpperCase()"
+                   width="160" height="160"
+                   class="h-40 w-40 rounded-md bg-white p-1.5" />
+            </template>
+            <div x-show="isQRMissing(item)"
+                 class="flex h-40 w-40 flex-col items-center justify-center gap-1.5 rounded-md border border-dashed bg-muted/40 p-3 text-center">
+              <p class="text-xs text-muted-foreground">Nema QR koda</p>
+              <a :href="item.url" target="_blank" rel="noopener"
+                 class="text-xs font-medium underline underline-offset-2">
+                Otvori PDF
+              </a>
+            </div>
+          </div>
+
+          <div class="flex min-w-0 flex-1 flex-col justify-between gap-3">
+            <div>
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="badge badge-secondary shrink-0" x-text="item.provider.toUpperCase()"></span>
+                <span class="badge badge-warning shrink-0">Neplaćeno</span>
+                <span class="text-sm text-muted-foreground" x-text="item.period"></span>
+              </div>
+              <div class="mt-2 text-2xl font-semibold tracking-tight"
+                   x-text="item.amount ? formatMoney(item.amount, item.currency) : '—'"></div>
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+              <button type="button" class="btn btn-primary"
+                      :disabled="saving.includes(item.url)"
+                      @click="markPaid(item)">
+                <svg x-show="!saving.includes(item.url)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="mr-1.5 h-4 w-4">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+                <span x-show="!saving.includes(item.url)">Označi kao plaćeno</span>
+                <span x-show="saving.includes(item.url)">Čuvanje...</span>
+              </button>
+              <a :href="item.url" target="_blank" rel="noopener" class="btn btn-outline">
+                PDF
+              </a>
+            </div>
+          </div>
+        </article>
+      </template>
+    </section>
+  </main>
+
+  <div x-show="!loading && unpaid.length > 0" x-cloak
+       class="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <div class="mx-auto flex max-w-2xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6 lg:px-8">
+      <div class="min-w-0">
+        <div class="text-xs text-muted-foreground">Preostalo</div>
+        <div class="text-sm font-medium">
+          <span x-text="unpaid.length"></span>
+          <span x-text="unpaid.length === 1 ? 'račun' : 'računa'"></span>
+        </div>
+      </div>
+      <div class="text-right">
+        <div class="text-xs text-muted-foreground">Ukupno</div>
+        <div class="text-xl font-semibold tracking-tight tabular-nums" x-text="formatMoney(runningTotal, 'RSD')"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/assets/js/pay.js"></script>
+</body>
+</html>

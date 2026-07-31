@@ -1,3 +1,10 @@
+-- Desired shape of the SQLite store. database.Apply creates missing tables and
+-- ALTERs in any columns listed here that an older database is missing, so adding
+-- a column is an edit to this file only (rebuild; no Go migration stub).
+--
+-- New columns that may appear on non-empty databases must include a DEFAULT so
+-- SQLite can ADD COLUMN them. Table-level constraints (UNIQUE below) apply to
+-- fresh CREATE TABLE only; they are not retrofitted onto existing tables.
 CREATE TABLE IF NOT EXISTS receipts (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     provider      TEXT    NOT NULL,

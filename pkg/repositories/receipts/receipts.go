@@ -205,30 +205,17 @@ func New(dir string) (*Repository, error) {
 	}, nil
 }
 
-// migrate applies the schema and brings older databases forward. The schema is
-// CREATE TABLE IF NOT EXISTS, so it is a no-op once the tables exist; the
-// follow-up steps are each idempotent so running them on every start is safe.
+// migrate applies database/schema.sql (creating tables and adding any columns
+// that appear there but are missing from an older database) and then runs
+// receipts-specific data migrations. Schema shape changes belong in
+// database/schema.sql only; this function keeps the data rewrites.
 func migrate(db *sql.DB, dir string) error {
-	if _, err := db.Exec(database.Schema); err != nil {
+	if err := database.Apply(db); err != nil {
 		return fmt.Errorf("receipts: applying schema: %w", err)
 	}
 
 	if err := migratePeriodsToSlash(db); err != nil {
 		return fmt.Errorf("receipts: migrating periods: %w", err)
-	}
-
-	// Ensure the paid-state columns exist on databases created before they were
-	// added (or before a separate payments table was merged back in).
-	if err := ensureColumn(db, "receipts", "paid_at", "INTEGER NOT NULL DEFAULT 0"); err != nil {
-		return fmt.Errorf("receipts: adding paid_at: %w", err)
-	}
-	if err := ensureColumn(db, "receipts", "confirmed_at", "INTEGER NOT NULL DEFAULT 0"); err != nil {
-		return fmt.Errorf("receipts: adding confirmed_at: %w", err)
-	}
-
-	// Bring pre-QR databases forward with the IPS payment-QR cache columns.
-	if err := migrateAddIPSQRColumns(db); err != nil {
-		return fmt.Errorf("receipts: migrating IPS QR columns: %w", err)
 	}
 
 	// Fold any earlier separate paid-state stores back into the receipts row.
@@ -247,21 +234,6 @@ func migrate(db *sql.DB, dir string) error {
 		StatusPaid,
 	); err != nil {
 		return fmt.Errorf("receipts: backfilling confirmed_at: %w", err)
-	}
-
-	return nil
-}
-
-// migrateAddIPSQRColumns adds the IPS payment-QR cache columns to databases
-// created before that feature (e.g. v1.1.0). Idempotent: a fresh install already
-// has them from schema.sql, so this is a no-op there. Existing receipt rows keep
-// their data; new columns default to empty / not-yet-checked.
-func migrateAddIPSQRColumns(db *sql.DB) error {
-	if err := ensureColumn(db, "receipts", "ips_qr", "TEXT NOT NULL DEFAULT ''"); err != nil {
-		return fmt.Errorf("adding ips_qr: %w", err)
-	}
-	if err := ensureColumn(db, "receipts", "ips_checked", "INTEGER NOT NULL DEFAULT 0"); err != nil {
-		return fmt.Errorf("adding ips_checked: %w", err)
 	}
 
 	return nil
@@ -385,44 +357,6 @@ func tableExists(db *sql.DB, name string) (bool, error) {
 	}
 
 	return true, nil
-}
-
-// ensureColumn adds col (with the given SQL definition) to table when it is not
-// already present. Idempotent, so it is safe on every startup.
-func ensureColumn(db *sql.DB, table, col, definition string) error {
-	has, err := hasColumn(db, table, col)
-	if err != nil || has {
-		return err
-	}
-
-	_, err = db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, col, definition))
-
-	return err
-}
-
-// hasColumn reports whether table has a column named col.
-func hasColumn(db *sql.DB, table, col string) (bool, error) {
-	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
-	if err != nil {
-		return false, err
-	}
-	defer rows.Close() //nolint:errcheck // read-only rows
-
-	for rows.Next() {
-		var (
-			cid, notnull, pk int
-			name, ctype      string
-			dflt             sql.NullString
-		)
-		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
-			return false, err
-		}
-		if name == col {
-			return true, rows.Err()
-		}
-	}
-
-	return false, rows.Err()
 }
 
 // migratePeriodsToSlash rewrites any legacy dash-form period ("06-2026") in the

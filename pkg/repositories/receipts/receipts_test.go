@@ -411,8 +411,9 @@ func TestParseKey(t *testing.T) {
 }
 
 // TestMigrateAddsIPSQRColumnsFromV110 proves a receipts.db created by v1.1.0
-// (no ips_qr / ips_checked) upgrades cleanly on open: existing rows survive and
-// the new columns are usable for the payment-QR cache.
+// (no ips_qr / ips_checked) upgrades cleanly on open via database.Apply reading
+// schema.sql: existing rows survive and the new columns are usable for the
+// payment-QR cache.
 func TestMigrateAddsIPSQRColumnsFromV110(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, fileName)
@@ -456,17 +457,16 @@ VALUES ('eps', '06/2026', '06-2026/eps.pdf', 1234, 2365.0, 'neplaćeno', 1720000
 	}
 	defer store.Close() //nolint:errcheck
 
-	for _, col := range []string{"ips_qr", "ips_checked"} {
-		has, err := hasColumn(store.db, "receipts", col)
-		if err != nil {
-			t.Fatalf("hasColumn(%s): %v", col, err)
-		}
-		if !has {
-			t.Fatalf("expected column %s after upgrade from v1.1.0", col)
-		}
+	ctx := context.Background()
+
+	payload, checked, err := store.IPSQR(ctx, "eps", "06/2026")
+	if err != nil {
+		t.Fatalf("IPSQR after upgrade: %v", err)
+	}
+	if payload != "" || checked {
+		t.Fatalf("IPSQR = (%q, %v), want empty/unchecked defaults (columns present)", payload, checked)
 	}
 
-	ctx := context.Background()
 	got, err := store.List(ctx)
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -476,14 +476,6 @@ VALUES ('eps', '06/2026', '06-2026/eps.pdf', 1234, 2365.0, 'neplaćeno', 1720000
 	}
 	if got[0].Provider != "eps" || got[0].Period != "06/2026" || got[0].Price != 2365.0 {
 		t.Fatalf("legacy row mutated: %+v", got[0])
-	}
-
-	payload, checked, err := store.IPSQR(ctx, "eps", "06/2026")
-	if err != nil {
-		t.Fatalf("IPSQR before set: %v", err)
-	}
-	if payload != "" || checked {
-		t.Fatalf("IPSQR = (%q, %v), want empty/unchecked defaults", payload, checked)
 	}
 
 	const wantPayload = "K:PR|V:01|C:1|R:160000000000000000|N:EPS|I:RSD2365,00|RO:97123"

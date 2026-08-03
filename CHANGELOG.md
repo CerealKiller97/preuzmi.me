@@ -16,6 +16,7 @@ Release, so keep the entries user-facing.
 
 ### 🔧 Changed
 
+- 💵 **Receipt amounts now come from the payment QR.** The total on the card, in the stats, and in notifications is the exact figure the bill's NBS IPS QR carries — the same amount your banking app charges when you scan it — instead of a separately parsed provider total that could drift (an e.Sanduče bill read 50 RSD high). e.Sanduče, Yettel and eUpravnik take the amount straight from the QR when the bill is downloaded; the other providers self-correct to the QR amount the first time a receipt's code is viewed. Bills with no readable QR keep the provider's amount as before.
 - 🗃️ Opening an existing `receipts.db` from a previous release automatically adds the IPS QR cache columns (`ips_qr`, `ips_checked`). No manual migration or data wipe — your downloaded receipts and paid state stay put.
 
 ## [1.2.0] - 31.07.2026

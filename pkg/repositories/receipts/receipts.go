@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -526,6 +527,33 @@ func (s *Repository) SetPrice(ctx context.Context, provider, period string, pric
 	)
 
 	return err
+}
+
+// ReconcilePrice corrects a receipt's stored price to want when the two differ
+// by more than half a cent, and reports whether it changed anything. It lets the
+// IPS QR amount — the figure a banking app actually charges — override a price a
+// provider's API or PDF parse recorded differently, so a bill that was filed
+// with a wrong total self-heals. A missing row is a no-op.
+func (s *Repository) ReconcilePrice(ctx context.Context, provider, period string, want float64) (bool, error) {
+	period = slashPeriod(period)
+
+	var current float64
+	switch err := s.db.QueryRowContext(ctx, selectPriceQuery, provider, period).Scan(&current); {
+	case err == sql.ErrNoRows:
+		return false, nil
+	case err != nil:
+		return false, err
+	}
+
+	if math.Abs(current-want) < 0.005 {
+		return false, nil
+	}
+
+	if _, err := s.db.ExecContext(ctx, setPriceQuery, want, provider, period); err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
 
 // SetStatus updates the provider-reported paid state ("plaćeno" / "neplaćeno")

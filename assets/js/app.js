@@ -172,6 +172,14 @@ document.addEventListener('alpine:init', () => {
         }
         this.qrPayload = payload;
         this.qrIPS = this.parseIPS(payload);
+
+        // The QR amount is authoritative (it is what the bank app charges). The
+        // server reconciles the stored price on this same request, so mirror it
+        // onto the in-memory receipt too, letting the card update without a
+        // reload. qrItem is the same object as the one in `receipts`.
+        if (this.qrIPS.amount && this.qrItem && this.qrItem.amount !== this.qrIPS.amount) {
+          this.qrItem.amount = this.qrIPS.amount;
+        }
       } catch (e) {
         console.error('Load IPS payload failed', e);
       }
@@ -182,7 +190,7 @@ document.addEventListener('alpine:init', () => {
      * Format: K:PR|V:01|C:1|R:account|N:name|I:RSD…|SF:code|S:purpose|RO:ref
      *
      * @param {string} payload
-     * @returns {{recipient: string, account: string, reference: string, code: string, purpose: string}}
+     * @returns {{recipient: string, account: string, reference: string, code: string, purpose: string, amount: number|null}}
      */
     parseIPS(payload) {
       const fields = {};
@@ -201,12 +209,25 @@ document.addEventListener('alpine:init', () => {
         reference = reference.slice(0, 2) + ' ' + reference.slice(2);
       }
 
+      // I: is "RSD4376,94" — a currency code then a comma-decimal amount. This is
+      // the figure the bank app charges, so the modal prefers it over the stored
+      // price. Strip the currency letters and any thousands dots, comma → point.
+      let amount = null;
+      if (fields.I) {
+        const num = fields.I.replace(/^[A-Za-z]+/, '').replace(/\./g, '').replace(',', '.');
+        const parsed = Number(num);
+        if (Number.isFinite(parsed) && parsed > 0) {
+          amount = parsed;
+        }
+      }
+
       return {
         recipient: fields.N || '',
         account: fields.R || '',
         reference,
         code: fields.SF || '',
         purpose: fields.S || '',
+        amount,
       };
     },
 

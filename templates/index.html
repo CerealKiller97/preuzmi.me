@@ -238,8 +238,10 @@
             <div x-show="qrItem" class="space-y-2.5 text-sm">
               <div class="flex items-baseline justify-between gap-3">
                 <span class="text-muted-foreground">Iznos</span>
+                {{/* Prefer the QR's own amount (what the bank app charges) over
+                     the stored price, so the figure always matches the code. */}}
                 <span class="text-lg font-semibold tracking-tight"
-                      x-text="qrItem && qrItem.amount ? formatMoney(qrItem.amount, qrItem.currency) : '—'"></span>
+                      x-text="(qrIPS && qrIPS.amount) ? formatMoney(qrIPS.amount, qrItem && qrItem.currency) : (qrItem && qrItem.amount ? formatMoney(qrItem.amount, qrItem.currency) : '—')"></span>
               </div>
               <div class="flex items-baseline justify-between gap-3">
                 <span class="text-muted-foreground">Period</span>

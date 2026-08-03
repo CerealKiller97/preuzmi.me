@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/repositories/receipts"
+	"github.com/CerealKiller97/preuzmi.me/pkg/services/ipsqr"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/mailbox"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/provider"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/storage"
@@ -111,7 +112,7 @@ func (s *Service) DownloadReceipt() error {
 	// Record price and paid status. Best-effort: the PDF is already saved, so a
 	// database hiccup must not fail the download.
 	if s.receipts != nil && parseErr == nil {
-		s.recordInvoice(ctx, in, period)
+		s.recordInvoice(ctx, in, period, attachment.Data)
 	}
 
 	return nil
@@ -128,8 +129,15 @@ func (s *Service) DownloadReceipt() error {
 //     issued bill, and the next month's invoice will confirm it later.
 //   - when this invoice shows no outstanding debt (DUG == 0), the previous
 //     month's receipt is settled, so it flips to paid.
-func (s *Service) recordInvoice(ctx context.Context, in invoice, period string) {
-	if in.hasTotal {
+func (s *Service) recordInvoice(ctx context.Context, in invoice, period string, pdf []byte) {
+	// The IPS QR carries the exact amount a banking app charges, so it is the
+	// source of truth for the price. Fall back to the PDF's "UKUPNO" total only
+	// when the bill has no readable QR.
+	if amount, ok := ipsqr.AmountFromPDF(pdf); ok {
+		if err := s.receipts.SetPrice(ctx, fileName, period, amount); err != nil {
+			s.logger.Err(err).Str("period", period).Msg("Failed to record eUpravnik receipt price")
+		}
+	} else if in.hasTotal {
 		if err := s.receipts.SetPrice(ctx, fileName, period, in.total); err != nil {
 			s.logger.Err(err).Str("period", period).Msg("Failed to record eUpravnik receipt price")
 		}

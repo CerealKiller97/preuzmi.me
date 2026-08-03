@@ -10,6 +10,8 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+## [1.3.0] - 03.08.2026
+
 ### ✨ Added
 
 - 📲 **Payment QR on the receipt card.** The NBS IPS payment QR embedded in a bill PDF is now lifted out and shown in a modal — open the dashboard, tap **Plati skeniranjem (QR)**, scan it in your banking app, then **Označi kao plaćeno** (or just close). Works off the bill's *own* QR, so the account and reference number are exactly what the provider printed. The extractor reads QRs whether they are embedded as an image XObject (mts, Infostan/eSanduče), an inline content-stream image (EPS), or drawn as vector paths (eUpravnik). A **Kopiraj IPS podatke** button copies the raw payment data as a fallback when you're paying from the same phone. Bills whose layout embeds no readable QR simply show no scannable code.
@@ -86,7 +88,8 @@ stats, and notifications, so no bill goes unintentionally unpaid.
 - 🐳 Multi-arch (amd64 + arm64), distroless Docker image published to GHCR.
 - 🌐 Bilingual documentation — English and Serbian.
 
-[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.3...v1.1.0
 [1.0.3]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.2...v1.0.3

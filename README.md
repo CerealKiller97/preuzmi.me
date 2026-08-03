@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-  ghcr.io/cerealkiller97/preuzmi.me:1.2.0
+  ghcr.io/cerealkiller97/preuzmi.me:1.3.0
 ```
 
 ### docker compose
@@ -65,7 +65,7 @@ docker run -d --name preuzmi \
 ```yaml
 services:
   preuzmi:
-    image: ghcr.io/cerealkiller97/preuzmi.me:1.2.0
+    image: ghcr.io/cerealkiller97/preuzmi.me:1.3.0
     container_name: preuzmi.me
     ports:
       - '5500:5500'
@@ -96,6 +96,7 @@ docker exec preuzmi /app/preuzmi checks
 - **Smart refresh** — skips providers whose previous-month receipt is settled (`paid_at` set, status `plaćeno`, and `confirmed_at` set); unpaid or unverified bills keep running so status can flip
 - **Receipt dashboard** — search, filter by period / provider / paid status
 - **Paid tracking** — mark receipts paid from the UI or the `receipts` CLI; tracked as two separate moments: *paid by you* and *confirmed by the provider*
+- **Payment QR** — unpaid receipt cards show *Plati skeniranjem (QR)*: the bill's own NBS IPS QR, lifted straight from the PDF and shown in a modal to scan in your banking app. The amount is read from that QR, so what you see matches what the bank charges
 - **Stats** — yearly totals, monthly averages, per-provider charts
 - **Notifications** — Telegram or SMTP (`off` / `per_receipt` / `all_done`)
 - **Storage** — local folder or S3-compatible bucket

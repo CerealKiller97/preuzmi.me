@@ -60,7 +60,7 @@ func TestRecordInvoiceCurrentUnpaidPreviousPaid(t *testing.T) {
 		debt: 0, hasDebt: true,
 		periodMonth: 5, periodYear: 2026, hasPeriod: true,
 	}
-	s.recordInvoice(context.Background(), in, "05-2026")
+	s.recordInvoice(context.Background(), in, "05-2026", nil)
 
 	if got := statusOf(t, store, "05-2026"); got != receipts.StatusUnpaid {
 		t.Errorf("current status = %q, want %q", got, receipts.StatusUnpaid)
@@ -92,7 +92,7 @@ func TestRecordInvoiceWithDebtLeavesPreviousUnpaid(t *testing.T) {
 		debt: 1912.00, hasDebt: true,
 		periodMonth: 5, periodYear: 2026, hasPeriod: true,
 	}
-	s.recordInvoice(context.Background(), in, "05-2026")
+	s.recordInvoice(context.Background(), in, "05-2026", nil)
 
 	if got := statusOf(t, store, "05-2026"); got != receipts.StatusUnpaid {
 		t.Errorf("current status = %q, want %q", got, receipts.StatusUnpaid)

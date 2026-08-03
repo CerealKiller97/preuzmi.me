@@ -20,5 +20,11 @@ CREATE TABLE IF NOT EXISTS receipts (
     -- Both are 0 when not set.
     paid_at       INTEGER NOT NULL DEFAULT 0,
     confirmed_at  INTEGER NOT NULL DEFAULT 0,
+    -- ips_qr: the NBS IPS payment QR payload decoded from the bill PDF, so the
+    -- dashboard can render a scannable copy on the receipt card. Empty when the
+    -- bill carries no readable QR. ips_checked flips to 1 the first time
+    -- extraction runs, so a bill with no QR is not re-parsed on every page load.
+    ips_qr        TEXT    NOT NULL DEFAULT '',
+    ips_checked   INTEGER NOT NULL DEFAULT 0,
     UNIQUE (provider, period)
 );

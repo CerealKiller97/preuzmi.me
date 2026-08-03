@@ -10,6 +10,15 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+### ✨ Added
+
+- 📲 **Payment QR on the receipt card.** The NBS IPS payment QR embedded in a bill PDF is now lifted out and shown in a modal — open the dashboard, tap **Plati skeniranjem (QR)**, scan it in your banking app, then **Označi kao plaćeno** (or just close). Works off the bill's *own* QR, so the account and reference number are exactly what the provider printed. The extractor reads QRs whether they are embedded as an image XObject (mts, Infostan/eSanduče), an inline content-stream image (EPS), or drawn as vector paths (eUpravnik). A **Kopiraj IPS podatke** button copies the raw payment data as a fallback when you're paying from the same phone. Bills whose layout embeds no readable QR simply show no scannable code.
+
+### 🔧 Changed
+
+- 💵 **Receipt amounts now come from the payment QR.** The total on the card, in the stats, and in notifications is the exact figure the bill's NBS IPS QR carries — the same amount your banking app charges when you scan it — instead of a separately parsed provider total that could drift (an e.Sanduče bill read 50 RSD high). e.Sanduče, Yettel and eUpravnik take the amount straight from the QR when the bill is downloaded; the other providers self-correct to the QR amount the first time a receipt's code is viewed. Bills with no readable QR keep the provider's amount as before.
+- 🗃️ Opening an existing `receipts.db` from a previous release automatically adds the IPS QR cache columns (`ips_qr`, `ips_checked`). No manual migration or data wipe — your downloaded receipts and paid state stay put.
+
 ## [1.2.0] - 31.07.2026
 
 ### ✨ Added

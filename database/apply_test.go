@@ -23,6 +23,7 @@ func TestParseSchemaTables(t *testing.T) {
 	want := []string{
 		"id", "provider", "period", "storage_key", "size_bytes",
 		"price", "status", "downloaded_at", "paid_at", "confirmed_at",
+		"ips_qr", "ips_checked",
 	}
 	if len(tables[0].columns) != len(want) {
 		t.Fatalf("columns = %v, want %v", columnNames(tables[0]), want)
@@ -75,7 +76,7 @@ VALUES ('eps', '06/2026', '06-2026/eps.pdf', 10, 1.5, 'plaćeno', 100)`); err !=
 	if err != nil {
 		t.Fatalf("existingColumns: %v", err)
 	}
-	for _, name := range []string{"paid_at", "confirmed_at"} {
+	for _, name := range []string{"paid_at", "confirmed_at", "ips_qr", "ips_checked"} {
 		if !cols[name] {
 			t.Fatalf("missing column %s after Apply", name)
 		}
@@ -108,7 +109,7 @@ func TestApplyCreatesFreshSchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("existingColumns: %v", err)
 	}
-	for _, name := range []string{"id", "provider", "paid_at", "confirmed_at"} {
+	for _, name := range []string{"id", "provider", "paid_at", "confirmed_at", "ips_qr", "ips_checked"} {
 		if !cols[name] {
 			t.Fatalf("fresh schema missing %s", name)
 		}

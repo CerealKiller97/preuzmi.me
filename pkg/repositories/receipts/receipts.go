@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -136,6 +137,14 @@ INSERT INTO receipts (provider, period, storage_key, size_bytes, price, status, 
 VALUES (?, ?, ?, 0, 0, ?, 0, ?)
 ON CONFLICT(provider, period) DO UPDATE SET
 	paid_at = excluded.paid_at;`
+
+	// selectIPSQRQuery reads the cached IPS QR payload and whether extraction has
+	// already been attempted for a (provider, period).
+	selectIPSQRQuery = `SELECT ips_qr, ips_checked FROM receipts WHERE provider = ? AND period = ?;`
+
+	// setIPSQRQuery stores the decoded IPS QR payload (possibly empty) and marks
+	// extraction as done, so a bill with no QR is not re-parsed on every render.
+	setIPSQRQuery = `UPDATE receipts SET ips_qr = ?, ips_checked = 1 WHERE provider = ? AND period = ?;`
 
 	// listReceiptsQuery returns every recorded receipt, newest download first.
 	listReceiptsQuery = `
@@ -520,6 +529,33 @@ func (s *Repository) SetPrice(ctx context.Context, provider, period string, pric
 	return err
 }
 
+// ReconcilePrice corrects a receipt's stored price to want when the two differ
+// by more than half a cent, and reports whether it changed anything. It lets the
+// IPS QR amount — the figure a banking app actually charges — override a price a
+// provider's API or PDF parse recorded differently, so a bill that was filed
+// with a wrong total self-heals. A missing row is a no-op.
+func (s *Repository) ReconcilePrice(ctx context.Context, provider, period string, want float64) (bool, error) {
+	period = slashPeriod(period)
+
+	var current float64
+	switch err := s.db.QueryRowContext(ctx, selectPriceQuery, provider, period).Scan(&current); {
+	case err == sql.ErrNoRows:
+		return false, nil
+	case err != nil:
+		return false, err
+	}
+
+	if math.Abs(current-want) < 0.005 {
+		return false, nil
+	}
+
+	if _, err := s.db.ExecContext(ctx, setPriceQuery, want, provider, period); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
 // SetStatus updates the provider-reported paid state ("plaćeno" / "neplaćeno")
 // for an already-recorded receipt.
 //
@@ -597,6 +633,34 @@ func (s *Repository) MarkPaid(ctx context.Context, provider, period string, paid
 	}
 
 	return at, nil
+}
+
+// IPSQR returns the cached NBS IPS QR payload for a receipt and whether
+// extraction has already been attempted. checked is true once we have tried to
+// parse the PDF, even if it carried no QR (payload is then ""), so callers can
+// avoid re-parsing a bill that has none.
+func (s *Repository) IPSQR(ctx context.Context, provider, period string) (payload string, checked bool, err error) {
+	period = slashPeriod(period)
+
+	var checkedInt int64
+	err = s.db.QueryRowContext(ctx, selectIPSQRQuery, provider, period).Scan(&payload, &checkedInt)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+
+	return payload, checkedInt != 0, nil
+}
+
+// SetIPSQR caches the decoded IPS QR payload for a receipt (empty when the bill
+// has none) and marks extraction as done. It is a no-op when no receipt row
+// exists for the (provider, period) yet.
+func (s *Repository) SetIPSQR(ctx context.Context, provider, period, payload string) error {
+	_, err := s.db.ExecContext(ctx, setIPSQRQuery, payload, provider, slashPeriod(period))
+
+	return err
 }
 
 // List returns every recorded receipt, newest download first.

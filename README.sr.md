@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-  ghcr.io/cerealkiller97/preuzmi.me:1.2.0
+  ghcr.io/cerealkiller97/preuzmi.me:1.3.0
 ```
 
 ### docker compose
@@ -65,7 +65,7 @@ docker run -d --name preuzmi \
 ```yaml
 services:
   preuzmi:
-    image: ghcr.io/cerealkiller97/preuzmi.me:1.2.0
+    image: ghcr.io/cerealkiller97/preuzmi.me:1.3.0
     container_name: preuzmi.me
     ports:
       - "5500:5500"
@@ -96,6 +96,7 @@ docker exec preuzmi /app/preuzmi checks
 - **Pametno osvežavanje** — preskače provajdere čiji je račun za prošli mesec završen (`paid_at` postavljen, status `plaćeno` i `confirmed_at` postavljen); neplaćeni ili neverifikovani računi se i dalje proveravaju da bi status mogao da se promeni
 - **Dashboard računa** — pretraga, filter po periodu / provajderu / statusu plaćanja
 - **Praćenje plaćanja** — označi račun kao plaćen iz UI-ja ili `receipts` CLI-ja; prati se kao dva odvojena trenutka: *ti platio* i *provajder potvrdio*
+- **QR za plaćanje** — na karticama neplaćenih računa stoji *Plati skeniranjem (QR)*: sopstveni NBS IPS QR računa, izvučen direktno iz PDF-a i prikazan u modalu za skeniranje u banking aplikaciji. Iznos se čita iz tog QR-a, pa je ono što vidiš isto što banka naplaćuje
 - **Statistika** — godišnji zbir, mesečni prosek, grafikoni po provajderu
 - **Obaveštenja** — Telegram ili SMTP (`off` / `per_receipt` / `all_done`)
 - **Skladište** — lokalni folder ili S3-kompatibilni bucket

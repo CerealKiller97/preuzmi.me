@@ -18,6 +18,18 @@ document.addEventListener('alpine:init', () => {
     saving: [],
     // Pending pulse-reset timers, keyed by receipt URL.
     pulseTimers: {},
+    // Receipt currently shown in the payment QR modal (null when closed).
+    qrItem: null,
+    qrOpen: false,
+    // Parsed IPS fields for the open modal (null until /qr.txt loads).
+    qrIPS: null,
+    // Raw IPS payload cached for "Kopiraj IPS podatke".
+    qrPayload: '',
+    // True when the modal's QR image 404'd (bill carries no readable IPS QR).
+    qrMissing: false,
+    // Brief "copied" feedback after copying the IPS payload from the modal.
+    qrCopied: false,
+    qrCopiedTimer: null,
 
     /**
      * Every period present in the data, newest first.
@@ -90,6 +102,188 @@ document.addEventListener('alpine:init', () => {
      */
     isVerified(item) {
       return this.isProviderPaid(item);
+    },
+
+    /**
+     * URL of the rendered IPS payment QR for a receipt. item.url is already
+     * "/receipt/{period}/{provider}"; the image lives one segment deeper.
+     *
+     * @param {object} item
+     * @returns {string}
+     */
+    qrImgUrl(item) {
+      return `${item.url}/qr.png`;
+    },
+
+    /**
+     * Opens the payment QR modal for a receipt and loads IPS payment fields.
+     *
+     * @param {object} item
+     */
+    openQR(item) {
+      this.qrMissing = false;
+      this.qrCopied = false;
+      this.qrIPS = null;
+      this.qrPayload = '';
+      this.qrItem = item;
+      this.qrOpen = true;
+      document.documentElement.classList.add('overflow-hidden');
+      this.loadIPS(item);
+    },
+
+    /**
+     * Closes the payment QR modal and unlocks page scroll.
+     */
+    closeQR() {
+      this.qrOpen = false;
+      this.qrItem = null;
+      this.qrIPS = null;
+      this.qrPayload = '';
+      this.qrMissing = false;
+      this.qrCopied = false;
+      if (this.qrCopiedTimer) {
+        clearTimeout(this.qrCopiedTimer);
+        this.qrCopiedTimer = null;
+      }
+      document.documentElement.classList.remove('overflow-hidden');
+    },
+
+    /**
+     * Fetches and parses the NBS IPS payload for the open modal receipt.
+     *
+     * @param {object} item
+     */
+    async loadIPS(item) {
+      if (!item) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`${item.url}/qr.txt`);
+        if (!res.ok) {
+          // Image @error may also flip this; keep both paths in sync.
+          this.qrMissing = true;
+          return;
+        }
+        const payload = await res.text();
+        // Modal may have closed or switched receipts while the fetch was in flight.
+        if (!this.qrOpen || this.qrItem !== item) {
+          return;
+        }
+        this.qrPayload = payload;
+        this.qrIPS = this.parseIPS(payload);
+
+        // The QR amount is authoritative (it is what the bank app charges). The
+        // server reconciles the stored price on this same request, so mirror it
+        // onto the in-memory receipt too, letting the card update without a
+        // reload. qrItem is the same object as the one in `receipts`.
+        if (this.qrIPS.amount && this.qrItem && this.qrItem.amount !== this.qrIPS.amount) {
+          this.qrItem.amount = this.qrIPS.amount;
+        }
+      } catch (e) {
+        console.error('Load IPS payload failed', e);
+      }
+    },
+
+    /**
+     * Parses an NBS IPS QR payload into labelled fields for the modal.
+     * Format: K:PR|V:01|C:1|R:account|N:name|I:RSD…|SF:code|S:purpose|RO:ref
+     *
+     * @param {string} payload
+     * @returns {{recipient: string, account: string, reference: string, code: string, purpose: string, amount: number|null}}
+     */
+    parseIPS(payload) {
+      const fields = {};
+      String(payload || '').split('|').forEach(part => {
+        const i = part.indexOf(':');
+        if (i > 0) {
+          fields[part.slice(0, i).toUpperCase()] = part.slice(i + 1).trim();
+        }
+      });
+
+      // RO often arrives as "97XX-…" or "00…" — strip the model prefix for display
+      // when it looks like "97" / "00" + digits, otherwise show as-is.
+      let reference = fields.RO || '';
+      if (/^(97|00)/.test(reference) && reference.length > 2) {
+        // Keep model code visible: "97 123456…" reads clearer in bank apps.
+        reference = reference.slice(0, 2) + ' ' + reference.slice(2);
+      }
+
+      // I: is "RSD4376,94" — a currency code then a comma-decimal amount. This is
+      // the figure the bank app charges, so the modal prefers it over the stored
+      // price. Strip the currency letters and any thousands dots, comma → point.
+      let amount = null;
+      if (fields.I) {
+        const num = fields.I.replace(/^[A-Za-z]+/, '').replace(/\./g, '').replace(',', '.');
+        const parsed = Number(num);
+        if (Number.isFinite(parsed) && parsed > 0) {
+          amount = parsed;
+        }
+      }
+
+      return {
+        recipient: fields.N || '',
+        account: fields.R || '',
+        reference,
+        code: fields.SF || '',
+        purpose: fields.S || '',
+        amount,
+      };
+    },
+
+    /**
+     * Marks the modal's receipt as paid, then closes. No-op if already paid.
+     */
+    async markPaidAndClose() {
+      const item = this.qrItem;
+      if (!item || this.isPaid(item)) {
+        this.closeQR();
+        return;
+      }
+
+      // togglePaid flips unpaid → paid; keep the modal open until it finishes
+      // so the button can show "Čuvanje...".
+      if (!item.paid) {
+        await this.togglePaid(item);
+      }
+      this.closeQR();
+    },
+
+    /**
+     * Copy the raw IPS payload for the open modal receipt — fallback when the
+     * user cannot scan their own screen. Uses the payload already loaded for
+     * the modal details when available.
+     */
+    async copyIPS() {
+      const item = this.qrItem;
+      if (!item) {
+        return;
+      }
+
+      try {
+        let payload = this.qrPayload;
+        if (!payload) {
+          const res = await fetch(`${item.url}/qr.txt`);
+          if (!res.ok) {
+            this.qrMissing = true;
+            return;
+          }
+          payload = await res.text();
+          this.qrPayload = payload;
+          this.qrIPS = this.parseIPS(payload);
+        }
+        await navigator.clipboard.writeText(payload);
+        this.qrCopied = true;
+        if (this.qrCopiedTimer) {
+          clearTimeout(this.qrCopiedTimer);
+        }
+        this.qrCopiedTimer = setTimeout(() => {
+          this.qrCopied = false;
+          this.qrCopiedTimer = null;
+        }, 2000);
+      } catch (e) {
+        console.error('Copy IPS payload failed', e);
+      }
     },
 
     /**

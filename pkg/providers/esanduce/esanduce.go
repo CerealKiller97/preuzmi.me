@@ -14,6 +14,7 @@ import (
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
 	"github.com/CerealKiller97/preuzmi.me/pkg/repositories/receipts"
+	"github.com/CerealKiller97/preuzmi.me/pkg/services/ipsqr"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/provider"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/storage"
 	"github.com/CerealKiller97/preuzmi.me/pkg/utils"
@@ -169,7 +170,8 @@ func (s Service) DownloadReceipt() error {
 	bill := bills[0]
 	period := periodFromGGMM(bill.Ggmm)
 
-	if err := s.downloadReceipt(accessToken, ident, bill.Ggmm, period); err != nil {
+	pdf, err := s.downloadReceipt(accessToken, ident, bill.Ggmm, period)
+	if err != nil {
 		s.logger.Err(err).Int("ggmm", bill.Ggmm).Msg("Error downloading esanduce receipt")
 		return err
 	}
@@ -178,7 +180,16 @@ func (s Service) DownloadReceipt() error {
 	// database hiccup must not fail the download.
 	if s.receipts != nil {
 		ctx := context.Background()
-		if err := s.receipts.SetPrice(ctx, fileName, period, bill.Zaduzenje); err != nil {
+
+		// The IPS QR carries the exact amount a banking app charges, so it is the
+		// source of truth for the price. Fall back to the API's "zaduzenje" only
+		// when the bill has no readable QR (it can run higher — e.g. a payment fee
+		// the QR excludes).
+		price := bill.Zaduzenje
+		if amount, ok := ipsqr.AmountFromPDF(pdf); ok {
+			price = amount
+		}
+		if err := s.receipts.SetPrice(ctx, fileName, period, price); err != nil {
 			s.logger.Err(err).Str("period", period).Msg("Failed to record esanduce receipt price")
 		}
 		if err := s.receipts.SetStatus(ctx, fileName, period, billStatus(bill)); err != nil {
@@ -230,59 +241,60 @@ func (s Service) getReceipts(token string, ident int) ([]Bill, error) {
 	return res.Data, nil
 }
 
-// downloadReceipt fetches the PDF for the given ident/ggmm and persists it under
-// the period folder.
-func (s Service) downloadReceipt(token string, ident, ggmm int, period string) error {
+// downloadReceipt fetches the PDF for the given ident/ggmm, persists it under
+// the period folder, and returns the decoded PDF bytes so the caller can read
+// the IPS QR amount from them.
+func (s Service) downloadReceipt(token string, ident, ggmm int, period string) ([]byte, error) {
 	endpoint := fmt.Sprintf("%s/SONUpit/ident/%d/zaduzenje/%d/stampa", BaseURL, ident, ggmm)
 
 	req, err := http.NewRequest(http.MethodPost, endpoint, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := s.http.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	defer resp.Body.Close() //nolint:errcheck // best-effort body drain
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("esanduce pdf download failed: %s", resp.Status)
+		return nil, fmt.Errorf("esanduce pdf download failed: %s", resp.Status)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// The stampa endpoint returns application/json: a JSON-encoded string
 	// holding the base64 PDF, not raw PDF bytes. Unwrap the string, then decode.
 	var encoded string
 	if err := json.Unmarshal(body, &encoded); err != nil {
-		return fmt.Errorf("esanduce pdf decode: unexpected response: %w", err)
+		return nil, fmt.Errorf("esanduce pdf decode: unexpected response: %w", err)
 	}
 
 	if encoded == "" {
-		return fmt.Errorf("esanduce returned an empty pdf for ggmm %d", ggmm)
+		return nil, fmt.Errorf("esanduce returned an empty pdf for ggmm %d", ggmm)
 	}
 
 	data, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
-		return fmt.Errorf("esanduce pdf base64 decode: %w", err)
+		return nil, fmt.Errorf("esanduce pdf base64 decode: %w", err)
 	}
 
 	key := fmt.Sprintf("%s/%s.pdf", period, fileName)
 
 	if err := s.storage.Save(context.Background(), key, data); err != nil {
-		return err
+		return nil, err
 	}
 
 	s.logger.Info().Str("key", key).Msg("Successfully downloaded receipt")
 
-	return nil
+	return data, nil
 }
 
 // periodFromGGMM converts esanduce's YYMM code (e.g. 2606) into the "MM-YYYY"

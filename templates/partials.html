@@ -29,7 +29,7 @@
 <meta property="og:image:type" content="image/png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
-<meta property="og:image:alt" content="Preuzmi.me — automatsko preuzimanje računa" />
+<meta property="og:image:alt" content="{{t "Preuzmi.me — automatsko preuzimanje računa"}}" />
 <meta property="og:locale" content="sr_RS" />
 
 <meta name="twitter:card" content="summary_large_image" />
@@ -51,6 +51,7 @@
   })();
 </script>
 <script src="/assets/js/theme.js"></script>
+<script src="/assets/js/script.js"></script>
 {{/* Backs the refresh control in the header, so both pages need it. */}}
 <script src="/assets/js/refresh.js"></script>
 <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -70,14 +71,14 @@
 
 {{/* Inline help tip next to a settings label. Pass the explanation as the pipeline. */}}
 {{define "hint"}}
-<span class="field-hint" tabindex="0" role="img" aria-label="{{.}}">
+<span class="field-hint" tabindex="0" role="img" aria-label="{{t .}}">
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
        stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5" aria-hidden="true">
     <circle cx="12" cy="12" r="10" />
     <path d="M12 16v-4" />
     <path d="M12 8h.01" />
   </svg>
-  <span class="field-hint-tip" role="tooltip">{{.}}</span>
+  <span class="field-hint-tip" role="tooltip">{{t .}}</span>
 </span>
 {{end}}
 
@@ -102,7 +103,7 @@
     <nav class="flex items-center gap-1" x-data="refreshControl" x-init="init()">
       {{/* Last fetched + refresh, driven by the same code as the `checks` CLI command. */}}
       <div class="mr-1 hidden text-right sm:block">
-        <div class="text-[11px] leading-tight text-muted-foreground">Poslednje preuzimanje</div>
+        <div class="text-[11px] leading-tight text-muted-foreground">{{t "Poslednje preuzimanje"}}</div>
         {{/* Keyed on the label so Alpine re-creates the node, replaying the fade. */}}
         <template x-for="label in [lastFetchedLabel]" :key="label">
           <div class="animate-fade-in text-xs font-medium leading-tight" x-text="label"
@@ -113,7 +114,7 @@
               class="btn btn-outline btn-icon mr-1"
               :class="{ 'opacity-40': !allowed && !running }"
               :title="refreshTitle"
-              aria-label="Preuzmi nove račune">
+              aria-label="{{t "Preuzmi nove račune"}}">
         <svg viewBox="0 0 24 24" class="h-4 w-4" :class="{ 'animate-spin': running }" fill="none"
              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 6.7 3L21 8" />
@@ -125,17 +126,17 @@
 
       <a href="/dashboard"
          class="btn btn-ghost {{if eq .Active "receipts"}}bg-accent text-accent-foreground{{else}}text-muted-foreground{{end}}">
-        Računi
+        {{t "Računi"}}
       </a>
       <a href="/stats"
          class="btn btn-ghost {{if eq .Active "stats"}}bg-accent text-accent-foreground{{else}}text-muted-foreground{{end}}">
-        Statistika
+        {{t "Statistika"}}
       </a>
       <a href="/settings"
          class="btn btn-ghost {{if eq .Active "settings"}}bg-accent text-accent-foreground{{else}}text-muted-foreground{{end}}">
-        Podešavanja
+        {{t "Podešavanja"}}
       </a>
-      <button type="button" @click="window.toggleTheme()" title="Promeni temu" aria-label="Promeni temu"
+      <button type="button" @click="window.toggleTheme()" title="{{t "Promeni temu"}}" aria-label="{{t "Promeni temu"}}"
               class="btn btn-outline btn-icon ml-1">
         {{template "icon-sun"}}
         {{template "icon-moon"}}
@@ -171,7 +172,7 @@
               <p class="mt-1 text-sm leading-snug text-muted-foreground"
                  x-show="flash.message" x-text="flash.message"></p>
             </div>
-            <button type="button" class="toast-close" @click="flash.show = false" aria-label="Zatvori">
+            <button type="button" class="toast-close" @click="flash.show = false" aria-label="{{t "Zatvori"}}">
               <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"
                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M18 6 6 18M6 6l12 12" />

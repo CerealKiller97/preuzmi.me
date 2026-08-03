@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
+	"github.com/CerealKiller97/preuzmi.me/pkg/script"
 	"github.com/CerealKiller97/preuzmi.me/pkg/utils"
 	"github.com/rs/zerolog/log"
 )
@@ -21,17 +22,18 @@ type settingsUpdateResponse struct {
 // secrets, writes config.json, and hot-reloads the running process.
 func updateSettingsHandler(cfg *config.Config, reload func(*config.Config)) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
+		prev := *cfg
+
 		var incoming config.Config
 		if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			writeJSON(w, settingsUpdateResponse{
 				OK:    false,
-				Error: "Neispravan JSON u zahtevu.",
+				Error: script.Apply(prev.Lang, "Neispravan JSON u zahtevu."),
 			})
 			return
 		}
 
-		prev := *cfg
 		incoming.MergeSecrets(prev)
 
 		// Listen bind cannot hot-reload: keep whatever the process started with,
@@ -42,7 +44,7 @@ func updateSettingsHandler(cfg *config.Config, reload func(*config.Config)) Hand
 			w.WriteHeader(http.StatusBadRequest)
 			writeJSON(w, settingsUpdateResponse{
 				OK:    false,
-				Error: config.FriendlyError(err),
+				Error: script.Apply(incoming.Lang, config.FriendlyError(err)),
 			})
 			return
 		}
@@ -58,7 +60,7 @@ func updateSettingsHandler(cfg *config.Config, reload func(*config.Config)) Hand
 			w.WriteHeader(http.StatusInternalServerError)
 			writeJSON(w, settingsUpdateResponse{
 				OK:    false,
-				Error: "Ne mogu da pronađem config.json.",
+				Error: script.Apply(incoming.Lang, "Ne mogu da pronađem config.json."),
 			})
 			return
 		}
@@ -68,7 +70,7 @@ func updateSettingsHandler(cfg *config.Config, reload func(*config.Config)) Hand
 			w.WriteHeader(http.StatusInternalServerError)
 			writeJSON(w, settingsUpdateResponse{
 				OK:    false,
-				Error: "Čuvanje config.json nije uspelo.",
+				Error: script.Apply(incoming.Lang, "Čuvanje config.json nije uspelo."),
 			})
 			return
 		}
@@ -85,7 +87,7 @@ func updateSettingsHandler(cfg *config.Config, reload func(*config.Config)) Hand
 
 		writeJSON(w, settingsUpdateResponse{
 			OK:      true,
-			Message: "Izmene su sačuvane i odmah primenjene.",
+			Message: script.Apply(incoming.Lang, "Izmene su sačuvane i odmah primenjene."),
 		})
 	}
 }

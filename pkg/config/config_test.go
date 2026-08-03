@@ -60,6 +60,23 @@ func TestValidateRejectsBadCheckUntil(t *testing.T) {
 	assert.Contains(t, FriendlyError(err), "1 i 31")
 }
 
+func TestValidateLang(t *testing.T) {
+	cfg := Config{Storage: StorageLocal, DownloadPath: "/tmp", Lang: "cyrilic"}
+	require.NoError(t, cfg.Validate())
+	assert.Equal(t, LangCyrillic, cfg.Lang)
+
+	cfg = Config{Storage: StorageLocal, DownloadPath: "/tmp", Lang: "cyrillic"}
+	require.NoError(t, cfg.Validate())
+	assert.Equal(t, LangCyrillic, cfg.Lang)
+
+	cfg = Config{Storage: StorageLocal, DownloadPath: "/tmp"}
+	require.NoError(t, cfg.Validate())
+	assert.Equal(t, LangLatin, cfg.Lang)
+
+	cfg = Config{Storage: StorageLocal, DownloadPath: "/tmp", Lang: "german"}
+	require.Error(t, cfg.Validate())
+}
+
 // The daily cron fires every day; check_until must stop a run past its day.
 func TestRefreshAllowedRespectsCheckUntil(t *testing.T) {
 	cfg := Config{CheckUntil: 20}

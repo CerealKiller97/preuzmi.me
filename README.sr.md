@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-  ghcr.io/cerealkiller97/preuzmi.me:1.1.0
+  ghcr.io/cerealkiller97/preuzmi.me:1.2.0
 ```
 
 ### docker compose
@@ -65,7 +65,7 @@ docker run -d --name preuzmi \
 ```yaml
 services:
   preuzmi:
-    image: ghcr.io/cerealkiller97/preuzmi.me:1.1.0
+    image: ghcr.io/cerealkiller97/preuzmi.me:1.2.0
     container_name: preuzmi.me
     ports:
       - "5500:5500"
@@ -101,6 +101,7 @@ docker exec preuzmi /app/preuzmi checks
 - **Skladište** — lokalni folder ili S3-kompatibilni bucket
 - **Živa podešavanja** — izmena `config.json` iz UI-ja; hot-reload bez restarta
 - **`check_until`** — bez bespotrebnog osvežavanja posle dana kada provajderi više ne izdaju račune
+- **Srpsko pismo** — biraj latinicu (podrazumevano) ili ćirilicu preko ključa `lang`; važi za UI, `receipts` CLI i obaveštenja
 
 ## Snimci ekrana
 
@@ -135,6 +136,7 @@ docker exec preuzmi /app/preuzmi checks
   "storage": "local",
   "download_path": "./receipts",
   "check_until": 20,
+  "lang": "latin",
   "notifications": {
     "mode": "off",
     "driver": "telegram",
@@ -173,6 +175,7 @@ docker exec preuzmi /app/preuzmi checks
 | `storage` | `local` ili `s3` |
 | `download_path` | Gde idu PDF-ovi + `meta.json` / `receipts.db` / `refresh.json`. U Dockeru koristi putanju unutar kontejnera (npr. `/data/receipts`) i mapiraj host folder tamo. |
 | `check_until` | Poslednji dan u mesecu kada je osvežavanje dozvoljeno (podrazumevano `20`) |
+| `lang` | Pismo UI-ja i obaveštenja: `latin` (podrazumevano) ili `cyrillic` |
 | `notifications.mode` | `off` · `per_receipt` · `all_done` |
 | `notifications.driver` | `telegram` ili `smtp` |
 | `email.provider` | Drajver sandučeta za email provajdere (eUpravnik / Yettel). **Trenutno samo `gmail`.** |

@@ -12,6 +12,7 @@ import (
 	"github.com/CerealKiller97/preuzmi.me/pkg/container"
 	handlers "github.com/CerealKiller97/preuzmi.me/pkg/http"
 	receiptsrepo "github.com/CerealKiller97/preuzmi.me/pkg/repositories/receipts"
+	"github.com/CerealKiller97/preuzmi.me/pkg/script"
 	"github.com/mattn/go-isatty"
 	"github.com/rs/zerolog/log"
 )
@@ -194,15 +195,21 @@ func receiptsList(c *container.Container, args []string) {
 
 	p := newPainter()
 
+	// tr transliterates the fixed Serbian labels below to Cyrillic when the
+	// configured script is cyrillic. Only static label text (or text whose
+	// interpolated data is digits/slashes, where transliteration is a no-op) is
+	// passed through it; provider keys, amounts and dates stay verbatim.
+	tr := func(s string) string { return script.Apply(cfg.Lang, s) }
+
 	// Show the period back in the MM/YYYY form the user types.
 	periodLabel := strings.ReplaceAll(period, "-", "/")
 
 	if len(items) == 0 {
-		fmt.Printf("🧾 Nema računa za %s.\n", periodLabel)
+		fmt.Println(tr(fmt.Sprintf("🧾 Nema računa za %s.", periodLabel)))
 		return
 	}
 
-	fmt.Println(p.c(ansiBold, "🧾 Računi · "+periodLabel))
+	fmt.Println(p.c(ansiBold, tr("🧾 Računi · "+periodLabel)))
 	fmt.Println()
 
 	// A cell keeps the visible text apart from its coloured form so columns can
@@ -218,12 +225,12 @@ func receiptsList(c *container.Container, args []string) {
 
 	rows := [][]cell{
 		{
-			plain("PROVAJDER"),
-			plain("PERIOD"),
-			plain("IZNOS"),
-			plain("STATUS"),
-			plain("VERIFIKOVANO"),
-			plain("PLAĆENO"),
+			plain(tr("PROVAJDER")),
+			plain(tr("PERIOD")),
+			plain(tr("IZNOS")),
+			plain(tr("STATUS")),
+			plain(tr("VERIFIKOVANO")),
+			plain(tr("PLAĆENO")),
 		},
 	}
 
@@ -241,11 +248,14 @@ func receiptsList(c *container.Container, args []string) {
 	statusCell := func(s string) cell {
 		switch s {
 		case receiptsrepo.StatusPaid:
-			return cell{"🟢 " + s, "🟢 " + p.c(ansiGreen, s)}
+			label := tr(s)
+			return cell{"🟢 " + label, "🟢 " + p.c(ansiGreen, label)}
 		case receiptsrepo.StatusUnpaid:
-			return cell{"🔴 " + s, "🔴 " + p.c(ansiYellow, s)}
+			label := tr(s)
+			return cell{"🔴 " + label, "🔴 " + p.c(ansiYellow, label)}
 		default:
-			return cell{"⚪ nepoznato", "⚪ " + p.c(ansiDim, "nepoznato")}
+			label := tr("nepoznato")
+			return cell{"⚪ " + label, "⚪ " + p.c(ansiDim, label)}
 		}
 	}
 
@@ -327,7 +337,7 @@ func receiptsList(c *container.Container, args []string) {
 	fmt.Println(border("└", "┴", "┘"))
 
 	fmt.Println()
-	fmt.Println(p.c(ansiDim, fmt.Sprintf("%d račun(a) · %d označeni kao plaćeni", len(items), paidCount)))
+	fmt.Println(p.c(ansiDim, tr(fmt.Sprintf("%d račun(a) · %d označeni kao plaćeni", len(items), paidCount))))
 }
 
 // receiptsMark marks a single receipt paid (or unpaid) by stamping paid_at on
@@ -353,11 +363,12 @@ func receiptsMark(c *container.Container, args []string, paidState bool) {
 	}
 
 	p := newPainter()
+	tr := func(s string) string { return script.Apply(c.GetConfig().Lang, s) }
 	label := fmt.Sprintf("%s/%s", provider, handlers.NormalizePeriod(period))
 	if paidState {
-		fmt.Printf("✅ %s označen kao %s.\n", p.c(ansiCyan, label), p.c(ansiGreen, "plaćen"))
+		fmt.Printf("✅ %s %s %s.\n", p.c(ansiCyan, label), tr("označen kao"), p.c(ansiGreen, tr("plaćen")))
 	} else {
-		fmt.Printf("↩️  %s označen kao %s.\n", p.c(ansiCyan, label), p.c(ansiYellow, "neplaćen"))
+		fmt.Printf("↩️  %s %s %s.\n", p.c(ansiCyan, label), tr("označen kao"), p.c(ansiYellow, tr("neplaćen")))
 	}
 }
 

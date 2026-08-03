@@ -62,14 +62,14 @@ document.addEventListener('alpine:init', () => {
      */
     get refreshTitle() {
       if (this.running) {
-        return 'Preuzimanje u toku...';
+        return t('Preuzimanje u toku...');
       }
 
       if (!this.allowed) {
-        return `Preuzimanje je dostupno samo do ${this.checkUntil}. u mesecu`;
+        return t(`Preuzimanje je dostupno samo do ${this.checkUntil}. u mesecu`);
       }
 
-      return 'Preuzmi nove račune';
+      return t('Preuzmi nove račune');
     },
 
     /**
@@ -80,11 +80,11 @@ document.addEventListener('alpine:init', () => {
       this.tick;
 
       if (this.running) {
-        return 'U toku...';
+        return t('U toku...');
       }
 
       if (!this.finishedAt) {
-        return 'Nikad';
+        return t('Nikad');
       }
 
       return this.relative(this.finishedAt);
@@ -97,20 +97,20 @@ document.addEventListener('alpine:init', () => {
      */
     get lastFetchedTitle() {
       if (!this.finishedAt) {
-        return 'Računi još nisu preuzimani';
+        return t('Računi još nisu preuzimani');
       }
 
-      const when = new Date(this.finishedAt * 1000).toLocaleString('sr-Latn-RS');
+      const when = new Date(this.finishedAt * 1000).toLocaleString(srLocale());
       if (this.results.length === 0) {
         return when;
       }
 
       const lines = this.results.map(r => {
         const status = r.ok
-          ? (r.empty ? 'nema mejla' : 'uspešno')
-          : (r.error || 'greška');
+          ? (r.empty ? t('nema mejla') : t('uspešno'))
+          : (r.error || t('greška'));
 
-        return `${r.provider.toUpperCase()}: ${status}`;
+        return `${providerLabel(r.provider)}: ${status}`;
       });
 
       return `${when}\n${lines.join('\n')}`;
@@ -153,8 +153,8 @@ document.addEventListener('alpine:init', () => {
           this.running = false;
           this.showFlash(
             false,
-            'Preuzimanje nije dostupno',
-            `Dostupno je samo do ${this.checkUntil}. u mesecu.`
+            t('Preuzimanje nije dostupno'),
+            t(`Dostupno je samo do ${this.checkUntil}. u mesecu.`)
           );
           return;
         }
@@ -162,7 +162,7 @@ document.addEventListener('alpine:init', () => {
         if (res.status === 409) {
           this.apply(await res.json());
           this.schedulePoll();
-          this.showFlash(true, 'Preuzimanje je već u toku', 'Sačekaj da se završi trenutno preuzimanje.');
+          this.showFlash(true, t('Preuzimanje je već u toku'), t('Sačekaj da se završi trenutno preuzimanje.'));
           return;
         }
 
@@ -175,16 +175,16 @@ document.addEventListener('alpine:init', () => {
         // A not-running state means the server started nothing: every provider
         // already has the previous month's receipt, so there was nothing to do.
         if (!this.running) {
-          this.showFlash(true, 'Računi su ažurni', 'Svi računi za prošli mesec su već preuzeti.');
+          this.showFlash(true, t('Računi su ažurni'), t('Svi računi za prošli mesec su već preuzeti.'));
           return;
         }
 
         this.schedulePoll();
-        this.showFlash(true, 'Preuzimanje pokrenuto', 'Računi se preuzimaju u pozadini.');
+        this.showFlash(true, t('Preuzimanje pokrenuto'), t('Računi se preuzimaju u pozadini.'));
       } catch (e) {
         console.error(e);
         this.running = false;
-        this.showFlash(false, 'Preuzimanje nije pokrenuto', 'Pokušaj ponovo za trenutak.');
+        this.showFlash(false, t('Preuzimanje nije pokrenuto'), t('Pokušaj ponovo za trenutak.'));
       }
     },
 
@@ -215,34 +215,34 @@ document.addEventListener('alpine:init', () => {
       const failed = this.failedCount;
 
       if (total === 0) {
-        this.showFlash(true, 'Preuzimanje završeno', 'Nema rezultata od provajdera.');
+        this.showFlash(true, t('Preuzimanje završeno'), t('Nema rezultata od provajdera.'));
         return;
       }
 
       // Email-based providers (Yettel, eUpravnik) report "no receipt" when their
       // invoice email has not arrived yet. That is not a failure, but it explains
       // why fewer receipts were downloaded, so name them in the message.
-      const noMail = this.results.filter(r => r.ok && r.empty).map(r => r.provider.toUpperCase());
+      const noMail = this.results.filter(r => r.ok && r.empty).map(r => providerLabel(r.provider));
       const noMailNote = noMail.length
-        ? ` ${noMail.join(', ')}: nije pronađen mejl sa računom.`
+        ? t(` ${noMail.join(', ')}: nije pronađen mejl sa računom.`)
         : '';
 
       if (failed === 0) {
         const downloaded = total - noMail.length;
         const base = noMail.length === 0
           ? (total === 1
-            ? 'Provajder je uspešno obrađen.'
-            : `Svih ${total} provajdera je uspešno obrađeno.`)
-          : `Preuzeto ${downloaded} od ${total} računa.`;
+            ? t('Provajder je uspešno obrađen.')
+            : t(`Svih ${total} provajdera je uspešno obrađeno.`))
+          : t(`Preuzeto ${downloaded} od ${total} računa.`);
 
-        this.showFlash(true, 'Preuzimanje završeno', base + noMailNote);
+        this.showFlash(true, t('Preuzimanje završeno'), base + noMailNote);
         return;
       }
 
       this.showFlash(
         false,
-        'Preuzimanje završeno sa greškama',
-        `${failed} od ${total} provajdera nije uspelo.` + noMailNote
+        t('Preuzimanje završeno sa greškama'),
+        t(`${failed} od ${total} provajdera nije uspelo.`) + noMailNote
       );
     },
 
@@ -289,10 +289,10 @@ document.addEventListener('alpine:init', () => {
       }
 
       try {
-        return new Intl.RelativeTimeFormat('sr-Latn-RS', { numeric: 'auto' })
+        return new Intl.RelativeTimeFormat(srLocale(), { numeric: 'auto' })
           .format(-value, unit);
       } catch (_) {
-        return new Date(unixSeconds * 1000).toLocaleString('sr-Latn-RS');
+        return new Date(unixSeconds * 1000).toLocaleString(srLocale());
       }
     },
   }));

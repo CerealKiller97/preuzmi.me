@@ -114,9 +114,18 @@ type (
 		Storage      string `json:"storage"`
 		DownloadPath string `json:"download_path"`
 		LogLevel     string `json:"log_level"`
-		CheckUntil   int    `json:"check_until"`
-		PrettyPrint  bool   `json:"pretty_print"`
+		// Lang selects the Serbian script for the UI and notifications:
+		// "latin" (default) or "cyrillic".
+		Lang        string `json:"lang"`
+		CheckUntil  int    `json:"check_until"`
+		PrettyPrint bool   `json:"pretty_print"`
 	}
+)
+
+// Allowed values for the top-level "lang" key.
+const (
+	LangLatin    = "latin"
+	LangCyrillic = "cyrillic"
 )
 
 // Allowed values for notifications.driver.
@@ -256,6 +265,17 @@ func (c *Config) Validate() error {
 	case "trace", "debug", "info", "warn", "error", "fatal", "panic", "disabled":
 	default:
 		return fmt.Errorf("invalid log_level %q", c.LogLevel)
+	}
+
+	switch strings.ToLower(strings.TrimSpace(c.Lang)) {
+	case "":
+		c.Lang = LangLatin
+	case LangLatin:
+		c.Lang = LangLatin
+	case LangCyrillic, "cyrilic":
+		c.Lang = LangCyrillic
+	default:
+		return fmt.Errorf("invalid lang %q, allowed values are %q and %q", c.Lang, LangLatin, LangCyrillic)
 	}
 
 	if err := c.validateNotifications(); err != nil {

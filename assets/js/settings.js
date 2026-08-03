@@ -100,10 +100,11 @@ document.addEventListener('alpine:init', () => {
         initial = JSON.parse(raw?.textContent || '{}');
       } catch (e) {
         console.error('Failed to parse settings form data', e);
-        this.showFlash(false, 'Greška', 'Ne mogu da učitam podešavanja sa stranice.');
+        this.showFlash(false, t('Greška'), t('Ne mogu da učitam podešavanja sa stranice.'));
       }
 
       this.form = this.normalizeForm(initial);
+      this.guides = this.localizeTree(this.guides);
 
       this.canTest = this.$el.dataset.canTest === 'true';
       const driver = (this.form.notifications?.driver || 'smtp').toLowerCase();
@@ -146,13 +147,30 @@ document.addEventListener('alpine:init', () => {
         const saved = JSON.parse(raw);
         this.showFlash(
           !!saved.ok,
-          saved.title || (saved.ok ? 'Uspešno' : 'Greška'),
+          saved.title || (saved.ok ? t('Uspešno') : t('Greška')),
           saved.message || '',
           saved.warnings || [],
         );
       } catch {
         sessionStorage.removeItem('settings-flash');
       }
+    },
+
+    localizeTree(value) {
+      if (typeof value === 'string') {
+        return t(value);
+      }
+      if (Array.isArray(value)) {
+        return value.map((v) => this.localizeTree(v));
+      }
+      if (value && typeof value === 'object') {
+        const out = {};
+        for (const [k, v] of Object.entries(value)) {
+          out[k] = this.localizeTree(v);
+        }
+        return out;
+      }
+      return value;
     },
 
     persistFlash(ok, title, message, warnings = []) {
@@ -231,6 +249,11 @@ document.addEventListener('alpine:init', () => {
       if (!form.log_level) {
         form.log_level = 'info';
       }
+      if (form.lang !== 'cyrillic' && form.lang !== 'cyrilic') {
+        form.lang = 'latin';
+      } else {
+        form.lang = 'cyrillic';
+      }
 
       return form;
     },
@@ -240,7 +263,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     secretPlaceholder(has) {
-      return has ? '•••••••• (neizmenjeno)' : '';
+      return has ? t('•••••••• (neizmenjeno)') : '';
     },
 
     markDirty() {
@@ -275,8 +298,8 @@ document.addEventListener('alpine:init', () => {
 
         this.dirty = false;
 
-        const title = 'Konfiguracija je uspešno promenjena';
-        const message = data.message || 'Izmene su sačuvane i primenjene.';
+        const title = t('Konfiguracija je uspešno promenjena');
+        const message = data.message || t('Izmene su sačuvane i primenjene.');
         const warnings = data.warnings || [];
 
         this.persistFlash(true, title, message, warnings);
@@ -287,7 +310,7 @@ document.addEventListener('alpine:init', () => {
           window.location.reload();
         }, 650);
       } catch (e) {
-        this.showFlash(false, 'Čuvanje nije uspelo', e.message || 'Pokušaj ponovo.');
+        this.showFlash(false, t('Čuvanje nije uspelo'), e.message || t('Pokušaj ponovo.'));
       } finally {
         this.saving = false;
       }
@@ -355,10 +378,10 @@ document.addEventListener('alpine:init', () => {
           throw new Error(text.trim() || `HTTP ${res.status}`);
         }
         this.testOk = true;
-        this.testMessage = 'Test poruka je poslata.';
+        this.testMessage = t('Test poruka je poslata.');
       } catch (e) {
         this.testOk = false;
-        this.testMessage = e.message || 'Slanje nije uspelo.';
+        this.testMessage = e.message || t('Slanje nije uspelo.');
       } finally {
         this.sending = false;
       }

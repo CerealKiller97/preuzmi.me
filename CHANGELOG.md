@@ -10,6 +10,13 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+## [1.2.0] - 31.07.2026
+
+### ✨ Added
+
+- 🔤 **Serbian Cyrillic support.** A new top-level `lang` config key — `latin` (default) or `cyrillic` — switches the whole app between Serbian Latin and Cyrillic: the dashboard, stats and settings UI, the `receipts` CLI output, and Telegram / email notifications. Change it from **Settings → Apply changes** or in `config.json`; it hot-reloads with no restart. **Existing installs keep Latin** — the key is new, and an absent or empty `lang` falls back to `latin`, so nothing changes until you opt in.
+- 🏷️ Provider names are localized sensibly in Cyrillic: Serbian names transliterate (`e.Sanduče` → `Е-САНДУЧЕ`, `eUpravnik` → `Е-УПРАВНИК`, `EPS` → `ЕПС`, `mts` → `МТС`), foreign brands stay Latin (`A1`), and `Yettel` renders as `ЈЕТЕЛ`.
+
 ## [1.1.0] - 30.07.2026
 
 ### ✨ Added
@@ -70,7 +77,8 @@ stats, and notifications, so no bill goes unintentionally unpaid.
 - 🐳 Multi-arch (amd64 + arm64), distroless Docker image published to GHCR.
 - 🌐 Bilingual documentation — English and Serbian.
 
-[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.3...v1.1.0
 [1.0.3]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.1...v1.0.2

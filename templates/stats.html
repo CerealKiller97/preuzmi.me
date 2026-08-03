@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="sr" class="h-full">
+<html lang="{{ .HTMLLang }}" data-lang="{{ .Lang }}" class="h-full">
 <head>
   {{template "head" .}}
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -11,16 +11,16 @@
 
   <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
     <div class="animate-fade-in-up flex flex-col gap-1">
-      <h1 class="text-2xl font-semibold tracking-tight">Statistika</h1>
+      <h1 class="text-2xl font-semibold tracking-tight">{{t "Statistika"}}</h1>
       <p class="text-sm text-muted-foreground">
-        Pregled troškova po mesecima i provajderima za izabranu godinu.
+        {{t "Pregled troškova po mesecima i provajderima za izabranu godinu."}}
       </p>
     </div>
 
     <!-- Filters -->
     <section class="mt-6 flex flex-col gap-4">
       <div class="flex w-full flex-col gap-1.5 sm:w-44">
-        <label for="year" class="text-sm font-medium leading-none">Godina</label>
+        <label for="year" class="text-sm font-medium leading-none">{{t "Godina"}}</label>
         <div class="relative">
           <select id="year" x-model.number="selectedYear" @change="fetchStats()" class="input appearance-none pr-9">
             <template x-for="y in years" :key="y">
@@ -38,12 +38,12 @@
       <div class="flex flex-wrap items-center gap-2">
         <button type="button" @click="clearProviders()"
                 :class="selectedProviders.length === 0 ? 'pill-active' : 'pill-inactive'" class="pill">
-          Svi provajderi
+          {{t "Svi provajderi"}}
         </button>
         <template x-for="p in providers" :key="p">
           <button type="button" @click="toggleProvider(p)"
                   :class="selectedProviders.includes(p) ? 'pill-active' : 'pill-inactive'" class="pill">
-            <span x-text="p.toUpperCase()"></span>
+            <span x-text="providerLabel(p)"></span>
           </button>
         </template>
       </div>
@@ -52,30 +52,30 @@
     <!-- Summary cards -->
     <section class="animate-fade-in-up mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" style="--stagger: 2">
       <div class="card p-5">
-        <div class="text-sm font-medium text-muted-foreground">Ukupno godišnje</div>
+        <div class="text-sm font-medium text-muted-foreground">{{t "Ukupno godišnje"}}</div>
         <div class="mt-2 text-2xl font-semibold tracking-tight" x-text="formatMoney(data.total, data.currency)"></div>
         <p class="mt-1 text-xs text-muted-foreground">
-          Za <span x-text="selectedYear"></span>.
+          {{t "Za"}} <span x-text="selectedYear"></span>.
         </p>
       </div>
 
       <div class="card p-5">
-        <div class="text-sm font-medium text-muted-foreground">Prosek mesečno</div>
+        <div class="text-sm font-medium text-muted-foreground">{{t "Prosek mesečno"}}</div>
         <div class="mt-2 text-2xl font-semibold tracking-tight" x-text="formatMoney(data.average, data.currency)"></div>
-        <p class="mt-1 text-xs text-muted-foreground">Prosek preko 12 meseci.</p>
+        <p class="mt-1 text-xs text-muted-foreground">{{t "Prosek preko 12 meseci."}}</p>
       </div>
 
       <div class="card p-5">
-        <div class="text-sm font-medium text-muted-foreground">Najskuplji mesec</div>
+        <div class="text-sm font-medium text-muted-foreground">{{t "Najskuplji mesec"}}</div>
         <div class="mt-2 text-2xl font-semibold tracking-tight" x-text="formatMoney(peakMonth.amount, data.currency)"></div>
         <p class="mt-1 text-xs text-muted-foreground" x-text="peakMonth.name || '—'"></p>
       </div>
 
       <div class="card p-5">
-        <div class="text-sm font-medium text-muted-foreground">Broj računa</div>
+        <div class="text-sm font-medium text-muted-foreground">{{t "Broj računa"}}</div>
         <div class="mt-2 text-2xl font-semibold tracking-tight" x-text="totalCount"></div>
         <p class="mt-1 truncate text-xs text-muted-foreground"
-           x-text="selectedProviders.length === 0 ? 'Svi provajderi' : selectedProviders.map(p => p.toUpperCase()).join(', ')"></p>
+           x-text="selectedProviders.length === 0 ? '{{t "Svi provajderi"}}' : selectedProviders.map(p => providerLabel(p)).join(', ')"></p>
       </div>
     </section>
 
@@ -83,20 +83,20 @@
     <section class="card mt-6 p-5">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 class="text-base font-semibold tracking-tight">Mesečni troškovi</h2>
-          <p class="text-sm text-muted-foreground">Prikaz za <span x-text="selectedYear"></span>.</p>
+          <h2 class="text-base font-semibold tracking-tight">{{t "Mesečni troškovi"}}</h2>
+          <p class="text-sm text-muted-foreground">{{t "Prikaz za"}} <span x-text="selectedYear"></span>.</p>
         </div>
         <div class="flex items-center gap-2">
           <div class="flex items-center gap-1 rounded-lg bg-muted p-1">
             <button type="button" @click="setChartType('bar')"
                     :class="chartType === 'bar' ? 'bg-background shadow-sm' : 'text-muted-foreground'"
                     class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors">
-              Stubići
+              {{t "Stubići"}}
             </button>
             <button type="button" @click="setChartType('line')"
                     :class="chartType === 'line' ? 'bg-background shadow-sm' : 'text-muted-foreground'"
                     class="rounded-md px-2.5 py-1 text-xs font-medium transition-colors">
-              Linije
+              {{t "Linije"}}
             </button>
           </div>
           <span class="badge badge-secondary" x-text="data.currency || 'RSD'"></span>
@@ -110,24 +110,24 @@
 
     <!-- Monthly prices per provider -->
     <section class="card animate-fade-in-up mt-6 p-5" style="--stagger: 4">
-      <h2 class="text-base font-semibold tracking-tight">Cene po provajderu i mesecu</h2>
+      <h2 class="text-base font-semibold tracking-tight">{{t "Cene po provajderu i mesecu"}}</h2>
       <p class="text-sm text-muted-foreground">
-        Iznosi računa za <span x-text="selectedYear"></span>, sa godišnjim zbirom po provajderu.
+        {{t "Iznosi računa za"}} <span x-text="selectedYear"></span>{{t ", sa godišnjim zbirom po provajderu."}}
       </p>
 
       <div x-show="providerSeries.length === 0" class="mt-6 text-sm text-muted-foreground">
-        Nema podataka za izabranu godinu.
+        {{t "Nema podataka za izabranu godinu."}}
       </div>
 
       <div class="mt-5 overflow-x-auto" x-show="providerSeries.length > 0">
         <table class="w-full text-sm">
           <thead>
             <tr class="border-b text-left text-muted-foreground">
-              <th class="pb-2 pr-4 font-medium">Mesec</th>
+              <th class="pb-2 pr-4 font-medium">{{t "Mesec"}}</th>
               <template x-for="row in providerSeries" :key="row.provider">
-                <th class="pb-2 pr-4 text-right font-medium" x-text="row.provider.toUpperCase()"></th>
+                <th class="pb-2 pr-4 text-right font-medium" x-text="providerLabel(row.provider)"></th>
               </template>
-              <th class="pb-2 text-right font-medium">Ukupno</th>
+              <th class="pb-2 text-right font-medium">{{t "Ukupno"}}</th>
             </tr>
           </thead>
           <tbody>
@@ -145,7 +145,7 @@
           </tbody>
           <tfoot>
             <tr class="border-t">
-              <td class="pt-3 pr-4 font-semibold">Godišnje</td>
+              <td class="pt-3 pr-4 font-semibold">{{t "Godišnje"}}</td>
               <template x-for="row in providerSeries" :key="row.provider">
                 <td class="pt-3 pr-4 text-right font-semibold tabular-nums"
                     x-text="formatMoney(yearlyFor(row), data.currency)"></td>
@@ -160,11 +160,11 @@
 
     <!-- Per-provider breakdown: no transform animation — blanks Chart.js canvases. -->
     <section class="card mt-6 p-5">
-      <h2 class="text-base font-semibold tracking-tight">Po provajderu</h2>
-      <p class="text-sm text-muted-foreground">Udeo svakog provajdera u ukupnom trošku.</p>
+      <h2 class="text-base font-semibold tracking-tight">{{t "Po provajderu"}}</h2>
+      <p class="text-sm text-muted-foreground">{{t "Udeo svakog provajdera u ukupnom trošku."}}</p>
 
       <div x-show="byProvider.length === 0" class="mt-6 text-sm text-muted-foreground">
-        Nema podataka za izabranu godinu.
+        {{t "Nema podataka za izabranu godinu."}}
       </div>
 
       <div class="mt-5 grid items-center gap-8 lg:grid-cols-[280px_1fr]" x-show="byProvider.length > 0">
@@ -179,7 +179,7 @@
                 <span class="flex items-center gap-2 font-medium">
                   <span class="h-2.5 w-2.5 shrink-0 rounded-full"
                         :style="`background: var(--brand-${row.provider.toLowerCase()}, var(--chart-series-${(i % 5) + 1}))`"></span>
-                  <span x-text="row.provider.toUpperCase()"></span>
+                  <span x-text="providerLabel(row.provider)"></span>
                 </span>
                 <span class="text-muted-foreground">
                   <span class="font-medium text-foreground" x-text="formatMoney(row.amount, data.currency)"></span>

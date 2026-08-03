@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-  ghcr.io/cerealkiller97/preuzmi.me:1.1.0
+  ghcr.io/cerealkiller97/preuzmi.me:1.2.0
 ```
 
 ### docker compose
@@ -65,7 +65,7 @@ docker run -d --name preuzmi \
 ```yaml
 services:
   preuzmi:
-    image: ghcr.io/cerealkiller97/preuzmi.me:1.1.0
+    image: ghcr.io/cerealkiller97/preuzmi.me:1.2.0
     container_name: preuzmi.me
     ports:
       - '5500:5500'
@@ -101,6 +101,7 @@ docker exec preuzmi /app/preuzmi checks
 - **Storage** — local folder or S3-compatible bucket
 - **Live settings** — edit `config.json` from the UI; hot-reload without restart
 - **`check_until`** — skip wasted refreshes after the day providers stop issuing bills
+- **Serbian script** — pick Latin (default) or Cyrillic via the `lang` key; applies to the UI, `receipts` CLI, and notifications
 
 ## Screenshots
 
@@ -135,6 +136,7 @@ docker exec preuzmi /app/preuzmi checks
   "storage": "local",
   "download_path": "./receipts",
   "check_until": 20,
+  "lang": "latin",
   "notifications": {
     "mode": "off",
     "driver": "telegram",
@@ -173,6 +175,7 @@ docker exec preuzmi /app/preuzmi checks
 | `storage`                  | `local` or `s3`                                                                                                                                                    |
 | `download_path`            | Where PDFs + `meta.json` / `receipts.db` / `refresh.json` live. In Docker use an in-container path (e.g. `/data/receipts`) and bind-mount the host folder there. |
 | `check_until`              | Last calendar day of the month refresh is allowed (default `20`)                                                                                                   |
+| `lang`                     | UI and notification script: `latin` (default) or `cyrillic`                                                                                                        |
 | `notifications.mode`       | `off` · `per_receipt` · `all_done`                                                                                                                                 |
 | `notifications.driver`     | `telegram` or `smtp`                                                                                                                                               |
 | `email.provider`           | Mailbox driver for the email-based providers (eUpravnik / Yettel). **Currently `gmail` only.**                                                                     |

@@ -52,6 +52,7 @@ type redactedConfig struct {
 	Storage      string `json:"storage"`
 	DownloadPath string `json:"download_path"`
 	LogLevel     string `json:"log_level"`
+	Lang         string `json:"lang"`
 	CheckUntil   int    `json:"check_until"`
 	PrettyPrint  bool   `json:"pretty_print"`
 }
@@ -104,6 +105,7 @@ func redact(cfg *config.Config) redactedConfig {
 		DownloadPath: cfg.DownloadPath,
 		CheckUntil:   cfg.CheckUntil,
 		LogLevel:     cfg.LogLevel,
+		Lang:         cfg.Lang,
 		PrettyPrint:  cfg.PrettyPrint,
 		Providers:    make(map[string]redactedCredentials, len(cfg.Providers)),
 	}
@@ -218,6 +220,7 @@ var knownKeys = map[string]struct{}{
 	"s3":            {},
 	"download_path": {},
 	"check_until":   {},
+	"lang":          {},
 	"notifications": {},
 	"email":         {},
 	"log_level":     {},
@@ -268,7 +271,8 @@ func writable(dir string) bool {
 func settingsHandler(cfg *config.Config, version string, notifier *notify.Service) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
 
-		tmpl, err := template.ParseFiles(
+		tmpl, err := parseTemplates(
+			cfg.Lang,
 			"./templates/settings.html",
 			"./templates/partials.html",
 		)
@@ -358,11 +362,9 @@ func settingsHandler(cfg *config.Config, version string, notifier *notify.Servic
 			ProviderSecretsJSON:  template.JS(providerSecretsJSON),
 			IgnoredKeys:          ignoredConfigKeys(configPath),
 		}
+		withPageScript(&viewModel.PageData, cfg.Lang)
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-
-		if err := tmpl.Execute(w, viewModel); err != nil {
-			log.Err(err).Msg("Error executing settings template")
-		}
+		renderTemplate(w, tmpl, viewModel)
 	}
 }

@@ -17,6 +17,21 @@ import (
 // caching the result — including an empty payload for a bill with no QR, so it
 // is parsed at most once). ok is false when the bill carries no readable QR.
 func resolveIPSPayload(ctx context.Context, store storage.Interface, rec *receipts.Repository, provider, period string) (string, bool) {
+	payload, ok := lookupIPSPayload(ctx, store, rec, provider, period)
+	if ok {
+		// The QR carries the amount a banking app actually charges, so treat it as
+		// the authoritative price and correct the recorded total when it drifted
+		// (e.g. a provider API reporting a figure that includes an extra fee).
+		reconcileIPSPrice(ctx, rec, provider, period, payload)
+	}
+
+	return payload, ok
+}
+
+// lookupIPSPayload returns the receipt's IPS payload, from the database cache
+// when present and by parsing the PDF (then caching the result) on a miss. ok is
+// false when the bill carries no readable QR.
+func lookupIPSPayload(ctx context.Context, store storage.Interface, rec *receipts.Repository, provider, period string) (string, bool) {
 	if rec != nil {
 		if payload, checked, err := rec.IPSQR(ctx, provider, period); err == nil && checked {
 			return payload, payload != ""
@@ -40,6 +55,25 @@ func resolveIPSPayload(ctx context.Context, store storage.Interface, rec *receip
 	}
 
 	return payload, payload != ""
+}
+
+// reconcileIPSPrice corrects the receipt's stored price to the amount its IPS QR
+// carries. It runs on every resolve but only writes when the two differ, so a
+// bill filed with a wrong provider total self-heals the first time its QR is
+// viewed. Best-effort: a failure is logged and swallowed.
+func reconcileIPSPrice(ctx context.Context, rec *receipts.Repository, provider, period, payload string) {
+	if rec == nil {
+		return
+	}
+
+	amount, ok := ipsqr.Amount(payload)
+	if !ok {
+		return
+	}
+
+	if _, err := rec.ReconcilePrice(ctx, provider, period, amount); err != nil {
+		log.Err(err).Str("provider", provider).Str("period", period).Msg("Failed to reconcile price from IPS QR")
+	}
 }
 
 // receiptQRImageHandler streams a freshly rendered PNG of a receipt's IPS

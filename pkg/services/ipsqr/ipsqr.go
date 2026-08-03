@@ -16,6 +16,7 @@ package ipsqr
 import (
 	"image"
 	"image/color"
+	"strconv"
 	"strings"
 
 	"github.com/makiuchi-d/gozxing"
@@ -60,6 +61,20 @@ func Extract(pdf []byte) (payload string, ok bool) {
 	}
 
 	return "", false
+}
+
+// AmountFromPDF extracts the IPS QR from a bill PDF and returns the payable
+// amount it carries. It is the one-call path for providers that want the QR
+// amount at download time — the figure a banking app actually charges — without
+// handling the payload themselves. ok is false when the bill has no readable QR
+// or the QR carries no parseable amount.
+func AmountFromPDF(pdf []byte) (float64, bool) {
+	payload, ok := Extract(pdf)
+	if !ok {
+		return 0, false
+	}
+
+	return Amount(payload)
 }
 
 // readIPSQR attempts to read a single image as a QR code and validates that the
@@ -107,6 +122,39 @@ func IsIPSPayload(text string) bool {
 	t := strings.ToUpper(strings.TrimSpace(text))
 
 	return strings.HasPrefix(t, "K:PR") && strings.Contains(t, "|R:")
+}
+
+// Amount parses the payable amount from an IPS payload's `I:` field and reports
+// whether one was found. Per the NBS IPS spec the field is a 3-letter ISO-4217
+// currency code followed by the amount with a comma decimal separator and no
+// thousands grouping, e.g. "I:RSD4376,94" -> 4376.94.
+//
+// This is the figure a banking app charges when the QR is scanned, so it is the
+// authoritative price for the bill — preferred over a provider's API- or
+// PDF-parsed total when the two disagree.
+func Amount(payload string) (float64, bool) {
+	for _, part := range strings.Split(payload, "|") {
+		key, val, ok := strings.Cut(part, ":")
+		if !ok || !strings.EqualFold(strings.TrimSpace(key), "I") {
+			continue
+		}
+
+		// Drop the leading ISO-4217 currency code (letters), then normalise the
+		// Serbian-style number: strip any thousands dots and turn the decimal
+		// comma into a point.
+		num := strings.TrimLeft(strings.TrimSpace(val), "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
+		num = strings.ReplaceAll(num, ".", "")
+		num = strings.Replace(num, ",", ".", 1)
+
+		amount, err := strconv.ParseFloat(num, 64)
+		if err != nil || amount <= 0 {
+			return 0, false
+		}
+
+		return amount, true
+	}
+
+	return 0, false
 }
 
 // invert returns a value-inverted grayscale copy of an image so a QR printed as

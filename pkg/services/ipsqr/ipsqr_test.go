@@ -68,6 +68,26 @@ func TestExtractFromRealBills(t *testing.T) {
 	}
 }
 
+// TestAmountFromRealBills confirms every sample bill with a QR yields a
+// positive payable amount, locking in that AmountFromPDF works across the
+// per-provider QR encodings (CCITT, Flate, inline, vector).
+func TestAmountFromRealBills(t *testing.T) {
+	for _, name := range []string{"mts.pdf", "esanduce.pdf", "eupravnik.pdf", "eps.pdf"} {
+		t.Run(name, func(t *testing.T) {
+			pdf := readSampleBill(t, name)
+
+			amount, ok := AmountFromPDF(pdf)
+			if !ok {
+				t.Fatalf("%s: AmountFromPDF ok = false, want an amount", name)
+			}
+			if amount <= 0 {
+				t.Errorf("%s: amount = %v, want > 0", name, amount)
+			}
+			t.Logf("%s: amount = %.2f", name, amount)
+		})
+	}
+}
+
 // TestRenderRoundTrip re-encodes a real extracted payload and decodes it back,
 // proving the rendered QR carries the exact payment string the bill did.
 func TestRenderRoundTrip(t *testing.T) {
@@ -92,6 +112,36 @@ func TestRenderRoundTrip(t *testing.T) {
 	}
 	if strings.TrimSpace(got) != strings.TrimSpace(payload) {
 		t.Errorf("round-trip mismatch:\n got: %q\nwant: %q", got, payload)
+	}
+}
+
+func TestAmount(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want float64
+		ok   bool
+	}{
+		{"esanduce", "K:PR|V:01|C:1|R:200220618010100048|N:INFOSTAN|I:RSD4376,94|SF:122|S:x", 4376.94, true},
+		{"mts", "K:PR|V:01|C:1|R:160000000000060216|N:Telekom|I:RSD1819,46|SF:189", 1819.46, true},
+		{"whole amount", "K:PR|I:RSD3001,01", 3001.01, true},
+		{"thousands separator", "K:PR|I:RSD1.234.567,89", 1234567.89, true},
+		{"lowercase key", "k:pr|i:rsd12,50", 12.50, true},
+		{"missing I field", "K:PR|V:01|R:123|N:x", 0, false},
+		{"empty", "", 0, false},
+		{"non-numeric", "K:PR|I:RSD", 0, false},
+		{"zero", "K:PR|I:RSD0,00", 0, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, ok := Amount(c.in)
+			if ok != c.ok {
+				t.Fatalf("Amount(%q) ok = %v, want %v", c.in, ok, c.ok)
+			}
+			if ok && got != c.want {
+				t.Errorf("Amount(%q) = %v, want %v", c.in, got, c.want)
+			}
+		})
 	}
 }
 

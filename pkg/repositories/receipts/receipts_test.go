@@ -508,3 +508,51 @@ VALUES ('eps', '06/2026', '06-2026/eps.pdf', 1234, 2365.0, 'neplaćeno', 1720000
 		t.Fatalf("IPSQR after re-open = (%q, %v), want (%q, true)", payload, checked, wantPayload)
 	}
 }
+
+func TestReconcilePrice(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer store.Close() //nolint:errcheck
+
+	ctx := context.Background()
+
+	if err := store.Record(ctx, Receipt{Provider: "esanduce", Period: "07-2026", StorageKey: "07-2026/esanduce.pdf"}); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	// A wrong provider total, as the API reported it.
+	if err := store.SetPrice(ctx, "esanduce", "07-2026", 4426.94); err != nil {
+		t.Fatalf("SetPrice: %v", err)
+	}
+
+	// The QR amount differs, so it wins and the row changes.
+	changed, err := store.ReconcilePrice(ctx, "esanduce", "07-2026", 4376.94)
+	if err != nil {
+		t.Fatalf("ReconcilePrice: %v", err)
+	}
+	if !changed {
+		t.Fatal("ReconcilePrice reported no change for a differing amount")
+	}
+	if r, ok := store.Latest(ctx, "esanduce"); !ok || r.Price != 4376.94 {
+		t.Fatalf("price after reconcile = %v (ok=%v), want 4376.94", r.Price, ok)
+	}
+
+	// Idempotent: reconciling to the same value is a no-op.
+	changed, err = store.ReconcilePrice(ctx, "esanduce", "07-2026", 4376.94)
+	if err != nil {
+		t.Fatalf("second ReconcilePrice: %v", err)
+	}
+	if changed {
+		t.Fatal("ReconcilePrice reported a change when the amount already matched")
+	}
+
+	// A missing row is a silent no-op, not an error.
+	changed, err = store.ReconcilePrice(ctx, "eps", "01-2026", 100)
+	if err != nil {
+		t.Fatalf("ReconcilePrice (missing row): %v", err)
+	}
+	if changed {
+		t.Fatal("ReconcilePrice changed a non-existent row")
+	}
+}

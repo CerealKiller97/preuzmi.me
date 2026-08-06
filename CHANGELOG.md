@@ -10,6 +10,12 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+## [1.3.1] - 06.08.2026
+
+### 🐛 Fixed
+
+- 🗓️ **mts receipts are now filed under the right month.** An mts bill was being saved one month early — July's receipt landed under `06-2026` instead of `07-2026` — because mts reports the bill's month starting from zero (0 = January). The period is now corrected before the receipt is stored, so the folder, dashboard and stats all show the month printed on the bill. Receipts already filed under the wrong month from an earlier version aren't moved automatically.
+
 ## [1.3.0] - 03.08.2026
 
 ### ✨ Added
@@ -88,7 +94,8 @@ stats, and notifications, so no bill goes unintentionally unpaid.
 - 🐳 Multi-arch (amd64 + arm64), distroless Docker image published to GHCR.
 - 🌐 Bilingual documentation — English and Serbian.
 
-[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.3...v1.1.0

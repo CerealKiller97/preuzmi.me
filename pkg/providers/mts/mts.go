@@ -153,9 +153,13 @@ func latestBill(bills []dto.Bill) dto.Bill {
 // billPeriod returns the "MM-YYYY" folder for a bill, preferring the bill's own
 // month/year and falling back to the previous-month heuristic when the API does
 // not provide them.
+//
+// MTS reports month 0-indexed (0 = January … 11 = December), so the July bill
+// arrives as month 6. Add one to get the human 1-12 month used in the folder;
+// without this the receipt is filed one month early (July under 06-YYYY).
 func billPeriod(bill dto.Bill) string {
-	if bill.Month >= 1 && bill.Month <= 12 && bill.Year > 0 {
-		return fmt.Sprintf("%02d-%d", bill.Month, bill.Year)
+	if bill.Month >= 0 && bill.Month <= 11 && bill.Year > 0 {
+		return fmt.Sprintf("%02d-%d", bill.Month+1, bill.Year)
 	}
 
 	return utils.PreviousMonthFolder()

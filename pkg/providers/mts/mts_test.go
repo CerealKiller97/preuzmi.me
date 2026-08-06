@@ -75,13 +75,19 @@ func TestLatestBill(t *testing.T) {
 }
 
 func TestBillPeriod(t *testing.T) {
-	if got := billPeriod(dto.Bill{Month: 5, Year: 2026}); got != "05-2026" {
-		t.Errorf("billPeriod = %q, want 05-2026", got)
+	// MTS reports month 0-indexed, so June's bill arrives as 5 -> 06-2026.
+	if got := billPeriod(dto.Bill{Month: 5, Year: 2026}); got != "06-2026" {
+		t.Errorf("billPeriod = %q, want 06-2026", got)
 	}
-	if got := billPeriod(dto.Bill{Month: 12, Year: 2025}); got != "12-2025" {
+	// The July bill (month 6) must be filed under 07-YYYY, not 06-YYYY.
+	if got := billPeriod(dto.Bill{Month: 6, Year: 2026}); got != "07-2026" {
+		t.Errorf("billPeriod = %q, want 07-2026", got)
+	}
+	// December (month 11).
+	if got := billPeriod(dto.Bill{Month: 11, Year: 2025}); got != "12-2025" {
 		t.Errorf("billPeriod = %q, want 12-2025", got)
 	}
-	// Missing month/year falls back to the heuristic (non-empty MM-YYYY).
+	// Year 0 (month/year absent) falls back to the heuristic (non-empty MM-YYYY).
 	if got := billPeriod(dto.Bill{}); len(got) < 6 {
 		t.Errorf("billPeriod fallback = %q, want a non-empty MM-YYYY", got)
 	}

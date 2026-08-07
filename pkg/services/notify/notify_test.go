@@ -235,6 +235,45 @@ func TestHandleDueRemindersSummary(t *testing.T) {
 	assert.Contains(t, sent[0].body, "Ukupno: 8.400,00 RSD.")
 }
 
+// The per-receipt reminder transliterates to Cyrillic, applying each provider's
+// name rule and keeping day words, bullets and the total intact.
+func TestHandleDueRemindersCyrillic(t *testing.T) {
+	var got struct{ subject, body string }
+	sender := senderFunc(func(subject, body string) error {
+		got.subject, got.body = subject, body
+		return nil
+	})
+	svc := notify.NewWithLang(
+		config.Notifications{Driver: config.NotifyDriverTelegram, DueReminders: true},
+		sender, zerolog.Nop(), config.LangCyrillic,
+	)
+
+	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.Local)
+	day := func(d int) int64 {
+		m := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+		return m.AddDate(0, 0, d).Unix()
+	}
+
+	svc.HandleDueReminders([]notify.DueReceipt{
+		{Provider: "yettel", Period: "07/2026", Price: 400.52, DueAt: day(2)},
+		{Provider: "eps", Period: "07/2026", Price: 4001.55, DueAt: day(0)},
+		{Provider: "a1", Period: "07/2026", Price: 1200, DueAt: day(-3)},
+		{Provider: "esanduce", Period: "07/2026", Price: 8123.50, DueAt: day(1)},
+	}, now)
+
+	assert.Contains(t, got.subject, "доспеће рачуна")
+	// Sorted most-urgent first, each provider by its own rule.
+	assert.Contains(t, got.body, "A1 рачун је доспео — 1.200,00 РСД.")             // brand kept Latin
+	assert.Contains(t, got.body, "ЕПС рачун доспева данас — 4.001,55 РСД.")        // acronym transliterated
+	assert.Contains(t, got.body, "Е-САНДУЧЕ рачун доспева за 1 дан — 8.123,50 РСД.") // Serbian word, singular "дан"
+	assert.Contains(t, got.body, "ЈЕТЕЛ рачун доспева за 2 дана — 400,52 РСД.")     // custom Cyrillic spelling
+	assert.Contains(t, got.body, "Укупно: 13.725,57 РСД.")
+	// No Latin provider names or currency leak through.
+	assert.NotContains(t, got.body, "YETTEL")
+	assert.NotContains(t, got.body, "EPS")
+	assert.NotContains(t, got.body, "RSD")
+}
+
 func TestHandleDueRemindersSilentWhenOff(t *testing.T) {
 	var count int
 	sender := senderFunc(func(string, string) error { count++; return nil })

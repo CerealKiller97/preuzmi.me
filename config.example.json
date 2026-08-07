@@ -1,0 +1,71 @@
+{
+  "providers": {
+    "a1": {
+      "identifier": "",
+      "password": ""
+    },
+    "eps": {
+      "identifier": "",
+      "password": ""
+    },
+    "esanduce": {
+      "identifier": "",
+      "password": ""
+    },
+    "eupravnik": {
+      "identifier": "",
+      "password": "",
+      "mailbox": "Računi/Eupravnik"
+    },
+    "mts": {
+      "identifier": "",
+      "password": ""
+    },
+    "yettel": {
+      "identifier": "",
+      "password": "",
+      "mailbox": "Računi/Yettel"
+    }
+  },
+  "lang": "cyrilic",
+  "notifications": {
+    "mode": "per_receipt",
+    "driver": "telegram",
+    "paid_confirmation": true,
+    "due_reminders": true,
+    "smtp": {
+      "host": "host.docker.internal",
+      "username": "",
+      "password": "",
+      "from": "preuzmi@localhost",
+      "to": "you@localhost",
+      "port": 1025
+    },
+    "telegram": {
+      "bot_token": "",
+      "chat_id": ""
+    }
+  },
+  "email": {
+    "provider": "gmail",
+    "host": "",
+    "mailbox": "",
+    "port": 0
+  },
+  "s3": {
+    "endpoint": "http://host.docker.internal:9000",
+    "bucket": "receipts",
+    "region": "us-east-1",
+    "access_key": "rustfsadmin",
+    "secret_key": "rustfsadmin"
+  },
+  "application": {
+    "host": "0.0.0.0",
+    "port": 5500
+  },
+  "storage": "local",
+  "download_path": "absolute-path/data/receipts",
+  "log_level": "info",
+  "check_until": 31,
+  "pretty_print": true
+}

@@ -14,6 +14,40 @@ Release, so keep the entries user-facing.
 
 - ⏰ Due-date tracking — `datum dospeća` / `rok za plaćanje` / `datum valute` is parsed from each PDF (and from e.Sanduče's API) into `due_at`. Unpaid cards show an overdue / due-soon badge, and optional due reminders fire a summary like "3 računa dospevaju za 2 dana — 8.400 RSD" (Settings → Obaveštenja).
 
+## [1.3.2] - 07.08.2026
+
+### 🐛 Fixed
+
+- 🔕 **Each receipt is announced only once — for good.** A download or paid-confirmation notification is now recorded on the receipt itself, so the daily `checks` cron never re-announces a bill it already told you about. Previously the "already notified" mark could be lost when a provider rewrote a receipt's status on a later run (some do this on every fetch), which let an old bill fire a duplicate notification. Existing databases gain the two tracking columns automatically, backfilled from your already-downloaded and confirmed receipts, so upgrading does not replay a burst of notifications for past bills.
+
+### 🔧 Changed
+
+- ⏭️ **Refresh stops as soon as the provider confirms payment — it no longer waits for you.** A provider's previous-month bill is skipped once it is downloaded and the provider reports it `plaćeno` (with a confirmation time), instead of also requiring that *you* had marked it paid in the app. Once the provider itself confirms the payment there is nothing left to learn, so the daily run and the refresh button stop logging into that account. Bills that aren't downloaded yet, or are downloaded but not yet confirmed paid, still run every time.
+
+## [1.3.1] - 06.08.2026
+
+### 🐛 Fixed
+
+- 🗓️ **mts receipts are now filed under the right month.** An mts bill was being saved one month early — July's receipt landed under `06-2026` instead of `07-2026` — because mts reports the bill's month starting from zero (0 = January). The period is now corrected before the receipt is stored, so the folder, dashboard and stats all show the month printed on the bill. Receipts already filed under the wrong month from an earlier version aren't moved automatically.
+
+## [1.3.0] - 03.08.2026
+
+### ✨ Added
+
+- 📲 **Payment QR on the receipt card.** The NBS IPS payment QR embedded in a bill PDF is now lifted out and shown in a modal — open the dashboard, tap **Plati skeniranjem (QR)**, scan it in your banking app, then **Označi kao plaćeno** (or just close). Works off the bill's *own* QR, so the account and reference number are exactly what the provider printed. The extractor reads QRs whether they are embedded as an image XObject (mts, Infostan/eSanduče), an inline content-stream image (EPS), or drawn as vector paths (eUpravnik). A **Kopiraj IPS podatke** button copies the raw payment data as a fallback when you're paying from the same phone. Bills whose layout embeds no readable QR simply show no scannable code.
+
+### 🔧 Changed
+
+- 💵 **Receipt amounts now come from the payment QR.** The total on the card, in the stats, and in notifications is the exact figure the bill's NBS IPS QR carries — the same amount your banking app charges when you scan it — instead of a separately parsed provider total that could drift (an e.Sanduče bill read 50 RSD high). e.Sanduče, Yettel and eUpravnik take the amount straight from the QR when the bill is downloaded; the other providers self-correct to the QR amount the first time a receipt's code is viewed. Bills with no readable QR keep the provider's amount as before.
+- 🗃️ Opening an existing `receipts.db` from a previous release automatically adds the IPS QR cache columns (`ips_qr`, `ips_checked`). No manual migration or data wipe — your downloaded receipts and paid state stay put.
+
+## [1.2.0] - 31.07.2026
+
+### ✨ Added
+
+- 🔤 **Serbian Cyrillic support.** A new top-level `lang` config key — `latin` (default) or `cyrillic` — switches the whole app between Serbian Latin and Cyrillic: the dashboard, stats and settings UI, the `receipts` CLI output, and Telegram / email notifications. Change it from **Settings → Apply changes** or in `config.json`; it hot-reloads with no restart. **Existing installs keep Latin** — the key is new, and an absent or empty `lang` falls back to `latin`, so nothing changes until you opt in.
+- 🏷️ Provider names are localized sensibly in Cyrillic: Serbian names transliterate (`e.Sanduče` → `Е-САНДУЧЕ`, `eUpravnik` → `Е-УПРАВНИК`, `EPS` → `ЕПС`, `mts` → `МТС`), foreign brands stay Latin (`A1`), and `Yettel` renders as `ЈЕТЕЛ`.
+
 ## [1.1.0] - 30.07.2026
 
 ### ✨ Added
@@ -74,7 +108,11 @@ stats, and notifications, so no bill goes unintentionally unpaid.
 - 🐳 Multi-arch (amd64 + arm64), distroless Docker image published to GHCR.
 - 🌐 Bilingual documentation — English and Serbian.
 
-[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.3.2...HEAD
+[1.3.2]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.3.1...v1.3.2
+[1.3.1]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.3.0...v1.3.1
+[1.3.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.3...v1.1.0
 [1.0.3]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.0.1...v1.0.2

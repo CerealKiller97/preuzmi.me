@@ -1,4 +1,4 @@
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Maj', 'Jun', 'Jul', 'Avg', 'Sep', 'Okt', 'Nov', 'Dec'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Maj', 'Jun', 'Jul', 'Avg', 'Sep', 'Okt', 'Nov', 'Dec'].map((m) => t(m));
 
 /**
  * Reads a design token from assets/css/app.css so the chart follows the theme
@@ -428,7 +428,7 @@ document.addEventListener('alpine:init', () => {
       // With no per-provider series (empty year) fall back to the total.
       if (this.providerSeries.length === 0) {
         return [{
-          label: 'Ukupno',
+          label: t('Ukupno'),
           data: this.data.monthly || Array(12).fill(0),
           backgroundColor: palette[0],
           borderRadius: 6,
@@ -441,7 +441,7 @@ document.addEventListener('alpine:init', () => {
         const color = this.providerColor(row.provider, i);
 
         return {
-          label: row.provider.toUpperCase(),
+          label: providerLabel(row.provider),
           data: row.monthly || Array(12).fill(0),
           backgroundColor: color,
           hoverBackgroundColor: this.rgba(color, 0.85),
@@ -471,7 +471,7 @@ document.addEventListener('alpine:init', () => {
       gradient.addColorStop(1, this.rgba(line, 0));
 
       const datasets = [{
-        label: 'Ukupno',
+        label: t('Ukupno'),
         data: this.data.monthly || Array(12).fill(0),
         borderColor: line,
         backgroundColor: gradient,
@@ -486,7 +486,7 @@ document.addEventListener('alpine:init', () => {
       this.providerSeries.forEach((row, i) => {
         const color = this.providerColor(row.provider, i);
         datasets.push({
-          label: row.provider.toUpperCase(),
+          label: providerLabel(row.provider),
           data: row.monthly || Array(12).fill(0),
           borderColor: color,
           backgroundColor: color,
@@ -551,7 +551,7 @@ document.addEventListener('alpine:init', () => {
           ctx.textBaseline = 'middle';
           ctx.fillStyle = token('--chart-tick');
           ctx.font = '12px ui-sans-serif, system-ui, sans-serif';
-          ctx.fillText('Ukupno', x, y - 12);
+          ctx.fillText(t('Ukupno'), x, y - 12);
           ctx.fillStyle = token('--chart-line');
           ctx.font = '600 15px ui-sans-serif, system-ui, sans-serif';
           ctx.fillText(self.formatMoney(self.data.total, self.data.currency), x, y + 10);
@@ -562,7 +562,7 @@ document.addEventListener('alpine:init', () => {
       this.donut = new Chart(el.getContext('2d'), {
         type: 'doughnut',
         data: {
-          labels: rows.map(r => r.provider.toUpperCase()),
+          labels: rows.map(r => providerLabel(r.provider)),
           datasets: [{
             data: rows.map(r => r.amount),
             backgroundColor: rows.map((r, i) => this.providerColor(r.provider, i)),
@@ -638,7 +638,7 @@ document.addEventListener('alpine:init', () => {
       const sym = currency || 'RSD';
 
       try {
-        return new Intl.NumberFormat('sr-Latn-RS', {
+        return new Intl.NumberFormat(srLocale(), {
           style: 'currency',
           currency: sym,
           maximumFractionDigits: 0,

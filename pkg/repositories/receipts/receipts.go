@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -124,9 +125,22 @@ WHERE provider = ? AND period = ?;`
 	// next Record is a first download.
 	selectDownloadedAtQuery = `SELECT downloaded_at FROM receipts WHERE provider = ? AND period = ?;`
 
-	// selectSettledQuery reads the fields that decide whether a refresh can skip
-	// a provider: user paid_at, provider status, and confirmed_at.
-	selectSettledQuery = `SELECT paid_at, status, confirmed_at FROM receipts WHERE provider = ? AND period = ?;`
+	// selectNotifiedDownloadQuery / selectNotifiedConfirmedQuery read whether a
+	// download or paid-confirmation notification has already fired for a
+	// (provider, period). A non-zero value means the user was already told once.
+	// The columns are nullable (NULL on rows predating them), so COALESCE folds
+	// NULL to 0 — "not yet notified" — keeping the scan an int64.
+	selectNotifiedDownloadQuery  = `SELECT COALESCE(notified_download_at, 0) FROM receipts WHERE provider = ? AND period = ?;`
+	selectNotifiedConfirmedQuery = `SELECT COALESCE(notified_confirmed_at, 0) FROM receipts WHERE provider = ? AND period = ?;`
+
+	// setNotifiedDownloadQuery / setNotifiedConfirmedQuery stamp the "already
+	// notified" marker so a later re-run stays silent about the same receipt.
+	setNotifiedDownloadQuery  = `UPDATE receipts SET notified_download_at = ? WHERE provider = ? AND period = ?;`
+	setNotifiedConfirmedQuery = `UPDATE receipts SET notified_confirmed_at = ? WHERE provider = ? AND period = ?;`
+
+	// selectConfirmedPaidQuery reads the fields that decide whether a refresh can
+	// skip a provider: the download time, provider status, and confirmed_at.
+	selectConfirmedPaidQuery = `SELECT downloaded_at, status, confirmed_at FROM receipts WHERE provider = ? AND period = ?;`
 
 	// setStatusPaidQuery marks a receipt paid by the provider, stamping
 	// confirmed_at only on the first confirmation so the timestamp is stable.
@@ -149,11 +163,50 @@ VALUES (?, ?, ?, 0, 0, ?, 0, ?)
 ON CONFLICT(provider, period) DO UPDATE SET
 	paid_at = excluded.paid_at;`
 
+	// selectIPSQRQuery reads the cached IPS QR payload and whether extraction has
+	// already been attempted for a (provider, period).
+	selectIPSQRQuery = `SELECT ips_qr, ips_checked FROM receipts WHERE provider = ? AND period = ?;`
+
+	// setIPSQRQuery stores the decoded IPS QR payload (possibly empty) and marks
+	// extraction as done, so a bill with no QR is not re-parsed on every render.
+	setIPSQRQuery = `UPDATE receipts SET ips_qr = ?, ips_checked = 1 WHERE provider = ? AND period = ?;`
+
 	// listReceiptsQuery returns every recorded receipt, newest download first.
 	listReceiptsQuery = `
 SELECT id, provider, period, storage_key, size_bytes, price, status, downloaded_at, paid_at, confirmed_at, due_at, due_reminded_at
 FROM receipts
 ORDER BY downloaded_at DESC, id DESC;`
+
+	// Migration statements, run once at startup by migrate(). Kept here with the
+	// rest so every SQL string the package issues lives in one place.
+
+	// backfillConfirmedAtQuery gives already-paid receipts a confirmation time
+	// (their download time) so the column is not blank for history predating it.
+	backfillConfirmedAtQuery = `UPDATE receipts SET confirmed_at = downloaded_at WHERE status = ? AND confirmed_at = 0 AND downloaded_at > 0;`
+
+	// backfillNotifiedDownloadQuery / backfillNotifiedConfirmedQuery seed the
+	// notification markers for receipts that predate the columns, so an upgrade
+	// does not re-announce every download and payment already on record. COALESCE
+	// matches whether the marker is still NULL (freshly ALTERed in) or an explicit 0.
+	backfillNotifiedDownloadQuery  = `UPDATE receipts SET notified_download_at = downloaded_at WHERE COALESCE(notified_download_at, 0) = 0 AND downloaded_at > 0;`
+	backfillNotifiedConfirmedQuery = `UPDATE receipts SET notified_confirmed_at = confirmed_at WHERE COALESCE(notified_confirmed_at, 0) = 0 AND confirmed_at > 0;`
+
+	// selectPaymentsQuery / dropPaymentsTableQuery fold a former standalone
+	// payments table back into receipts.paid_at, then drop it.
+	selectPaymentsQuery    = `SELECT key, paid_at FROM payments;`
+	dropPaymentsTableQuery = `DROP TABLE payments;`
+
+	// setImportedPaidQuery writes a paid_at imported from a former store onto its
+	// receipt row (a no-op when the row does not exist yet).
+	setImportedPaidQuery = `UPDATE receipts SET paid_at = ? WHERE provider = ? AND period = ?;`
+
+	// tableExistsQuery reports whether a table of the given name is present.
+	tableExistsQuery = `SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?;`
+
+	// selectDashPeriodsQuery lists rows whose period is still in the legacy dash
+	// form; updatePeriodByIDQuery rewrites one to the canonical slash form.
+	selectDashPeriodsQuery = `SELECT id, period FROM receipts WHERE period LIKE '%-%';`
+	updatePeriodByIDQuery  = `UPDATE OR IGNORE receipts SET period = ? WHERE id = ?;`
 )
 
 type Receipt struct {
@@ -211,31 +264,17 @@ func New(dir string) (*Repository, error) {
 	}, nil
 }
 
-// migrate applies the schema and brings older databases forward. The schema is
-// CREATE TABLE IF NOT EXISTS, so it is a no-op once the tables exist; the
-// follow-up steps are each idempotent so running them on every start is safe.
+// migrate applies database/schema.sql (creating tables and adding any columns
+// that appear there but are missing from an older database) and then runs
+// receipts-specific data migrations. Schema shape changes belong in
+// database/schema.sql only; this function keeps the data rewrites.
 func migrate(db *sql.DB, dir string) error {
-	if _, err := db.Exec(database.Schema); err != nil {
+	if err := database.Apply(db); err != nil {
 		return fmt.Errorf("receipts: applying schema: %w", err)
 	}
 
 	if err := migratePeriodsToSlash(db); err != nil {
 		return fmt.Errorf("receipts: migrating periods: %w", err)
-	}
-
-	// Ensure the paid-state columns exist on databases created before they were
-	// added (or before a separate payments table was merged back in).
-	if err := ensureColumn(db, "receipts", "paid_at", "INTEGER NOT NULL DEFAULT 0"); err != nil {
-		return fmt.Errorf("receipts: adding paid_at: %w", err)
-	}
-	if err := ensureColumn(db, "receipts", "confirmed_at", "INTEGER NOT NULL DEFAULT 0"); err != nil {
-		return fmt.Errorf("receipts: adding confirmed_at: %w", err)
-	}
-	if err := ensureColumn(db, "receipts", "due_at", "INTEGER NOT NULL DEFAULT 0"); err != nil {
-		return fmt.Errorf("receipts: adding due_at: %w", err)
-	}
-	if err := ensureColumn(db, "receipts", "due_reminded_at", "INTEGER NOT NULL DEFAULT 0"); err != nil {
-		return fmt.Errorf("receipts: adding due_reminded_at: %w", err)
 	}
 
 	// Fold any earlier separate paid-state stores back into the receipts row.
@@ -249,11 +288,21 @@ func migrate(db *sql.DB, dir string) error {
 
 	// Give already-confirmed receipts a confirmation time so the column is not
 	// blank for history predating it. downloaded_at is the closest known proxy.
-	if _, err := db.Exec(
-		`UPDATE receipts SET confirmed_at = downloaded_at WHERE status = ? AND confirmed_at = 0 AND downloaded_at > 0`,
-		StatusPaid,
-	); err != nil {
+	if _, err := db.Exec(backfillConfirmedAtQuery, StatusPaid); err != nil {
 		return fmt.Errorf("receipts: backfilling confirmed_at: %w", err)
+	}
+
+	// Backfill the notification markers for receipts that predate them, so
+	// upgrading does not re-announce every download and payment already on record.
+	// The columns are freshly ALTERed in as NULL on an existing database; a
+	// receipt with a real download time was effectively already announced, as was
+	// one already confirmed, so use those timestamps as the proxy. COALESCE keeps
+	// the match working whether the marker is still NULL or an explicit 0.
+	if _, err := db.Exec(backfillNotifiedDownloadQuery); err != nil {
+		return fmt.Errorf("receipts: backfilling notified_download_at: %w", err)
+	}
+	if _, err := db.Exec(backfillNotifiedConfirmedQuery); err != nil {
+		return fmt.Errorf("receipts: backfilling notified_confirmed_at: %w", err)
 	}
 
 	return nil
@@ -271,7 +320,7 @@ func migratePaymentsTableIntoReceipts(db *sql.DB) error {
 		return nil
 	}
 
-	rows, err := db.Query(`SELECT key, paid_at FROM payments`)
+	rows, err := db.Query(selectPaymentsQuery)
 	if err != nil {
 		return err
 	}
@@ -304,7 +353,7 @@ func migratePaymentsTableIntoReceipts(db *sql.DB) error {
 		}
 	}
 
-	_, err = db.Exec(`DROP TABLE payments`)
+	_, err = db.Exec(dropPaymentsTableQuery)
 
 	return err
 }
@@ -351,7 +400,7 @@ func applyImportedPaid(db *sql.DB, key string, paidAt int64) error {
 	provider := providerPart
 	period := slashPeriod(dashPart)
 
-	res, err := db.Exec(`UPDATE receipts SET paid_at = ? WHERE provider = ? AND period = ?`, paidAt, provider, period)
+	res, err := db.Exec(setImportedPaidQuery, paidAt, provider, period)
 	if err != nil {
 		return err
 	}
@@ -368,7 +417,7 @@ func applyImportedPaid(db *sql.DB, key string, paidAt int64) error {
 // tableExists reports whether a table of the given name is present.
 func tableExists(db *sql.DB, name string) (bool, error) {
 	var found string
-	err := db.QueryRow(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`, name).Scan(&found)
+	err := db.QueryRow(tableExistsQuery, name).Scan(&found)
 	if err == sql.ErrNoRows {
 		return false, nil
 	}
@@ -379,44 +428,6 @@ func tableExists(db *sql.DB, name string) (bool, error) {
 	return true, nil
 }
 
-// ensureColumn adds col (with the given SQL definition) to table when it is not
-// already present. Idempotent, so it is safe on every startup.
-func ensureColumn(db *sql.DB, table, col, definition string) error {
-	has, err := hasColumn(db, table, col)
-	if err != nil || has {
-		return err
-	}
-
-	_, err = db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, col, definition))
-
-	return err
-}
-
-// hasColumn reports whether table has a column named col.
-func hasColumn(db *sql.DB, table, col string) (bool, error) {
-	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
-	if err != nil {
-		return false, err
-	}
-	defer rows.Close() //nolint:errcheck // read-only rows
-
-	for rows.Next() {
-		var (
-			cid, notnull, pk int
-			name, ctype      string
-			dflt             sql.NullString
-		)
-		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
-			return false, err
-		}
-		if name == col {
-			return true, rows.Err()
-		}
-	}
-
-	return false, rows.Err()
-}
-
 // migratePeriodsToSlash rewrites any legacy dash-form period ("06-2026") in the
 // period column to the slash form ("06/2026"). It is idempotent — slash-form
 // rows contain no dash and are skipped — so it can run on every startup. The
@@ -424,7 +435,7 @@ func hasColumn(db *sql.DB, table, col string) (bool, error) {
 // (provider, period), leaving the legacy row untouched rather than failing the
 // whole migration on a unique-constraint violation.
 func migratePeriodsToSlash(db *sql.DB) error {
-	rows, err := db.Query(`SELECT id, period FROM receipts WHERE period LIKE '%-%'`)
+	rows, err := db.Query(selectDashPeriodsQuery)
 	if err != nil {
 		return err
 	}
@@ -455,7 +466,7 @@ func migratePeriodsToSlash(db *sql.DB) error {
 	}
 
 	for _, u := range updates {
-		if _, err := db.Exec(`UPDATE OR IGNORE receipts SET period = ? WHERE id = ?`, u.period, u.id); err != nil {
+		if _, err := db.Exec(updatePeriodByIDQuery, u.period, u.id); err != nil {
 			return err
 		}
 	}
@@ -475,12 +486,14 @@ func (s *Repository) Record(ctx context.Context, r Receipt) error {
 	// provider wrote it (dash), so paths are unaffected.
 	r.Period = slashPeriod(r.Period)
 
-	// A first download is one with no prior download time (no row, or a paid-only
-	// stub with downloaded_at 0). Read it before the upsert so DrainNewlyDownloaded
-	// can announce it once, and a daily re-download stays silent.
-	var prevDownloadedAt int64
-	_ = s.db.QueryRowContext(ctx, selectDownloadedAtQuery, r.Provider, r.Period).Scan(&prevDownloadedAt)
-	firstDownload := prevDownloadedAt == 0
+	// Announce a download exactly once, ever. We key off a persistent "already
+	// notified" marker rather than "is this the first download": a daily re-run —
+	// or any provider that rewrites this receipt's row on every pass — must not
+	// re-announce a bill the user has already been told about. Read the marker
+	// before the upsert; 0 means it has never been announced.
+	var notifiedDownloadAt int64
+	_ = s.db.QueryRowContext(ctx, selectNotifiedDownloadQuery, r.Provider, r.Period).Scan(&notifiedDownloadAt)
+	alreadyNotified := notifiedDownloadAt != 0
 
 	// On a re-download we refresh the file facts but deliberately leave price,
 	// status and paid_at untouched — those are set by SetPrice / SetStatus /
@@ -500,7 +513,14 @@ func (s *Repository) Record(ctx context.Context, r Receipt) error {
 		return err
 	}
 
-	if firstDownload {
+	if !alreadyNotified {
+		// Stamp the marker in the same call that queues the announcement, so even a
+		// crash right after leaves the receipt marked as told (matching the existing
+		// behaviour, where state advances before the notification is sent).
+		if _, err := s.db.ExecContext(ctx, setNotifiedDownloadQuery, time.Now().Unix(), r.Provider, r.Period); err != nil {
+			return err
+		}
+
 		s.mu.Lock()
 		s.newlyDownloaded = append(s.newlyDownloaded, Receipt{Provider: r.Provider, Period: r.Period})
 		s.mu.Unlock()
@@ -521,22 +541,26 @@ func (s *Repository) HasDownloaded(ctx context.Context, provider, period string)
 	return err == nil && downloadedAt > 0
 }
 
-// IsSettled reports whether the receipt for (provider, period) is fully done:
-// the user has stamped paid_at, the provider reports status "plaćeno", and
-// confirmed_at is set. Only then is there nothing left for a refresh to learn or
-// fetch — an unpaid or unverified bill is still worth re-checking so status can
-// flip and paid-confirmation can fire.
-func (s *Repository) IsSettled(ctx context.Context, provider, period string) bool {
+// IsConfirmedPaid reports whether the receipt for (provider, period) is
+// downloaded and the provider has confirmed it paid: a real download time,
+// status "plaćeno", and confirmed_at set. Only then is there nothing left for a
+// refresh to fetch or learn — a not-yet-downloaded or still-unpaid bill is worth
+// re-checking so its PDF is fetched and a paid-confirmation can fire.
+//
+// Unlike a fully-settled check this does NOT require the user to have marked the
+// receipt paid in the app (paid_at): once the provider itself confirms payment
+// there is no reason to keep logging in, whether or not the user clicked "paid".
+func (s *Repository) IsConfirmedPaid(ctx context.Context, provider, period string) bool {
 	period = slashPeriod(period)
 
-	var paidAt, confirmedAt int64
+	var downloadedAt, confirmedAt int64
 	var status string
-	err := s.db.QueryRowContext(ctx, selectSettledQuery, provider, period).Scan(&paidAt, &status, &confirmedAt)
+	err := s.db.QueryRowContext(ctx, selectConfirmedPaidQuery, provider, period).Scan(&downloadedAt, &status, &confirmedAt)
 	if err != nil {
 		return false
 	}
 
-	return paidAt != 0 && status == StatusPaid && confirmedAt != 0
+	return downloadedAt > 0 && status == StatusPaid && confirmedAt != 0
 }
 
 // DrainNewlyDownloaded returns and clears the receipts downloaded for the first
@@ -619,6 +643,33 @@ func (s *Repository) MarkDueReminded(ctx context.Context, items []Receipt, at in
 	return nil
 }
 
+// ReconcilePrice corrects a receipt's stored price to want when the two differ
+// by more than half a cent, and reports whether it changed anything. It lets the
+// IPS QR amount — the figure a banking app actually charges — override a price a
+// provider's API or PDF parse recorded differently, so a bill that was filed
+// with a wrong total self-heals. A missing row is a no-op.
+func (s *Repository) ReconcilePrice(ctx context.Context, provider, period string, want float64) (bool, error) {
+	period = slashPeriod(period)
+
+	var current float64
+	switch err := s.db.QueryRowContext(ctx, selectPriceQuery, provider, period).Scan(&current); {
+	case err == sql.ErrNoRows:
+		return false, nil
+	case err != nil:
+		return false, err
+	}
+
+	if math.Abs(current-want) < 0.005 {
+		return false, nil
+	}
+
+	if _, err := s.db.ExecContext(ctx, setPriceQuery, want, provider, period); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
 // SetStatus updates the provider-reported paid state ("plaćeno" / "neplaćeno")
 // for an already-recorded receipt.
 //
@@ -636,6 +687,13 @@ func (s *Repository) SetStatus(ctx context.Context, provider, period, status str
 	// queue no notification: a payment is only confirmed for a receipt we hold.
 	existed := s.db.QueryRowContext(ctx, selectStatusQuery, provider, period).Scan(&prev) == nil
 
+	// Whether we have already announced this payment. Read it before the status
+	// write so a provider that rewrites status every run (e.g. Yettel/eUpravnik
+	// flip the current bill back to unpaid, clearing confirmed_at, then re-confirm
+	// it later) cannot make us re-announce a payment already reported once.
+	var notifiedConfirmedAt int64
+	_ = s.db.QueryRowContext(ctx, selectNotifiedConfirmedQuery, provider, period).Scan(&notifiedConfirmedAt)
+
 	if status == StatusPaid {
 		if _, err := s.db.ExecContext(ctx, setStatusPaidQuery, status, time.Now().Unix(), provider, period); err != nil {
 			return err
@@ -646,7 +704,13 @@ func (s *Repository) SetStatus(ctx context.Context, provider, period, status str
 		}
 	}
 
-	if existed && status == StatusPaid && prev != StatusPaid {
+	if existed && status == StatusPaid && notifiedConfirmedAt == 0 {
+		// Stamp the marker so this payment is never announced again, even if the
+		// status later flaps unpaid → paid.
+		if _, err := s.db.ExecContext(ctx, setNotifiedConfirmedQuery, time.Now().Unix(), provider, period); err != nil {
+			return err
+		}
+
 		var price float64
 		_ = s.db.QueryRowContext(ctx, selectPriceQuery, provider, period).Scan(&price)
 
@@ -696,6 +760,34 @@ func (s *Repository) MarkPaid(ctx context.Context, provider, period string, paid
 	}
 
 	return at, nil
+}
+
+// IPSQR returns the cached NBS IPS QR payload for a receipt and whether
+// extraction has already been attempted. checked is true once we have tried to
+// parse the PDF, even if it carried no QR (payload is then ""), so callers can
+// avoid re-parsing a bill that has none.
+func (s *Repository) IPSQR(ctx context.Context, provider, period string) (payload string, checked bool, err error) {
+	period = slashPeriod(period)
+
+	var checkedInt int64
+	err = s.db.QueryRowContext(ctx, selectIPSQRQuery, provider, period).Scan(&payload, &checkedInt)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+
+	return payload, checkedInt != 0, nil
+}
+
+// SetIPSQR caches the decoded IPS QR payload for a receipt (empty when the bill
+// has none) and marks extraction as done. It is a no-op when no receipt row
+// exists for the (provider, period) yet.
+func (s *Repository) SetIPSQR(ctx context.Context, provider, period, payload string) error {
+	_, err := s.db.ExecContext(ctx, setIPSQRQuery, payload, provider, slashPeriod(period))
+
+	return err
 }
 
 // List returns every recorded receipt, newest download first.

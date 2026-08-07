@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-  ghcr.io/cerealkiller97/preuzmi.me:1.1.0
+  ghcr.io/cerealkiller97/preuzmi.me:1.3.2
 ```
 
 ### docker compose
@@ -65,7 +65,7 @@ docker run -d --name preuzmi \
 ```yaml
 services:
   preuzmi:
-    image: ghcr.io/cerealkiller97/preuzmi.me:1.1.0
+    image: ghcr.io/cerealkiller97/preuzmi.me:1.3.2
     container_name: preuzmi.me
     ports:
       - '5500:5500'
@@ -96,11 +96,13 @@ docker exec preuzmi /app/preuzmi checks
 - **Smart refresh** — skips providers whose previous-month receipt is settled (`paid_at` set, status `plaćeno`, and `confirmed_at` set); unpaid or unverified bills keep running so status can flip
 - **Receipt dashboard** — search, filter by period / provider / paid status
 - **Paid tracking** — mark receipts paid from the UI or the `receipts` CLI; tracked as two separate moments: *paid by you* and *confirmed by the provider*
+- **Payment QR** — unpaid receipt cards show *Plati skeniranjem (QR)*: the bill's own NBS IPS QR, lifted straight from the PDF and shown in a modal to scan in your banking app. The amount is read from that QR, so what you see matches what the bank charges
 - **Stats** — yearly totals, monthly averages, per-provider charts
 - **Notifications** — Telegram or SMTP (`off` / `per_receipt` / `all_done`)
 - **Storage** — local folder or S3-compatible bucket
 - **Live settings** — edit `config.json` from the UI; hot-reload without restart
 - **`check_until`** — skip wasted refreshes after the day providers stop issuing bills
+- **Serbian script** — pick Latin (default) or Cyrillic via the `lang` key; applies to the UI, `receipts` CLI, and notifications
 
 ## Screenshots
 
@@ -108,6 +110,12 @@ docker exec preuzmi /app/preuzmi checks
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Receipts dashboard" width="880" />
+</p>
+
+### Payment QR
+
+<p align="center">
+  <img src="docs/screenshots/qr-modal.png" alt="Payment QR modal" width="880" />
 </p>
 
 ### Statistics
@@ -135,6 +143,7 @@ docker exec preuzmi /app/preuzmi checks
   "storage": "local",
   "download_path": "./receipts",
   "check_until": 20,
+  "lang": "latin",
   "notifications": {
     "mode": "off",
     "driver": "telegram",
@@ -173,6 +182,7 @@ docker exec preuzmi /app/preuzmi checks
 | `storage`                  | `local` or `s3`                                                                                                                                                    |
 | `download_path`            | Where PDFs + `meta.json` / `receipts.db` / `refresh.json` live. In Docker use an in-container path (e.g. `/data/receipts`) and bind-mount the host folder there. |
 | `check_until`              | Last calendar day of the month refresh is allowed (default `20`)                                                                                                   |
+| `lang`                     | UI and notification script: `latin` (default) or `cyrillic`                                                                                                        |
 | `notifications.mode`       | `off` · `per_receipt` · `all_done`                                                                                                                                 |
 | `notifications.driver`     | `telegram` or `smtp`                                                                                                                                               |
 | `email.provider`           | Mailbox driver for the email-based providers (eUpravnik / Yettel). **Currently `gmail` only.**                                                                     |

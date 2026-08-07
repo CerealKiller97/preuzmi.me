@@ -8,10 +8,12 @@ require (
 	github.com/emersion/go-imap v1.2.1
 	github.com/emersion/go-message v0.18.2
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
+	github.com/makiuchi-d/gozxing v0.1.1
 	github.com/mattn/go-isatty v0.0.24
 	github.com/minio/minio-go/v7 v7.2.1
 	github.com/rs/zerolog v1.35.1
 	github.com/stretchr/testify v1.11.1
+	golang.org/x/image v0.44.0
 	modernc.org/sqlite v1.54.0
 )
 
@@ -40,6 +42,7 @@ require (
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/ini.v1 v1.67.3 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

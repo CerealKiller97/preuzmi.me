@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="sr" class="h-full">
+<html lang="{{ .HTMLLang }}" data-lang="{{ .Lang }}" class="h-full">
 <head>
   {{template "head" .}}
   <script src="/assets/js/settings.js"></script>
@@ -22,51 +22,51 @@
 
   <main class="mx-auto w-full max-w-5xl flex-1 px-4 py-8 pb-28 sm:px-6 lg:px-8">
     <div class="animate-fade-in-up flex flex-col gap-1">
-      <h1 class="text-2xl font-semibold tracking-tight">Podešavanja</h1>
+      <h1 class="text-2xl font-semibold tracking-tight">{{t "Podešavanja"}}</h1>
       <p class="text-sm text-muted-foreground">
-        Izmeni konfiguraciju i klikni <span class="font-medium text-foreground">Primeni promene</span>.
-        Izmene se čuvaju u <code class="font-mono text-xs">config.json</code> i odmah se učitavaju.
-        Pređi mišem preko <span class="inline-flex align-middle text-muted-foreground">ⓘ</span> za objašnjenje.
+        {{t "Izmeni konfiguraciju i klikni"}} <span class="font-medium text-foreground">{{t "Primeni promene"}}</span>.
+        {{t "Izmene se čuvaju u"}} <code class="font-mono text-xs">config.json</code> {{t "i odmah se učitavaju."}}
+        {{t "Pređi mišem preko"}} <span class="inline-flex align-middle text-muted-foreground">ⓘ</span> {{t "za objašnjenje."}}
       </p>
     </div>
 
     <!-- Environment summary -->
     <section class="animate-fade-in-up mt-6 grid grid-cols-[repeat(auto-fit,minmax(14rem,1fr))] gap-4" style="--stagger: 1">
-      <div class="card p-5" title="Trenutna verzija aplikacije iz fajla version.">
-        <div class="text-sm font-medium text-muted-foreground">Verzija</div>
+      <div class="card p-5" title="{{t "Trenutna verzija aplikacije iz fajla version."}}">
+        <div class="text-sm font-medium text-muted-foreground">{{t "Verzija"}}</div>
         <div class="mt-2 text-2xl font-semibold tracking-tight">v{{ .Version }}</div>
       </div>
 
-      <div class="card p-5" title="Broj PDF računa pronađenih u folderu za preuzimanje.">
-        <div class="text-sm font-medium text-muted-foreground">Preuzetih računa</div>
+      <div class="card p-5" title="{{t "Broj PDF računa pronađenih u folderu za preuzimanje."}}">
+        <div class="text-sm font-medium text-muted-foreground">{{t "Preuzetih računa"}}</div>
         <div class="mt-2 text-2xl font-semibold tracking-tight">{{ .ReceiptCount }}</div>
       </div>
 
-      <div class="card p-5" title="Gde se čuvaju preuzeti računi: lokalni folder ili S3 bucket.">
-        <div class="text-sm font-medium text-muted-foreground">Skladište računa</div>
+      <div class="card p-5" title="{{t "Gde se čuvaju preuzeti računi: lokalni folder ili S3 bucket."}}">
+        <div class="text-sm font-medium text-muted-foreground">{{t "Skladište računa"}}</div>
         <div class="mt-2 flex flex-wrap items-center gap-1.5">
           {{if eq .Storage "s3"}}
             <span class="badge badge-success">S3</span>
           {{else}}
-            <span class="badge badge-secondary">Lokalno</span>
+            <span class="badge badge-secondary">{{t "Lokalno"}}</span>
           {{end}}
         </div>
         <p class="mt-2 truncate font-mono text-xs text-muted-foreground" title="{{ .StorageTarget }}">{{ .StorageTarget }}</p>
       </div>
 
       {{if eq .Storage "local"}}
-        <div class="card p-5" title="Da li download_path postoji i da li aplikacija može da upisuje u njega.">
-          <div class="text-sm font-medium text-muted-foreground">Folder za preuzimanje</div>
+        <div class="card p-5" title="{{t "Da li download_path postoji i da li aplikacija može da upisuje u njega."}}">
+          <div class="text-sm font-medium text-muted-foreground">{{t "Folder za preuzimanje"}}</div>
           <div class="mt-2 flex flex-wrap items-center gap-1.5">
             {{if .DownloadPathExists}}
-              <span class="badge badge-success">Postoji</span>
+              <span class="badge badge-success">{{t "Postoji"}}</span>
             {{else}}
-              <span class="badge badge-destructive">Ne postoji</span>
+              <span class="badge badge-destructive">{{t "Ne postoji"}}</span>
             {{end}}
             {{if .DownloadPathWritable}}
-              <span class="badge badge-success">Upisiv</span>
+              <span class="badge badge-success">{{t "Upisiv"}}</span>
             {{else}}
-              <span class="badge badge-warning">Nije upisiv</span>
+              <span class="badge badge-warning">{{t "Nije upisiv"}}</span>
             {{end}}
           </div>
         </div>
@@ -75,56 +75,65 @@
 
     {{if and (eq .Storage "local") (not .DownloadPathExists)}}
       <div class="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">
-        <div class="font-medium text-destructive">Folder za preuzimanje ne postoji</div>
+        <div class="font-medium text-destructive">{{t "Folder za preuzimanje ne postoji"}}</div>
         <p class="mt-1 text-muted-foreground">
-          Računi se ne mogu ni preuzeti ni prikazati dok <code class="font-mono">download_path</code>
-          ne pokazuje na postojeći folder.
+          {{t "Računi se ne mogu ni preuzeti ni prikazati dok"}} <code class="font-mono">download_path</code>
+          {{t "ne pokazuje na postojeći folder."}}
         </p>
       </div>
     {{end}}
 
     {{if .IgnoredKeys}}
       <div class="mt-4 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm">
-        <div class="font-medium text-warning">Neka podešavanja se ignorišu</div>
+        <div class="font-medium text-warning">{{t "Neka podešavanja se ignorišu"}}</div>
         <p class="mt-1 text-muted-foreground">
-          Ovi ključevi postoje u <code class="font-mono">config.json</code>, ali ih aplikacija ne čita,
-          pa nemaju nikakav efekat:
+          {{t "Ovi ključevi postoje u"}} <code class="font-mono">config.json</code>{{t ", ali ih aplikacija ne čita, pa nemaju nikakav efekat:"}}
           {{range $i, $key := .IgnoredKeys}}{{if $i}}, {{end}}<code class="font-mono text-foreground">{{ $key }}</code>{{end}}.
         </p>
       </div>
     {{end}}
 
     <div class="mt-4 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-      Izvor: <code class="font-mono text-foreground">{{ .ConfigPath }}</code>
-      · Tajna polja ostavi prazna da zadržiš postojeću vrednost
+      {{t "Izvor:"}} <code class="font-mono text-foreground">{{ .ConfigPath }}</code>
+      · {{t "Tajna polja ostavi prazna da zadržiš postojeću vrednost"}}
     </div>
 
     <!-- Storage -->
     <section class="card animate-fade-in-up mt-6 p-5" style="--stagger: 3">
-      <h2 class="text-base font-semibold tracking-tight">Skladište</h2>
-      <p class="text-sm text-muted-foreground">Gde se čuvaju preuzeti računi i do kog dana u mesecu se osvežava.</p>
+      <h2 class="text-base font-semibold tracking-tight">{{t "Skladište"}}</h2>
+      <p class="text-sm text-muted-foreground">{{t "Gde se čuvaju preuzeti računi i do kog dana u mesecu se osvežava."}}</p>
 
       <div class="mt-5 grid gap-4 sm:grid-cols-2">
         <div class="flex flex-col gap-1.5">
           <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="storage-driver">
-            Tip skladišta
+            {{t "Tip skladišta"}}
             {{template "hint" "local = PDF fajlovi na disku. s3 = upload na S3-kompatibilni bucket."}}
           </label>
           <select id="storage-driver" class="input" x-model="form.storage">
-            <option value="local">Lokalno</option>
+            <option value="local">{{t "Lokalno"}}</option>
             <option value="s3">S3</option>
           </select>
         </div>
         <div class="flex flex-col gap-1.5">
           <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="check-until">
-            Osvežavanje do dana
+            {{t "Osvežavanje do dana"}}
             {{template "hint" "Poslednji dan u mesecu kada je dugme za preuzimanje aktivno."}}
           </label>
           <input id="check-until" type="number" min="1" max="31" class="input" x-model.number="form.check_until">
         </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="lang">
+            {{t "Pismo"}}
+            {{template "hint" "latin = latinica, cyrillic = ćirilica. Važi za UI, Telegram i email obaveštenja."}}
+          </label>
+          <select id="lang" class="input" x-model="form.lang">
+            <option value="latin">{{t "Latinica"}}</option>
+            <option value="cyrillic">{{t "Ćirilica"}}</option>
+          </select>
+        </div>
         <div class="flex flex-col gap-1.5 sm:col-span-2">
           <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="download-path">
-            Folder za preuzimanje
+            {{t "Folder za preuzimanje"}}
             {{template "hint" "Apsolutna putanja gde se čuvaju računi (i meta/payments fajlovi)."}}
           </label>
           <input id="download-path" type="text" class="input font-mono text-xs"
@@ -141,7 +150,7 @@
               {{template "hint" "Host S3-kompatibilnog servisa. Ostavi prazno za AWS S3. Primeri: eu-central-1.linodeobjects.com ili http://localhost:9000 za MinIO."}}
             </label>
             <input id="s3-endpoint" type="text" class="input font-mono text-xs"
-                   x-model="form.s3.endpoint" placeholder="(AWS podrazumevano)">
+                   x-model="form.s3.endpoint" placeholder="{{t "(AWS podrazumevano)"}}">
           </div>
           <div class="flex flex-col gap-1.5">
             <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="s3-bucket">
@@ -183,14 +192,13 @@
     <section class="card animate-fade-in-up mt-6 p-5" style="--stagger: 4">
       <h2 class="text-base font-semibold tracking-tight">Email (IMAP)</h2>
       <p class="text-sm text-muted-foreground">
-        Server za čitanje pošte za provajdere bez API-ja (npr. eUpravnik, koji račun šalje kao PDF u prilogu).
-        Nalog i lozinku aplikacije unesi dole u sekciji Provajderi pod „eupravnik“.
+        {{t "Server za čitanje pošte za provajdere bez API-ja (npr. eUpravnik, koji račun šalje kao PDF u prilogu). Nalog i lozinku aplikacije unesi dole u sekciji Provajderi pod „eupravnik“."}}
       </p>
 
       <div class="mt-5 grid gap-4 sm:grid-cols-2">
         <div class="flex flex-col gap-1.5">
           <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="email-provider">
-            Provajder
+            {{t "Provajder"}}
             {{template "hint" "Izaberi poznati IMAP server (gmail, outlook, yahoo, icloud) ili custom za ručni unos hosta."}}
           </label>
           <select id="email-provider" class="input" x-model="form.email.provider">
@@ -203,7 +211,7 @@
         </div>
         <div class="flex flex-col gap-1.5">
           <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="email-mailbox">
-            Folder
+            {{t "Folder"}}
             {{template "hint" "IMAP folder koji se pretražuje. Podrazumevano INBOX. Na Gmailu unesite naziv labele da se pretraga ograniči samo na te poruke — brže je kod velikih sandučića (ugnežđene labele: Roditelj/Dete)."}}
           </label>
           <input id="email-mailbox" type="text" class="input" x-model="form.email.mailbox" placeholder="INBOX">
@@ -235,23 +243,23 @@
     <section class="card animate-fade-in-up mt-6 p-5" style="--stagger: 5">
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 class="text-base font-semibold tracking-tight">Obaveštenja</h2>
+          <h2 class="text-base font-semibold tracking-tight">{{t "Obaveštenja"}}</h2>
           <p class="text-sm text-muted-foreground">
-            Kada i kako da se pošalje poruka posle preuzimanja računa.
+            {{t "Kada i kako da se pošalje poruka posle preuzimanja računa."}}
           </p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <button type="button" class="btn btn-outline h-8 px-3 text-xs"
                   @click="openGuide()"
-                  title="Korak-po-korak uputstvo za izabrani drajver">
-            Uputstvo
+                  title="{{t "Korak-po-korak uputstvo za izabrani drajver"}}">
+            {{t "Uputstvo"}}
           </button>
           <button type="button" class="btn btn-outline h-8 px-3 text-xs"
                   @click="send()"
                   :disabled="!canTest || sending"
-                  :title="canTest ? 'Šalje probnu poruku preko izabranog drajvera.' : 'Prvo sačuvaj kredencijale drajvera'">
-            <span x-show="!sending">Pošalji test</span>
-            <span x-show="sending">Šaljem...</span>
+                  :title="canTest ? '{{t "Šalje probnu poruku preko izabranog drajvera."}}' : '{{t "Prvo sačuvaj kredencijale drajvera"}}'">
+            <span x-show="!sending">{{t "Pošalji test"}}</span>
+            <span x-show="sending">{{t "Šaljem..."}}</span>
           </button>
         </div>
       </div>
@@ -263,7 +271,7 @@
       <div class="mt-5 grid gap-4 sm:grid-cols-2">
         <div class="flex flex-col gap-1.5">
           <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="notify-mode">
-            Režim
+            {{t "Režim"}}
             {{template "hint" "off = isključeno, per_receipt = poruka za svaki uspešan račun, all_done = jedna poruka kad svi uspeju."}}
           </label>
           <select id="notify-mode" class="input" x-model="form.notifications.mode">
@@ -274,7 +282,7 @@
         </div>
         <div class="flex flex-col gap-1.5">
           <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="notify-driver">
-            Drajver
+            {{t "Drajver"}}
             {{template "hint" "Kako se šalju poruke: smtp (email) ili telegram (Bot API)."}}
           </label>
           <select id="notify-driver" class="input" x-model="form.notifications.driver"
@@ -288,7 +296,7 @@
       <div class="mt-4">
         <label class="inline-flex items-center gap-2 text-sm font-medium" for="notify-paid">
           <input id="notify-paid" type="checkbox" class="h-4 w-4" x-model="form.notifications.paid_confirmation">
-          Obavesti kada je račun potvrđen kao plaćen
+          {{t "Obavesti kada je račun potvrđen kao plaćen"}}
           {{template "hint" "Šalje poruku kad provajder potvrdi da je račun plaćen. Radi nezavisno od režima — može biti uključeno i kad je režim off (potreban je podešen drajver)."}}
         </label>
       </div>
@@ -306,7 +314,7 @@
           <h3 class="text-sm font-semibold tracking-tight">Telegram</h3>
           <button type="button" class="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
                   @click="openGuide('telegram')">
-            Kako da podesim?
+            {{t "Kako da podesim?"}}
           </button>
         </div>
         <div class="mt-3 grid gap-4 sm:grid-cols-2">
@@ -335,7 +343,7 @@
           <h3 class="text-sm font-semibold tracking-tight">SMTP</h3>
           <button type="button" class="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
                   @click="openGuide('smtp')">
-            Kako da podesim?
+            {{t "Kako da podesim?"}}
           </button>
         </div>
         <div class="mt-3 grid gap-4 sm:grid-cols-2">
@@ -355,14 +363,14 @@
           </div>
           <div class="flex flex-col gap-1.5">
             <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="smtp-user">
-              Korisničko ime
+              {{t "Korisničko ime"}}
               {{template "hint" "Nalog za prijavu na SMTP server (često ista adresa kao Od)."}}
             </label>
             <input id="smtp-user" type="text" class="input" x-model="form.notifications.smtp.username" placeholder="—">
           </div>
           <div class="flex flex-col gap-1.5">
             <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="smtp-pass">
-              Lozinka
+              {{t "Lozinka"}}
               {{template "hint" "SMTP lozinka ili app password. Ostavi prazno da zadržiš postojeću."}}
             </label>
             <input id="smtp-pass" type="password" class="input font-mono text-xs" autocomplete="new-password"
@@ -371,14 +379,14 @@
           </div>
           <div class="flex flex-col gap-1.5">
             <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="smtp-from">
-              Od
+              {{t "Od"}}
               {{template "hint" "Adresa pošiljaoca u From zaglavlju emaila."}}
             </label>
             <input id="smtp-from" type="email" class="input" x-model="form.notifications.smtp.from" placeholder="—">
           </div>
           <div class="flex flex-col gap-1.5">
             <label class="inline-flex items-center gap-1.5 text-sm font-medium" for="smtp-to">
-              Za
+              {{t "Za"}}
               {{template "hint" "Adresa primaoca na koju stižu obaveštenja."}}
             </label>
             <input id="smtp-to" type="email" class="input" x-model="form.notifications.smtp.to" placeholder="—">
@@ -389,9 +397,9 @@
 
     <!-- Providers -->
     <section class="card animate-fade-in-up mt-6 p-5" style="--stagger: 6">
-      <h2 class="text-base font-semibold tracking-tight">Provajderi</h2>
+      <h2 class="text-base font-semibold tracking-tight">{{t "Provajderi"}}</h2>
       <p class="text-sm text-muted-foreground">
-        Preuzimaju se samo provajderi kod kojih su popunjena oba polja i za koje postoji implementacija.
+        {{t "Preuzimaju se samo provajderi kod kojih su popunjena oba polja i za koje postoji implementacija."}}
       </p>
 
       <div class="mt-5 flex flex-col gap-4">
@@ -403,7 +411,7 @@
             <div class="mt-3 grid gap-3 sm:grid-cols-2">
               <div class="flex flex-col gap-1.5">
                 <label class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                  Nalog
+                  {{t "Nalog"}}
                   {{template "hint" "Korisničko ime ili email za prijavu kod ovog provajdera (identifier u config.json)."}}
                 </label>
                 <input type="text" class="input font-mono text-xs"
@@ -411,7 +419,7 @@
               </div>
               <div class="flex flex-col gap-1.5">
                 <label class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                  Lozinka
+                  {{t "Lozinka"}}
                   {{template "hint" "Lozinka naloga. Ostavi prazno da zadržiš postojeću vrednost."}}
                 </label>
                 <input type="password" class="input font-mono text-xs" autocomplete="new-password"
@@ -429,14 +437,14 @@
   <div class="settings-apply-bar">
     <div class="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
       <p class="text-sm text-muted-foreground">
-        <span x-show="dirty" class="text-foreground">Ima nesačuvanih izmena.</span>
-        <span x-show="!dirty">Nema nesačuvanih izmena.</span>
+        <span x-show="dirty" class="text-foreground">{{t "Ima nesačuvanih izmena."}}</span>
+        <span x-show="!dirty">{{t "Nema nesačuvanih izmena."}}</span>
       </p>
       <button type="button" class="btn btn-primary h-9 px-4 text-sm"
               @click="apply()"
               :disabled="saving || !dirty">
-        <span x-show="!saving">Primeni promene</span>
-        <span x-show="saving" x-cloak>Čuvam...</span>
+        <span x-show="!saving">{{t "Primeni promene"}}</span>
+        <span x-show="saving" x-cloak>{{t "Čuvam..."}}</span>
       </button>
     </div>
   </div>
@@ -477,7 +485,7 @@
             </template>
           </ul>
         </div>
-        <button type="button" class="toast-close" @click="flash.show = false" aria-label="Zatvori">
+        <button type="button" class="toast-close" @click="flash.show = false" aria-label="{{t "Zatvori"}}">
           <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"
                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M18 6 6 18M6 6l12 12" />
@@ -504,7 +512,7 @@
             <h3 id="guide-title" class="text-base font-semibold tracking-tight" x-text="currentGuide.title"></h3>
             <p class="mt-0.5 text-sm text-muted-foreground" x-text="currentGuide.subtitle"></p>
           </div>
-          <button type="button" class="btn btn-ghost btn-icon shrink-0" @click="closeGuide()" aria-label="Zatvori">
+          <button type="button" class="btn btn-ghost btn-icon shrink-0" @click="closeGuide()" aria-label="{{t "Zatvori"}}">
             <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"
                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M18 6 6 18M6 6l12 12" />
@@ -517,19 +525,19 @@
             <button type="button" class="h-1.5 flex-1 rounded-full transition-colors"
                     :class="i <= step ? 'bg-primary' : 'bg-muted'"
                     @click="goTo(i)"
-                    :aria-label="'Korak ' + (i + 1)"></button>
+                    :aria-label="'{{t "Korak"}} ' + (i + 1)"></button>
           </template>
         </div>
 
         <div class="min-h-0 flex-1 overflow-y-auto px-5 py-5">
           <div class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-               x-text="'Korak ' + (step + 1) + ' / ' + currentGuide.steps.length"></div>
+               x-text="'{{t "Korak"}} ' + (step + 1) + ' / ' + currentGuide.steps.length"></div>
           <h4 class="mt-2 text-lg font-semibold tracking-tight" x-text="currentStep.title"></h4>
           <p class="mt-2 text-sm leading-relaxed text-muted-foreground" x-text="currentStep.body"></p>
 
           <div class="mt-4 rounded-lg border border-border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground"
                x-show="currentStep.tip">
-            <span class="font-medium text-foreground">Savet:</span>
+            <span class="font-medium text-foreground">{{t "Savet:"}}</span>
             <span x-text="currentStep.tip"></span>
           </div>
 
@@ -539,11 +547,11 @@
 
         <div class="flex items-center justify-between gap-3 border-t px-5 py-4">
           <button type="button" class="btn btn-outline h-8 px-3 text-xs"
-                  @click="prev()" :disabled="isFirst">Nazad</button>
+                  @click="prev()" :disabled="isFirst">{{t "Nazad"}}</button>
           <button type="button" class="btn btn-primary h-8 px-3 text-xs"
-                  x-show="!isLast" @click="next()">Dalje</button>
+                  x-show="!isLast" @click="next()">{{t "Dalje"}}</button>
           <button type="button" class="btn btn-primary h-8 px-3 text-xs"
-                  x-show="isLast" @click="closeGuide()">Gotovo</button>
+                  x-show="isLast" @click="closeGuide()">{{t "Gotovo"}}</button>
         </div>
       </div>
     </div>

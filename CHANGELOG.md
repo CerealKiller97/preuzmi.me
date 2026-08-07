@@ -10,6 +10,16 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+## [1.3.2] - 07.08.2026
+
+### 🐛 Fixed
+
+- 🔕 **Each receipt is announced only once — for good.** A download or paid-confirmation notification is now recorded on the receipt itself, so the daily `checks` cron never re-announces a bill it already told you about. Previously the "already notified" mark could be lost when a provider rewrote a receipt's status on a later run (some do this on every fetch), which let an old bill fire a duplicate notification. Existing databases gain the two tracking columns automatically, backfilled from your already-downloaded and confirmed receipts, so upgrading does not replay a burst of notifications for past bills.
+
+### 🔧 Changed
+
+- ⏭️ **Refresh stops as soon as the provider confirms payment — it no longer waits for you.** A provider's previous-month bill is skipped once it is downloaded and the provider reports it `plaćeno` (with a confirmation time), instead of also requiring that *you* had marked it paid in the app. Once the provider itself confirms the payment there is nothing left to learn, so the daily run and the refresh button stop logging into that account. Bills that aren't downloaded yet, or are downloaded but not yet confirmed paid, still run every time.
+
 ## [1.3.1] - 06.08.2026
 
 ### 🐛 Fixed
@@ -94,7 +104,8 @@ stats, and notifications, so no bill goes unintentionally unpaid.
 - 🐳 Multi-arch (amd64 + arm64), distroless Docker image published to GHCR.
 - 🌐 Bilingual documentation — English and Serbian.
 
-[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.3.2...HEAD
+[1.3.2]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.1.0...v1.2.0

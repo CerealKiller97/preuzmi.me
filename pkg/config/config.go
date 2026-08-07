@@ -14,6 +14,11 @@ import (
 // DefaultCheckUntil is used when check_until is omitted from config.json.
 const DefaultCheckUntil = 20
 
+// DefaultDueReminderDays is the due-reminder lead time used when
+// notifications.due_reminder_days is omitted from config.json: a bill is
+// reminded when it is overdue or due within this many days.
+const DefaultDueReminderDays = 7
+
 // Allowed values for the top-level "storage" key.
 const (
 	StorageLocal = "local"
@@ -89,12 +94,16 @@ type (
 		// Mode: paid-confirmation messages can fire even when Mode is off, as
 		// long as the driver is configured.
 		PaidConfirmation bool `json:"paid_confirmation"`
-		// DueReminders, when true, sends a summary when unpaid receipts are
-		// overdue or due within a few days (e.g. "3 računa dospevaju za 2
-		// dana — 8.400 RSD"). Independent of Mode, same as PaidConfirmation.
-		DueReminders bool     `json:"due_reminders"`
-		SMTP         SMTP     `json:"smtp"`
-		Telegram     Telegram `json:"telegram"`
+		// DueReminders, when true, sends a reminder listing unpaid receipts that
+		// are overdue or due soon (e.g. "• ЈЕТЕЛ рачун доспева за 2 дана — 400,52
+		// RSD."). Independent of Mode, same as PaidConfirmation.
+		DueReminders bool `json:"due_reminders"`
+		// DueReminderDays is the lead time for due reminders: a bill is reminded
+		// once it is overdue or due within this many days. 0 means "use the
+		// default" (DefaultDueReminderDays). Only meaningful when DueReminders.
+		DueReminderDays int      `json:"due_reminder_days"`
+		SMTP            SMTP     `json:"smtp"`
+		Telegram        Telegram `json:"telegram"`
 	}
 
 	Providers struct {
@@ -332,6 +341,16 @@ func (next *Config) MergeSecrets(prev Config) {
 // validateNotifications only requires delivery settings when mode is not off.
 func (c *Config) validateNotifications() error {
 	n := c.Notifications
+
+	// Default and bound the due-reminder lead time regardless of whether
+	// delivery is enabled, so the settings view always shows a real value.
+	if c.Notifications.DueReminderDays == 0 {
+		c.Notifications.DueReminderDays = DefaultDueReminderDays
+		n.DueReminderDays = DefaultDueReminderDays
+	}
+	if c.Notifications.DueReminderDays < 0 || c.Notifications.DueReminderDays > 60 {
+		return fmt.Errorf("notifications.due_reminder_days must be between 0 and 60, got %d", c.Notifications.DueReminderDays)
+	}
 
 	switch n.Mode {
 	case "":

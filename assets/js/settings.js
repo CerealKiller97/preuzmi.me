@@ -240,6 +240,9 @@ document.addEventListener('alpine:init', () => {
       if (typeof form.notifications.due_reminders !== 'boolean') {
         form.notifications.due_reminders = !!form.notifications.due_reminders;
       }
+      // Lead time for due reminders; 0 lets the server apply the default (7).
+      const days = Number(form.notifications.due_reminder_days);
+      form.notifications.due_reminder_days = Number.isFinite(days) && days > 0 ? Math.trunc(days) : 0;
       if (!form.s3) {
         form.s3 = {};
       }

@@ -305,7 +305,18 @@
         <label class="inline-flex items-center gap-2 text-sm font-medium" for="notify-due">
           <input id="notify-due" type="checkbox" class="h-4 w-4" x-model="form.notifications.due_reminders">
           Obavesti o računima koji dospevaju
-          {{template "hint" "Šalje sažetak kad neplaćeni računi dospevaju u naredna 3 dana ili su već dospeli (npr. „3 računa dospevaju za 2 dana — 8.400 RSD“). Radi nezavisno od režima."}}
+          {{template "hint" "Šalje podsetnik sa spiskom neplaćenih računa koji su već dospeli ili dospevaju u zadatom roku (npr. „• ЈЕТЕЛ рачун доспева за 2 дана — 400,52 RSD“). Radi nezavisno od režima."}}
+        </label>
+      </div>
+
+      <div class="mt-3" x-show="form.notifications.due_reminders" x-cloak>
+        <label class="flex flex-col gap-1.5 text-sm font-medium" for="notify-due-days">
+          <span class="inline-flex items-center gap-2">
+            Koliko dana unapred podsetiti
+            {{template "hint" "Račun ulazi u podsetnik kada je već dospeo ili dospeva u narednih toliko dana. 0–60; podrazumevano 7 (nedelja dana)."}}
+          </span>
+          <input id="notify-due-days" type="number" min="0" max="60" step="1"
+                 class="input w-28" x-model.number="form.notifications.due_reminder_days">
         </label>
       </div>
 

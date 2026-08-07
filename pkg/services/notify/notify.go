@@ -11,6 +11,7 @@ package notify
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -161,9 +162,11 @@ const (
 	emojiTest    = "🔔" // manual test probe
 )
 
-// DueReminderWindowDays is how far ahead of the deadline a due-soon
-// notification will fire (inclusive of today).
-const DueReminderWindowDays = 3
+// defaultDueReminderDays is the fallback lead time used when the service's
+// config carries none (e.g. a Service built directly in a test). Production
+// config is defaulted to config.DefaultDueReminderDays before the service is
+// built, so this only guards the raw-construction path.
+const defaultDueReminderDays = 7
 
 // DueReceipt is one unpaid receipt included in a due-soon reminder.
 type DueReceipt struct {
@@ -179,16 +182,16 @@ func (s *Service) DueReminderEnabled() bool {
 	return s != nil && s.sender != nil && s.cfg.DueReminders
 }
 
-// HandleDueReminders sends one summary when unpaid receipts are overdue or due
-// within DueReminderWindowDays. Failures are logged and never bubbled up.
-// Returns the receipts that were announced so the caller can stamp them as
-// reminded and avoid re-sending.
+// HandleDueReminders sends one reminder listing the unpaid receipts that are
+// overdue or due within the configured lead time (notifications.due_reminder_days).
+// Failures are logged, never bubbled up. Returns the receipts that were
+// announced so the caller can stamp them as reminded and avoid re-sending.
 func (s *Service) HandleDueReminders(items []DueReceipt, now time.Time) []DueReceipt {
 	if !s.DueReminderEnabled() {
 		return nil
 	}
 
-	due := FilterDueReminders(items, now)
+	due := FilterDueReminders(items, now, s.dueWindowDays())
 	if len(due) == 0 {
 		return nil
 	}
@@ -210,22 +213,33 @@ func (s *Service) HandleDueReminders(items []DueReceipt, now time.Time) []DueRec
 }
 
 // FilterDueReminders keeps receipts whose deadline is overdue or within
-// DueReminderWindowDays. Callers should already exclude paid receipts and
-// ones that were reminded for the current due_at.
-func FilterDueReminders(items []DueReceipt, now time.Time) []DueReceipt {
+// windowDays days. Callers should already exclude paid receipts and ones that
+// were reminded for the current due_at.
+func FilterDueReminders(items []DueReceipt, now time.Time, windowDays int) []DueReceipt {
 	out := make([]DueReceipt, 0, len(items))
 	for _, it := range items {
 		if it.DueAt <= 0 {
 			continue
 		}
 		days := DaysUntilDue(it.DueAt, now)
-		if days > DueReminderWindowDays {
+		if days > windowDays {
 			continue
 		}
 		out = append(out, it)
 	}
 
 	return out
+}
+
+// dueWindowDays is the reminder lead time taken from config, falling back to the
+// package default when the config carries none (config normally fills it in; a
+// Service built directly may not).
+func (s *Service) dueWindowDays() int {
+	if s.cfg.DueReminderDays > 0 {
+		return s.cfg.DueReminderDays
+	}
+
+	return defaultDueReminderDays
 }
 
 // DaysUntilDue returns whole calendar days from today to the due date
@@ -238,48 +252,56 @@ func DaysUntilDue(dueAt int64, now time.Time) int {
 	return int(dueDay.Sub(today).Hours() / 24)
 }
 
-// dueReminderMessage builds the summary: "3 računa dospevaju za 2 dana — 8.400 RSD."
+// dueReminderMessage builds a per-receipt reminder — one line per bill, most
+// urgent first — with a total footer when more than one bill is due:
+//
+//	• YETTEL račun dospeva za 2 dana — 400,52 RSD.
+//	• EPS račun je dospeo — 4.001,55 RSD.
+//	Ukupno: 4.402,07 RSD.
+//
+// Provider names use the display form (see displayName) and are registered in
+// Repl so they keep their fixed Cyrillic spelling after transliteration.
 func dueReminderMessage(items []DueReceipt, now time.Time) Message {
+	// Sort a copy so the caller's slice (used for stamping) is untouched. Most
+	// urgent first: overdue, then soonest deadline.
+	sorted := make([]DueReceipt, len(items))
+	copy(sorted, items)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return DaysUntilDue(sorted[i].DueAt, now) < DaysUntilDue(sorted[j].DueAt, now)
+	})
+
+	var b strings.Builder
 	var total float64
-	soonest := DaysUntilDue(items[0].DueAt, now)
-	for _, it := range items {
+	var repl map[string]string
+	for _, it := range sorted {
+		name := displayName(it.Provider)
+		repl = addRepl(repl, it.Provider, name)
 		total += it.Price
-		if d := DaysUntilDue(it.DueAt, now); d < soonest {
-			soonest = d
-		}
+		fmt.Fprintf(&b, "• %s račun %s — %s.\n",
+			name, dueWhen(DaysUntilDue(it.DueAt, now)), formatPrice(it.Price))
 	}
 
-	count := len(items)
-	noun := "računa"
-	if count == 1 {
-		noun = "račun"
+	if len(sorted) > 1 {
+		fmt.Fprintf(&b, "Ukupno: %s.\n", formatPrice(total))
 	}
-
-	var when string
-	switch {
-	case soonest < 0:
-		when = "su dospela"
-		if count == 1 {
-			when = "je dospeo"
-		}
-	case soonest == 0:
-		when = "dospevaju danas"
-		if count == 1 {
-			when = "dospeva danas"
-		}
-	default:
-		when = fmt.Sprintf("dospevaju za %d %s", soonest, dayWord(soonest))
-		if count == 1 {
-			when = fmt.Sprintf("dospeva za %d %s", soonest, dayWord(soonest))
-		}
-	}
-
-	body := fmt.Sprintf("%d %s %s — %s.\n", count, noun, when, formatPrice(total))
 
 	return Message{
 		Emoji:   emojiDue,
 		Subject: "preuzmi.me: dospeće računa",
-		Body:    body,
+		Body:    b.String(),
+		Repl:    repl,
+	}
+}
+
+// dueWhen renders the singular deadline phrase for one receipt.
+func dueWhen(days int) string {
+	switch {
+	case days < 0:
+		return "je dospeo"
+	case days == 0:
+		return "dospeva danas"
+	default:
+		return fmt.Sprintf("dospeva za %d %s", days, dayWord(days))
 	}
 }
 

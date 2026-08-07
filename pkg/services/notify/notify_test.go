@@ -228,8 +228,11 @@ func TestHandleDueRemindersSummary(t *testing.T) {
 	require.Len(t, announced, 3)
 	require.Len(t, sent, 1)
 	assert.True(t, strings.HasPrefix(sent[0].subject, "⏰ "))
-	assert.Contains(t, sent[0].body, "3 računa dospevaju za 2 dana")
-	assert.Contains(t, sent[0].body, "8.400,00 RSD")
+	// One line per receipt, each naming its provider, plus a total footer.
+	assert.Contains(t, sent[0].body, "MTS račun dospeva za 2 dana — 1.819,46 RSD.")
+	assert.Contains(t, sent[0].body, "EPS račun dospeva za 2 dana — 2.364,66 RSD.")
+	assert.Contains(t, sent[0].body, "A1 račun dospeva za 2 dana — 4.215,88 RSD.")
+	assert.Contains(t, sent[0].body, "Ukupno: 8.400,00 RSD.")
 }
 
 func TestHandleDueRemindersSilentWhenOff(t *testing.T) {
@@ -255,11 +258,33 @@ func TestFilterDueRemindersWindow(t *testing.T) {
 		{Provider: "none", DueAt: 0},
 	}
 
-	got := notify.FilterDueReminders(items, now)
+	got := notify.FilterDueReminders(items, now, 3)
 	require.Len(t, got, 3)
 	assert.Equal(t, "overdue", got[0].Provider)
 	assert.Equal(t, "today", got[1].Provider)
 	assert.Equal(t, "in3", got[2].Provider)
+
+	// A wider window pulls in the 4-days-out bill too.
+	assert.Len(t, notify.FilterDueReminders(items, now, 7), 4)
+}
+
+func TestHandleDueRemindersRespectsConfiguredWindow(t *testing.T) {
+	var sent int
+	sender := senderFunc(func(string, string) error { sent++; return nil })
+
+	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.Local)
+	inFiveDays := time.Date(2026, 8, 3, 0, 0, 0, 0, time.Local).Unix()
+
+	// Default lead time is 7, so a bill 5 days out is announced...
+	def := notify.New(config.Notifications{Driver: config.NotifyDriverTelegram, DueReminders: true}, sender, zerolog.Nop())
+	require.Len(t, def.HandleDueReminders([]notify.DueReceipt{{Provider: "eps", Price: 100, DueAt: inFiveDays}}, now), 1)
+	assert.Equal(t, 1, sent)
+
+	// ...but a tighter window of 3 keeps quiet about the same bill.
+	sent = 0
+	tight := notify.New(config.Notifications{Driver: config.NotifyDriverTelegram, DueReminders: true, DueReminderDays: 3}, sender, zerolog.Nop())
+	assert.Empty(t, tight.HandleDueReminders([]notify.DueReceipt{{Provider: "eps", Price: 100, DueAt: inFiveDays}}, now))
+	assert.Equal(t, 0, sent)
 }
 
 func TestMessagesOffSendsNothing(t *testing.T) {

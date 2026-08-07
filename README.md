@@ -112,6 +112,12 @@ docker exec preuzmi /app/preuzmi checks
   <img src="docs/screenshots/dashboard.png" alt="Receipts dashboard" width="880" />
 </p>
 
+### Payment QR
+
+<p align="center">
+  <img src="docs/screenshots/qr-modal.png" alt="Payment QR modal" width="880" />
+</p>
+
 ### Statistics
 
 <p align="center">

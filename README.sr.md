@@ -112,6 +112,12 @@ docker exec preuzmi /app/preuzmi checks
   <img src="docs/screenshots/dashboard.png" alt="Dashboard računa" width="880" />
 </p>
 
+### QR za plaćanje
+
+<p align="center">
+  <img src="docs/screenshots/qr-modal.png" alt="Modal za plaćanje QR-om" width="880" />
+</p>
+
 ### Statistika
 
 <p align="center">

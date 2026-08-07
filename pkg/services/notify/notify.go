@@ -178,28 +178,46 @@ var providerCyrillic = map[string]string{
 	"yettel": "ЈЕТЕЛ",
 }
 
-// displayName returns the Latin display name for a provider key: an explicit
-// override, or the uppercased key otherwise. send transliterates it, except for
-// the fixed Cyrillic forms in providerCyrillic (see addRepl / Message.Repl).
+// displayName returns the Latin brand name for an account key: an explicit
+// override for its base provider, or the uppercased base otherwise. The account
+// key may be a base provider ("a1") or an extra account ("a1-mama"); the brand
+// comes from the base either way, so both read as "A1". send transliterates it,
+// except for the fixed Cyrillic forms in providerCyrillic (see addRepl).
 func displayName(provider string) string {
-	if name, ok := providerNames[strings.ToLower(provider)]; ok {
+	base := config.BaseProvider(provider)
+	if name, ok := providerNames[base]; ok {
 		return name
 	}
-	return strings.ToUpper(provider)
+	return strings.ToUpper(base)
+}
+
+// accountDisplay returns the brand with the account label appended when the
+// account has one ("A1 — Mama"), so several accounts of one provider are told
+// apart in messages. A label-less (primary) account shows the brand alone,
+// exactly as before multi-account support. The label transliterates normally in
+// Cyrillic mode; only the brand is pinned via addRepl.
+func accountDisplay(provider, label string) string {
+	brand := displayName(provider)
+	if label = strings.TrimSpace(label); label != "" {
+		return brand + " — " + label
+	}
+	return brand
 }
 
 // addRepl records the Latin→Cyrillic substitution for a provider whose Cyrillic
-// name is fixed (providerCyrillic). Providers that transliterate normally add
-// nothing and leave repl untouched.
-func addRepl(repl map[string]string, provider, name string) map[string]string {
-	c, ok := providerCyrillic[strings.ToLower(provider)]
+// brand is fixed (providerCyrillic). It keys on the base provider, so an extra
+// account maps the same way as its primary. brand is the Latin brand string the
+// substitution replaces (a substring of any account display, so the label part
+// still transliterates). Providers that transliterate normally add nothing.
+func addRepl(repl map[string]string, provider, brand string) map[string]string {
+	c, ok := providerCyrillic[config.BaseProvider(provider)]
 	if !ok {
 		return repl
 	}
 	if repl == nil {
 		repl = make(map[string]string, 1)
 	}
-	repl[name] = c
+	repl[brand] = c
 	return repl
 }
 
@@ -230,12 +248,12 @@ func Messages(cfg config.Notifications, results []refresh.Result) []Message {
 			if !r.OK || !r.New {
 				continue
 			}
-			name := displayName(r.Provider)
+			name := accountDisplay(r.Provider, r.Label)
 			out = append(out, Message{
 				Emoji:   emojiReceipt,
 				Subject: fmt.Sprintf("preuzmi.me: račun %s preuzet", name),
 				Body:    perReceiptBody(name, r),
-				Repl:    addRepl(nil, r.Provider, name),
+				Repl:    addRepl(nil, r.Provider, displayName(r.Provider)),
 			})
 		}
 		return out
@@ -250,9 +268,8 @@ func Messages(cfg config.Notifications, results []refresh.Result) []Message {
 		names := make([]string, 0, len(results))
 		var repl map[string]string
 		for _, r := range results {
-			name := displayName(r.Provider)
-			names = append(names, name)
-			repl = addRepl(repl, r.Provider, name)
+			names = append(names, accountDisplay(r.Provider, r.Label))
+			repl = addRepl(repl, r.Provider, displayName(r.Provider))
 		}
 		return []Message{{
 			Emoji:   emojiAllDone,
@@ -272,8 +289,12 @@ func Messages(cfg config.Notifications, results []refresh.Result) []Message {
 // VerifiedReceipt describes a receipt whose provider just confirmed payment.
 type VerifiedReceipt struct {
 	Provider string
-	Period   string
-	Price    float64
+	// Label is the account's family-member name, appended to the brand for
+	// display when the provider holds more than one account. Empty for a
+	// single/primary account.
+	Label  string
+	Period string
+	Price  float64
 }
 
 // HandleVerified sends a notification for each receipt the provider newly
@@ -298,7 +319,7 @@ func (s *Service) HandleVerified(items []VerifiedReceipt) {
 
 // verifiedMessage builds the message for a payment-confirmed receipt.
 func verifiedMessage(it VerifiedReceipt) Message {
-	name := displayName(it.Provider)
+	name := accountDisplay(it.Provider, it.Label)
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "Račun za %s za %s je potvrđen kao plaćen.", name, formatPeriod(it.Period))
@@ -311,7 +332,7 @@ func verifiedMessage(it VerifiedReceipt) Message {
 		Emoji:   emojiPaid,
 		Subject: fmt.Sprintf("preuzmi.me: račun %s potvrđen", name),
 		Body:    b.String(),
-		Repl:    addRepl(nil, it.Provider, name),
+		Repl:    addRepl(nil, it.Provider, displayName(it.Provider)),
 	}
 }
 

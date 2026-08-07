@@ -26,8 +26,6 @@ const (
 	loginURL     = "https://moj.mts.rs/selfcare/b2c/user/authorize"
 	receiptsURL  = "https://moj.mts.rs/hybris/selfcare/b2c/v1/user/billgroups/?includeBills=true"
 	exportPDFURL = "https://moj.mts.rs/hybris/selfcare/b2c/v1/user/bills/export?invoiceNumber=%s&billingAccountId=%s"
-
-	fileName = "mts"
 )
 
 var _ provider.Interface = &Service{}
@@ -49,16 +47,22 @@ type (
 		receipts *receipts.Repository
 		http     *http.Client
 		config   config.Credentials
+		// name is the account key: "mts" for the primary account, or "mts-<slug>"
+		// for an extra one. It is the receipt's base filename and its provider
+		// column in the receipts index, so each account files separately.
+		name string
 	}
 )
 
 func New(
+	name string,
 	config config.Credentials,
 	storage storage.Interface,
 	logger zerolog.Logger,
 	receiptsStore *receipts.Repository,
 ) *Service {
 	return &Service{
+		name:   name,
 		config: config,
 		http: &http.Client{
 			Timeout: 30 * time.Second,
@@ -116,10 +120,10 @@ func (s *Service) DownloadReceipt() error {
 	// saved, so a database hiccup must not fail the download.
 	if s.receipts != nil {
 		ctx := context.Background()
-		if err := s.receipts.SetPrice(ctx, fileName, period, billPrice(bill)); err != nil {
+		if err := s.receipts.SetPrice(ctx, s.name, period, billPrice(bill)); err != nil {
 			s.logger.Err(err).Str("period", period).Msg("Failed to record MTS receipt price")
 		}
-		if err := s.receipts.SetStatus(ctx, fileName, period, billStatus(bill)); err != nil {
+		if err := s.receipts.SetStatus(ctx, s.name, period, billStatus(bill)); err != nil {
 			s.logger.Err(err).Str("period", period).Msg("Failed to record MTS receipt status")
 		}
 	}
@@ -334,7 +338,7 @@ func (s *Service) downloadReceipt(invoiceNumber string, billingAccountId string,
 		return err
 	}
 
-	key := fmt.Sprintf("%s/%s.pdf", period, fileName)
+	key := fmt.Sprintf("%s/%s.pdf", period, s.name)
 
 	if err := s.storage.Save(context.Background(), key, data); err != nil {
 		return err

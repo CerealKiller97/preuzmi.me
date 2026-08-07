@@ -2,7 +2,6 @@ package container
 
 import (
 	"slices"
-	"strings"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
 	"github.com/CerealKiller97/preuzmi.me/pkg/providers/a1"
@@ -39,99 +38,63 @@ func (c *Container) GetStorage() storage.Interface {
 	return c.storage
 }
 
-// providerLogger returns the shared logger tagged with the provider name.
+// providerLogger returns the shared logger tagged with the account key.
 func (c *Container) providerLogger(name string) zerolog.Logger {
 	return c.Logger.With().Str("provider", name).Logger()
 }
 
-func (c *Container) MTSProvider() provider.Interface {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.mtsProvider == nil {
-		c.mtsProvider = mts.New(
-			c.config.Providers["mts"],
-			c.getStorageLocked(),
-			c.providerLogger("mts"),
-			c.getReceiptsStoreLocked(),
-		)
+// getProviderLocked returns the built provider for an account key, memoized in
+// c.providers so a given account is built once per config generation. A key with
+// no implementation (or an email provider whose mailbox cannot be configured)
+// yields nil, which GetProviders skips. Assumes c.mu is held.
+func (c *Container) getProviderLocked(key string) provider.Interface {
+	if c.providers == nil {
+		c.providers = make(map[string]provider.Interface)
 	}
 
-	return c.mtsProvider
-}
-
-func (c *Container) A1Provider() provider.Interface {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.a1Provider == nil {
-		c.a1Provider = a1.New(
-			c.config.Providers["a1"],
-			c.providerLogger("a1"),
-			c.getStorageLocked(),
-			c.getReceiptsStoreLocked(),
-		)
+	if p, ok := c.providers[key]; ok {
+		return p
 	}
 
-	return c.a1Provider
+	p := c.buildProviderLocked(key)
+	c.providers[key] = p
+
+	return p
 }
 
-func (c *Container) EsanduceProvider() provider.Interface {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+// buildProviderLocked constructs the provider for an account key. The base
+// provider type (config.BaseProvider) selects the implementation; the full key
+// is passed through as the account name so each account files its receipts to
+// its own path and receipts row. Assumes c.mu is held.
+func (c *Container) buildProviderLocked(key string) provider.Interface {
+	creds := c.config.Providers[config.Provider(key)]
+	logger := c.providerLogger(key)
 
-	if c.esanduceProvider == nil {
-		c.esanduceProvider = esanduce.New(
-			c.config.Providers["esanduce"],
-			c.providerLogger("esanduce"),
-			c.getStorageLocked(),
-			c.getReceiptsStoreLocked(),
-		)
-	}
-
-	return c.esanduceProvider
-}
-
-// YettelProvider builds the Yettel provider, which reads the invoice PDF from
-// the configured mailbox over IMAP (Yettel emails it as an attachment). A
-// mailbox that cannot be constructed yields nil, so the provider is skipped with
-// a warning rather than crashing the run.
-func (c *Container) YettelProvider() provider.Interface {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.yettelProvider == nil {
-		reader, err := c.newMailboxReaderLocked("yettel")
+	switch config.BaseProvider(key) {
+	case "mts":
+		return mts.New(key, creds, c.getStorageLocked(), logger, c.getReceiptsStoreLocked())
+	case "a1":
+		return a1.New(key, creds, logger, c.getStorageLocked(), c.getReceiptsStoreLocked())
+	case "esanduce":
+		return esanduce.New(key, creds, logger, c.getStorageLocked(), c.getReceiptsStoreLocked())
+	case "eps":
+		return eps.New(key, creds, logger, c.getStorageLocked(), c.getReceiptsStoreLocked())
+	case "yettel", "eupravnik":
+		// Email-based providers read the invoice from this account's own mailbox
+		// over IMAP. A mailbox that cannot be constructed yields nil, so the
+		// provider is skipped with a warning rather than crashing the run.
+		reader, err := c.newMailboxReaderLocked(key)
 		if err != nil {
-			c.Logger.Err(err).Msg("Could not configure Yettel mailbox, provider unavailable")
+			c.Logger.Err(err).Str("provider", key).Msg("Could not configure mailbox, provider unavailable")
 			return nil
 		}
-
-		c.yettelProvider = yettel.New(
-			reader,
-			c.providerLogger("yettel"),
-			c.getStorageLocked(),
-			c.getReceiptsStoreLocked(),
-		)
+		if config.BaseProvider(key) == "yettel" {
+			return yettel.New(key, reader, logger, c.getStorageLocked(), c.getReceiptsStoreLocked())
+		}
+		return eupravnik.New(key, reader, logger, c.getStorageLocked(), c.getReceiptsStoreLocked())
+	default:
+		return nil
 	}
-
-	return c.yettelProvider
-}
-
-func (c *Container) EPSProvider() provider.Interface {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.epsProvider == nil {
-		c.epsProvider = eps.New(
-			c.config.Providers["eps"],
-			c.providerLogger("eps"),
-			c.getStorageLocked(),
-			c.getReceiptsStoreLocked(),
-		)
-	}
-
-	return c.epsProvider
 }
 
 // newMailboxReaderLocked builds an IMAP reader for an email-based provider. The
@@ -163,34 +126,6 @@ func (c *Container) newMailboxReaderLocked(key string) (mailbox.Reader, error) {
 		creds.Username,
 		creds.Password,
 	)
-}
-
-// EupravnikProvider builds the eUpravnik provider, which reads the invoice from
-// the configured mailbox over IMAP.
-//
-// A mailbox that cannot be constructed (e.g. an unknown provider or a custom
-// provider with no host) yields nil, so the provider is skipped with a warning
-// rather than crashing the run — matching how unconfigured providers behave.
-func (c *Container) EupravnikProvider() provider.Interface {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.eupravnikProvider == nil {
-		reader, err := c.newMailboxReaderLocked("eupravnik")
-		if err != nil {
-			c.Logger.Err(err).Msg("Could not configure eUpravnik mailbox, provider unavailable")
-			return nil
-		}
-
-		c.eupravnikProvider = eupravnik.New(
-			reader,
-			c.providerLogger("eupravnik"),
-			c.getStorageLocked(),
-			c.getReceiptsStoreLocked(),
-		)
-	}
-
-	return c.eupravnikProvider
 }
 
 // getStorageLocked assumes c.mu is already held. The backend is wrapped so that
@@ -237,13 +172,16 @@ func (c *Container) GetReceiptsStore() *receipts.Repository {
 	return c.getReceiptsStoreLocked()
 }
 
-// implemented lists the providers that actually have a download implementation.
-// GetProviders below switches on exactly these names; keep the two in step.
+// implemented lists the base providers that actually have a download
+// implementation. buildProviderLocked switches on exactly these names; keep the
+// two in step.
 var implemented = []string{"mts", "a1", "esanduce", "eps", "yettel", "eupravnik"}
 
-// IsImplemented reports whether a provider can actually download anything yet.
+// IsImplemented reports whether an account key's provider can actually download
+// anything yet. It resolves the base provider first, so an extra account like
+// "a1-mama" is implemented exactly when its base ("a1") is.
 func IsImplemented(name string) bool {
-	return slices.Contains(implemented, strings.ToLower(name))
+	return slices.Contains(implemented, config.BaseProvider(name))
 }
 
 // SkipAlreadyDownloaded drops any provider whose receipt for the current billing
@@ -292,50 +230,42 @@ func (c *Container) SkipAlreadyDownloaded(providers map[string]provider.Interfac
 	return pending
 }
 
-// GetProviders resolves configured provider names to their implementations,
-// keyed by name so callers can report results per provider.
+// GetProviders resolves configured account keys to their implementations, keyed
+// by account key so callers can report results per account. A key like
+// "a1-mama" resolves to the A1 implementation built for that account (see
+// buildProviderLocked).
 //
-// Names without an implementation yet are skipped with a warning rather than
-// failing the whole run, so filling them into config.json ahead of time is
-// harmless.
+// Keys without an implementation yet — or an email account whose mailbox could
+// not be initialized — are skipped with a warning rather than failing the whole
+// run or adding a nil that would panic the refresh runner, so filling them into
+// config.json ahead of time is harmless.
 func (c *Container) GetProviders(names []string) map[string]provider.Interface {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	providers := make(map[string]provider.Interface, len(names))
 
 	for _, name := range names {
-		switch config.Provider(name) {
-		case "mts":
-			providers[name] = c.MTSProvider()
-		case "a1":
-			providers[name] = c.A1Provider()
-		case "esanduce":
-			providers[name] = c.EsanduceProvider()
-		case "eps":
-			providers[name] = c.EPSProvider()
-		case "yettel":
-			// A misconfigured mailbox yields a nil provider; skip it rather than
-			// adding a nil that would panic in the refresh runner.
-			if p := c.YettelProvider(); p != nil {
-				providers[name] = p
-			} else {
-				c.Logger.Warn().
-					Str("provider", name).
-					Msg("Yettel is configured but its mailbox could not be initialized, skipping")
-			}
-		case "eupravnik":
-			// A misconfigured mailbox yields a nil provider; skip it rather than
-			// adding a nil that would panic in the refresh runner.
-			if p := c.EupravnikProvider(); p != nil {
-				providers[name] = p
-			} else {
-				c.Logger.Warn().
-					Str("provider", name).
-					Msg("eUpravnik is configured but its mailbox could not be initialized, skipping")
-			}
-		default:
+		if !IsImplemented(name) {
 			c.Logger.Warn().
 				Str("provider", name).
 				Msg("Configured provider has no implementation yet, skipping")
+
+			continue
 		}
+
+		p := c.getProviderLocked(name)
+		if p == nil {
+			// An email account whose mailbox could not be configured; skip it
+			// rather than adding a nil that would panic in the refresh runner.
+			c.Logger.Warn().
+				Str("provider", name).
+				Msg("Provider is configured but could not be initialized, skipping")
+
+			continue
+		}
+
+		providers[name] = p
 	}
 
 	return providers

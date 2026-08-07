@@ -93,6 +93,7 @@ docker exec preuzmi /app/preuzmi checks
 ## Features
 
 - **Multi-provider downloads** — A1, mts, EPS and e.Sanduče sign in with each provider's own platform credentials; Yettel and eUpravnik read the invoice from your mailbox over IMAP (for now)
+- **Multiple accounts per provider** — track several family members' accounts under one provider (e.g. `a1` + `a1-mama`); each is downloaded, indexed and shown separately with its own label
 - **Smart refresh** — skips providers whose previous-month receipt is settled (`paid_at` set, status `plaćeno`, and `confirmed_at` set); unpaid or unverified bills keep running so status can flip
 - **Receipt dashboard** — search, filter by period / provider / paid status
 - **Paid tracking** — mark receipts paid from the UI or the `receipts` CLI; tracked as two separate moments: *paid by you* and *confirmed by the provider*
@@ -162,6 +163,7 @@ docker exec preuzmi /app/preuzmi checks
   },
   "providers": {
     "a1": { "identifier": "", "password": "" },
+    "a1-mama": { "identifier": "", "password": "", "label": "Mama" },
     "mts": { "identifier": "", "password": "" },
     "esanduce": { "identifier": "", "password": "" },
     "eps": { "identifier": "", "password": "" },
@@ -181,6 +183,9 @@ docker exec preuzmi /app/preuzmi checks
 | `notifications.driver`     | `telegram` or `smtp`                                                                                                                                               |
 | `email.provider`           | Mailbox driver for the email-based providers (eUpravnik / Yettel). **Currently `gmail` only.**                                                                     |
 | `providers.<name>.mailbox` | Gmail label to search for that provider's invoice. Empty → falls back to `email.mailbox`, then `INBOX`.                                                            |
+| `providers.<name>.label`   | Family-member / account name shown next to the brand (e.g. `A1 — Mama`). Optional; only needed to tell multiple accounts of one provider apart.                    |
+
+> **Multiple accounts per provider (family members).** A provider can hold more than one account — e.g. each family member's own A1 login. The primary account keeps the plain key (`a1`); each extra account is a key of the form `<provider>-<name>` (`a1-mama`, `mts-tata`) with its own `identifier` / `password` and a `label`. Every account downloads to its own file (`06-2026/a1-mama.pdf`) and is tracked separately on the dashboard, stats, and notifications. You can add or remove accounts from **Settings → Providers → Add account**, or by editing `config.json`.
 
 > **Two login models.** **A1, mts, EPS and e.Sanduče** authenticate against each service's own platform, so their `identifier` / `password` are your **login for that provider**. **Yettel and eUpravnik** have no usable API, so — _for now_ — the app reads the invoice PDF from your mailbox over IMAP; their `identifier` / `password` are your **Gmail address and a Google App Password**, not the provider login. See [eUpravnik & Yettel](#eupravnik--yettel--mailbox-based-gmail-only-for-now) below.
 

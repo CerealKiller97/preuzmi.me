@@ -1,11 +1,76 @@
 package config
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestBaseProvider(t *testing.T) {
+	// A primary account key is its own base.
+	assert.Equal(t, "a1", BaseProvider("a1"))
+	assert.Equal(t, "eupravnik", BaseProvider("eupravnik"))
+	// An extra account resolves to the base before the first dash.
+	assert.Equal(t, "a1", BaseProvider("a1-mama"))
+	assert.Equal(t, "mts", BaseProvider("mts-tata"))
+	// A label that itself contains a dash still resolves to the base.
+	assert.Equal(t, "a1", BaseProvider("a1-baka-mara"))
+	// Case and surrounding space are normalized.
+	assert.Equal(t, "a1", BaseProvider("  A1-Mama "))
+	// An unknown key is returned as-is (lowercased).
+	assert.Equal(t, "unknown", BaseProvider("unknown"))
+}
+
+func TestCredentialsLabelRoundTrips(t *testing.T) {
+	in := Credentials{Username: "u", Password: "p", Label: "Mama"}
+
+	b, err := json.Marshal(in)
+	require.NoError(t, err)
+	assert.Contains(t, string(b), `"label":"Mama"`)
+
+	var out Credentials
+	require.NoError(t, json.Unmarshal(b, &out))
+	assert.Equal(t, in, out)
+
+	// An empty label is omitted from the JSON so single-account configs are clean.
+	b, err = json.Marshal(Credentials{Username: "u", Password: "p"})
+	require.NoError(t, err)
+	assert.NotContains(t, string(b), "label")
+}
+
+func TestMergeSecretsMultiAccount(t *testing.T) {
+	prev := Config{
+		Providers: map[Provider]Credentials{
+			"a1":      {Username: "me", Password: "p-me"},
+			"a1-mama": {Username: "mama", Password: "p-mama"},
+			"a1-tata": {Username: "tata", Password: "p-tata"},
+		},
+	}
+
+	// The incoming form keeps the primary (blank password → merged), edits mama's
+	// password, drops tata entirely, and adds a brand-new account with a password.
+	next := Config{
+		Providers: map[Provider]Credentials{
+			"a1":        {Username: "me", Password: ""},
+			"a1-mama":   {Username: "mama", Password: "changed"},
+			"a1-sestra": {Username: "sestra", Password: "p-sestra"},
+		},
+	}
+
+	next.MergeSecrets(prev)
+
+	// Primary keeps its stored secret.
+	assert.Equal(t, "p-me", next.Providers["a1"].Password)
+	// Edited account takes the new password.
+	assert.Equal(t, "changed", next.Providers["a1-mama"].Password)
+	// New account keeps the password it submitted (prev had none to merge).
+	assert.Equal(t, "p-sestra", next.Providers["a1-sestra"].Password)
+	// Removed account stays removed — not resurrected with its old secret.
+	_, ok := next.Providers["a1-tata"]
+	assert.False(t, ok)
+}
 
 func TestKeepSecret(t *testing.T) {
 	assert.Equal(t, "old", KeepSecret("", "old"))

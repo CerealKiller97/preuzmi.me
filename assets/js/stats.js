@@ -173,7 +173,11 @@ document.addEventListener('alpine:init', () => {
         }
 
         const data = await res.json();
-        this.providers = Array.isArray(data) ? data : [];
+        const list = Array.isArray(data) ? data : [];
+        // Register account labels so chart legends render "A1 — Mama" from the
+        // bare account keys carried in the stats series.
+        if (window.setProviderAccounts) window.setProviderAccounts(list);
+        this.providers = list.map(a => (a && a.key ? a.key : a));
       } catch (e) {
         console.error(e);
         this.providers = [];
@@ -289,7 +293,10 @@ document.addEventListener('alpine:init', () => {
      * @returns {string}
      */
     providerColor(provider, i) {
-      const brand = token(`--brand-${String(provider || '').toLowerCase()}`);
+      // Colour by base provider, so every account of a provider shares its brand
+      // colour (e.g. "a1-mama" uses --brand-a1).
+      const base = window.baseProvider ? window.baseProvider(provider) : String(provider || '').toLowerCase();
+      const brand = token(`--brand-${base}`);
       if (brand) {
         return brand;
       }

@@ -110,7 +110,7 @@ document.addEventListener('alpine:init', () => {
           ? (r.empty ? t('nema mejla') : t('uspešno'))
           : (r.error || t('greška'));
 
-        return `${providerLabel(r.provider)}: ${status}`;
+        return `${providerLabel(r.provider, r.label)}: ${status}`;
       });
 
       return `${when}\n${lines.join('\n')}`;
@@ -222,7 +222,7 @@ document.addEventListener('alpine:init', () => {
       // Email-based providers (Yettel, eUpravnik) report "no receipt" when their
       // invoice email has not arrived yet. That is not a failure, but it explains
       // why fewer receipts were downloaded, so name them in the message.
-      const noMail = this.results.filter(r => r.ok && r.empty).map(r => providerLabel(r.provider));
+      const noMail = this.results.filter(r => r.ok && r.empty).map(r => providerLabel(r.provider, r.label));
       const noMailNote = noMail.length
         ? t(` ${noMail.join(', ')}: nije pronađen mejl sa računom.`)
         : '';

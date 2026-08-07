@@ -7,6 +7,42 @@ import (
 	"testing"
 )
 
+func TestTwoAccountsSamePeriodCoexist(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer store.Close() //nolint:errcheck
+
+	ctx := context.Background()
+
+	// Two accounts of the same provider file their bill for the same period.
+	// They key on distinct account keys ("a1" vs "a1-mama"), so both rows survive
+	// the UNIQUE(provider, period) constraint rather than overwriting each other.
+	if err := store.Record(ctx, Receipt{Provider: "a1", Period: "06-2026", StorageKey: "06-2026/a1.pdf", SizeBytes: 100}); err != nil {
+		t.Fatalf("Record a1: %v", err)
+	}
+	if err := store.Record(ctx, Receipt{Provider: "a1-mama", Period: "06-2026", StorageKey: "06-2026/a1-mama.pdf", SizeBytes: 200}); err != nil {
+		t.Fatalf("Record a1-mama: %v", err)
+	}
+
+	got, err := store.List(ctx)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 coexisting receipts, got %d", len(got))
+	}
+
+	mama, ok := store.Latest(ctx, "a1-mama")
+	if !ok {
+		t.Fatalf("Latest a1-mama: not found")
+	}
+	if mama.StorageKey != "06-2026/a1-mama.pdf" || mama.SizeBytes != 200 {
+		t.Fatalf("Latest a1-mama returned wrong row: %+v", mama)
+	}
+}
+
 func TestRecordAndList(t *testing.T) {
 	store, err := New(t.TempDir())
 	if err != nil {

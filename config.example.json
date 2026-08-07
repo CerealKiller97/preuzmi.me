@@ -2,7 +2,13 @@
   "providers": {
     "a1": {
       "identifier": "",
-      "password": ""
+      "password": "",
+      "label": ""
+    },
+    "a1-mama": {
+      "identifier": "",
+      "password": "",
+      "label": "Mama"
     },
     "eps": {
       "identifier": "",

@@ -19,9 +19,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// fileName is the receipt's base name, also the provider key used across the app.
-const fileName = "yettel"
-
 // senderFilter optionally narrows the mailbox search to Yettel's invoice address
 // (a substring IMAP FROM match). It is empty by default: the intended setup is a
 // dedicated Gmail label (configured as the provider's mailbox) that already
@@ -40,18 +37,24 @@ type Service struct {
 	storage  storage.Interface
 	receipts *receipts.Repository
 	reader   mailbox.Reader
+	// name is the account key: "yettel" for the primary account, or
+	// "yettel-<slug>" for an extra one (a second mailbox/login). It is the
+	// receipt's base filename and its provider column in the receipts index.
+	name string
 }
 
-// New builds the provider. reader is the mailbox to search (injected so tests can
-// supply a fake inbox); storage and receiptsStore are shared with the other
-// providers.
+// New builds the provider. name is the account key, reader is the mailbox to
+// search (injected so tests can supply a fake inbox); storage and receiptsStore
+// are shared with the other providers.
 func New(
+	name string,
 	reader mailbox.Reader,
 	logger zerolog.Logger,
 	storage storage.Interface,
 	receiptsStore *receipts.Repository,
 ) *Service {
 	return &Service{
+		name:     name,
 		reader:   reader,
 		logger:   logger,
 		storage:  storage,
@@ -97,7 +100,7 @@ func (s *Service) DownloadReceipt() error {
 		period = in.periodString()
 	}
 
-	key := fmt.Sprintf("%s/%s.pdf", period, fileName)
+	key := fmt.Sprintf("%s/%s.pdf", period, s.name)
 	if err := s.storage.Save(ctx, key, attachment.Data); err != nil {
 		s.logger.Err(err).Str("key", key).Msg("Error saving Yettel receipt")
 		return err
@@ -134,18 +137,18 @@ func (s *Service) recordInvoice(ctx context.Context, in invoice, period string, 
 	// source of truth for the price. Fall back to the PDF's "UKUPNO" total only
 	// when the bill has no readable QR.
 	if amount, ok := ipsqr.AmountFromPDF(pdf); ok {
-		if err := s.receipts.SetPrice(ctx, fileName, period, amount); err != nil {
+		if err := s.receipts.SetPrice(ctx, s.name, period, amount); err != nil {
 			s.logger.Err(err).Str("period", period).Msg("Failed to record Yettel receipt price")
 		}
 	} else if in.hasTotal {
-		if err := s.receipts.SetPrice(ctx, fileName, period, in.total); err != nil {
+		if err := s.receipts.SetPrice(ctx, s.name, period, in.total); err != nil {
 			s.logger.Err(err).Str("period", period).Msg("Failed to record Yettel receipt price")
 		}
 	}
 
 	// Never leave the status empty: the current invoice is unpaid until a later
 	// invoice confirms it.
-	if err := s.receipts.SetStatus(ctx, fileName, period, receipts.StatusUnpaid); err != nil {
+	if err := s.receipts.SetStatus(ctx, s.name, period, receipts.StatusUnpaid); err != nil {
 		s.logger.Err(err).Str("period", period).Msg("Failed to record Yettel receipt status")
 	}
 
@@ -153,7 +156,7 @@ func (s *Service) recordInvoice(ctx context.Context, in invoice, period string, 
 	// period so we know which month "previous" is.
 	if in.hasPrevBalance && in.hasPeriod && in.previousSettled() {
 		prev := in.previousPeriodString()
-		if err := s.receipts.SetStatus(ctx, fileName, prev, receipts.StatusPaid); err != nil {
+		if err := s.receipts.SetStatus(ctx, s.name, prev, receipts.StatusPaid); err != nil {
 			s.logger.Err(err).Str("period", prev).Msg("Failed to mark previous Yettel receipt paid")
 		}
 	}

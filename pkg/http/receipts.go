@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -288,12 +289,24 @@ func loadReceiptMeta(dir string) ([]ReceiptMeta, error) {
 	return items, nil
 }
 
-// providersAPIHandler returns all configured provider keys from config
+// providerAccount is one configured account in the /api/providers response. Key
+// is the account identity used in receipt data and URLs (e.g. "a1" or
+// "a1-mama"); Base is its provider type; Label is the family-member name shown
+// next to the brand when a provider holds more than one account.
+type providerAccount struct {
+	Key   string `json:"key"`
+	Base  string `json:"base"`
+	Label string `json:"label"`
+}
+
+// providersAPIHandler returns all configured accounts (one per provider key),
+// each carrying its base provider and label so the UI can render "A1 — Mama"
+// and tell several accounts of one provider apart.
 func providersAPIHandler(cfg *config.Config) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Nothing configured yet is an ordinary state for a fresh install, not
 		// a server error: answer with an empty list so the UI still renders.
-		providers, err := utils.GetPairs(cfg)
+		keys, err := utils.GetPairs(cfg)
 		if err != nil {
 			if !errors.Is(err, utils.ErrEmptyProviders) {
 				log.Err(err).Msg("Error getting pairs for providers")
@@ -302,10 +315,22 @@ func providersAPIHandler(cfg *config.Config) Handler {
 				return
 			}
 
-			providers = []string{}
+			keys = []string{}
 		}
 
-		writeJSON(w, providers)
+		// Stable order, since GetPairs ranges a map.
+		sort.Strings(keys)
+
+		accounts := make([]providerAccount, 0, len(keys))
+		for _, key := range keys {
+			accounts = append(accounts, providerAccount{
+				Key:   key,
+				Base:  config.BaseProvider(key),
+				Label: cfg.Providers[config.Provider(key)].Label,
+			})
+		}
+
+		writeJSON(w, accounts)
 	}
 }
 

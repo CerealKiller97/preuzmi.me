@@ -39,8 +39,6 @@ const (
 
 	// amountEpsilon absorbs float rounding when matching a payment to a bill.
 	amountEpsilon = 0.005
-
-	fileName = "eps"
 )
 
 var _ provider.Interface = &Service{}
@@ -52,6 +50,10 @@ type (
 		receipts *receipts.Repository
 		http     *http.Client
 		config   config.Credentials
+		// name is the account key: "eps" for the primary account, or "eps-<slug>"
+		// for an extra one. It is the receipt's base filename and its provider
+		// column in the receipts index, so each account files separately.
+		name string
 	}
 
 	authenticateRequest struct {
@@ -134,12 +136,14 @@ type (
 )
 
 func New(
+	name string,
 	config config.Credentials,
 	logger zerolog.Logger,
 	storage storage.Interface,
 	receiptsStore *receipts.Repository,
 ) *Service {
 	return &Service{
+		name:     name,
 		config:   config,
 		logger:   logger,
 		storage:  storage,
@@ -203,7 +207,7 @@ func (s *Service) DownloadReceipt() error {
 	if s.receipts != nil {
 		ctx := context.Background()
 
-		if err := s.receipts.SetPrice(ctx, fileName, period, latest.Amount); err != nil {
+		if err := s.receipts.SetPrice(ctx, s.name, period, latest.Amount); err != nil {
 			s.logger.Err(err).Str("period", period).Msg("Failed to record EPS receipt price")
 		}
 
@@ -218,7 +222,7 @@ func (s *Service) DownloadReceipt() error {
 			if billSettled(latest, payments) {
 				status = receipts.StatusPaid
 			}
-			if err := s.receipts.SetStatus(ctx, fileName, period, status); err != nil {
+			if err := s.receipts.SetStatus(ctx, s.name, period, status); err != nil {
 				s.logger.Err(err).Str("period", period).Msg("Failed to record EPS receipt status")
 			}
 		}
@@ -292,7 +296,7 @@ func (s *Service) downloadReceipt(token, receiptID, period string) error {
 		return err
 	}
 
-	key := fmt.Sprintf("%s/%s.pdf", period, fileName)
+	key := fmt.Sprintf("%s/%s.pdf", period, s.name)
 
 	if err := s.storage.Save(context.Background(), key, data); err != nil {
 		return err

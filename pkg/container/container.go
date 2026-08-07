@@ -18,21 +18,19 @@ import (
 )
 
 type Container struct {
-	Logger            zerolog.Logger
-	esanduceProvider  provider.Interface
-	storage           storage.Interface
-	receiptsStore     *receipts.Repository
-	mtsProvider       provider.Interface
-	a1Provider        provider.Interface
-	Ctx               context.Context
-	yettelProvider    provider.Interface
-	epsProvider       provider.Interface
-	eupravnikProvider provider.Interface
-	config            *config.Config
-	Assets            embed.FS
-	notifier          *notify.Service
-	version           string
-	mu                sync.RWMutex
+	Logger        zerolog.Logger
+	storage       storage.Interface
+	receiptsStore *receipts.Repository
+	// providers caches one built provider per account key (e.g. "a1",
+	// "a1-mama"), so a provider that holds several family-member accounts gets a
+	// distinct instance per account. Cleared in Reload.
+	providers map[string]provider.Interface
+	Ctx       context.Context
+	config    *config.Config
+	Assets    embed.FS
+	notifier  *notify.Service
+	version   string
+	mu        sync.RWMutex
 }
 
 var _ io.Closer = &Container{}
@@ -75,12 +73,7 @@ func (c *Container) Reload(cfg *config.Config) {
 		c.receiptsStore = nil
 	}
 	c.notifier = nil
-	c.mtsProvider = nil
-	c.a1Provider = nil
-	c.esanduceProvider = nil
-	c.yettelProvider = nil
-	c.epsProvider = nil
-	c.eupravnikProvider = nil
+	c.providers = nil
 
 	level := cfg.LogLevel
 	if level == "" {
@@ -141,6 +134,12 @@ func (c *Container) NotifyRefreshResults(results []refresh.Result) {
 	// state, so enriching it in place would race concurrent readers.
 	enriched := append([]refresh.Result(nil), results...)
 
+	// Stamp each result with its account label so notifications can name the
+	// family member ("A1 — Mama") when a provider holds more than one account.
+	for i := range enriched {
+		enriched[i].Label = c.config.Providers[config.Provider(enriched[i].Provider)].Label
+	}
+
 	if store == nil {
 		for i := range enriched {
 			enriched[i].New = enriched[i].OK
@@ -183,6 +182,7 @@ func (c *Container) NotifyRefreshResults(results []refresh.Result) {
 	for _, r := range verified {
 		items = append(items, notify.VerifiedReceipt{
 			Provider: r.Provider,
+			Label:    c.config.Providers[config.Provider(r.Provider)].Label,
 			Period:   r.Period,
 			Price:    r.Price,
 		})

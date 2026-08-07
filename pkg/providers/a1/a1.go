@@ -32,8 +32,6 @@ const (
 	// a1DateLayout is the RFC3339 timestamp format A1 uses for bill dates.
 	a1DateLayout = "2006-01-02T15:04:05-07:00"
 
-	fileName = "a1"
-
 	// userAgent makes the requests look like a normal browser; some ASMP
 	// front-ends reject requests without one.
 	userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
@@ -59,6 +57,11 @@ type (
 		receipts *receipts.Repository
 		http     *http.Client
 		config   config.Credentials
+		// name is the account key: the base provider ("a1") for the primary
+		// account, or "a1-<slug>" for an extra one. It is the receipt's base
+		// filename and the provider column in the receipts index, so each account
+		// files to its own path and row.
+		name string
 	}
 
 	// profileResponse is the JSON:API payload of /webscapi/v1/profile; only the
@@ -122,12 +125,13 @@ type (
 
 var _ provider.Interface = &Service{}
 
-func New(config config.Credentials, logger zerolog.Logger, storage storage.Interface, receiptsStore *receipts.Repository) *Service {
+func New(name string, config config.Credentials, logger zerolog.Logger, storage storage.Interface, receiptsStore *receipts.Repository) *Service {
 	// A cookie jar carries the session cookie the login sets (and any cookies
 	// picked up along redirects) into the follow-up authenticated requests.
 	jar, _ := cookiejar.New(nil) //nolint:errcheck // cookiejar.New never errors with a nil options
 
 	return &Service{
+		name:     name,
 		config:   config,
 		logger:   logger,
 		storage:  storage,
@@ -186,10 +190,10 @@ func (s Service) DownloadReceipt() error {
 	// database hiccup must not fail the download.
 	if s.receipts != nil {
 		ctx := context.Background()
-		if err := s.receipts.SetPrice(ctx, fileName, period, latest.Fields.TotalAmount); err != nil {
+		if err := s.receipts.SetPrice(ctx, s.name, period, latest.Fields.TotalAmount); err != nil {
 			s.logger.Err(err).Str("period", period).Msg("Failed to record A1 receipt price")
 		}
-		if err := s.receipts.SetStatus(ctx, fileName, period, billStatus(latest)); err != nil {
+		if err := s.receipts.SetStatus(ctx, s.name, period, billStatus(latest)); err != nil {
 			s.logger.Err(err).Str("period", period).Msg("Failed to record A1 receipt status")
 		}
 	}
@@ -241,7 +245,7 @@ func (s Service) downloadReceipt(billID, subscriptionID, cookie, period string) 
 		return fmt.Errorf("a1 bill content is not valid base64: %w", err)
 	}
 
-	key := fmt.Sprintf("%s/%s.pdf", period, fileName)
+	key := fmt.Sprintf("%s/%s.pdf", period, s.name)
 
 	if err := s.storage.Save(context.Background(), key, data); err != nil {
 		return err

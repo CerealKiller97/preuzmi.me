@@ -360,7 +360,13 @@ document.addEventListener('alpine:init', () => {
         }
 
         const data = await res.json();
-        this.providers = Array.isArray(data) ? data : [];
+        const list = Array.isArray(data) ? data : [];
+        // Register account labels so providerLabel() can render "A1 — Mama" for
+        // receipt cards, which only carry the bare account key.
+        if (window.setProviderAccounts) window.setProviderAccounts(list);
+        // Keep providers as the list of account keys the filter pills iterate.
+        // Tolerate both the object shape ({key,...}) and a bare-string fallback.
+        this.providers = list.map(a => (a && a.key ? a.key : a));
       } catch (e) {
         console.error(e);
         this.providers = [];

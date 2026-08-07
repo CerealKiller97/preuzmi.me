@@ -56,6 +56,24 @@ func TestGetPairsSkipsProvidersMissingOneHalfOfThePair(t *testing.T) {
 	assert.ErrorIs(err, utils.ErrEmptyProviders)
 }
 
+func TestGetPairsReturnsExtraAccountKeys(t *testing.T) {
+	// Arrange: a provider with two accounts (a family member's own login).
+	assert := require.New(t)
+	cfg := config.Config{
+		Providers: map[config.Provider]config.Credentials{
+			"a1":      {Username: "me", Password: "p"},
+			"a1-mama": {Username: "mama", Password: "p"},
+		},
+	}
+
+	// Act
+	pairs, err := utils.GetPairs(&cfg)
+
+	// Assert: both account keys are returned so each is refreshed independently.
+	assert.NoError(err)
+	assert.ElementsMatch([]string{"a1", "a1-mama"}, pairs)
+}
+
 func TestGetPairsErrorsWhenNothingIsConfigured(t *testing.T) {
 	// Arrange
 	assert := require.New(t)

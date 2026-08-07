@@ -93,6 +93,7 @@ docker exec preuzmi /app/preuzmi checks
 ## Mogućnosti
 
 - **Više provajdera** — A1, mts, EPS i e.Sanduče se prijavljuju kredencijalima svoje platforme; Yettel i eUpravnik čitaju račun iz vašeg sandučeta preko IMAP-a (za sada)
+- **Više naloga po provajderu** — prati naloge više članova porodice pod jednim provajderom (npr. `a1` + `a1-mama`); svaki se preuzima, indeksira i prikazuje zasebno sa svojim imenom
 - **Pametno osvežavanje** — preskače provajdere čiji je račun za prošli mesec završen (`paid_at` postavljen, status `plaćeno` i `confirmed_at` postavljen); neplaćeni ili neverifikovani računi se i dalje proveravaju da bi status mogao da se promeni
 - **Dashboard računa** — pretraga, filter po periodu / provajderu / statusu plaćanja
 - **Praćenje plaćanja** — označi račun kao plaćen iz UI-ja ili `receipts` CLI-ja; prati se kao dva odvojena trenutka: *ti platio* i *provajder potvrdio*
@@ -162,6 +163,7 @@ docker exec preuzmi /app/preuzmi checks
   },
   "providers": {
     "a1":        { "identifier": "", "password": "" },
+    "a1-mama":   { "identifier": "", "password": "", "label": "Mama" },
     "mts":       { "identifier": "", "password": "" },
     "esanduce":  { "identifier": "", "password": "" },
     "eps":       { "identifier": "", "password": "" },
@@ -181,6 +183,9 @@ docker exec preuzmi /app/preuzmi checks
 | `notifications.driver` | `telegram` ili `smtp` |
 | `email.provider` | Drajver sandučeta za email provajdere (eUpravnik / Yettel). **Trenutno samo `gmail`.** |
 | `providers.<ime>.mailbox` | Gmail labela koja se pretražuje za račun tog provajdera. Prazno → pada na `email.mailbox`, pa na `INBOX`. |
+| `providers.<ime>.label` | Ime člana porodice / naloga koje se prikazuje uz provajdera (npr. `A1 — Mama`). Opciono; potrebno samo da se razlikuje više naloga istog provajdera. |
+
+> **Više naloga po provajderu (članovi porodice).** Jedan provajder može imati više naloga — npr. zaseban A1 nalog svakog člana porodice. Primarni nalog zadržava običan ključ (`a1`); svaki dodatni je ključ oblika `<provajder>-<ime>` (`a1-mama`, `mts-tata`) sa svojim `identifier` / `password` i `label`. Svaki nalog se preuzima u svoj fajl (`06-2026/a1-mama.pdf`) i prati zasebno na kontrolnoj tabli, statistici i u obaveštenjima. Naloge dodaješ ili uklanjaš u **Podešavanja → Provajderi → Dodaj nalog**, ili izmenom `config.json`.
 
 > **Dva načina prijave.** **A1, mts, EPS i e.Sanduče** se autentifikuju na sopstvenu platformu, pa su njihovi `identifier` / `password` vaša **prijava za tog provajdera**. **Yettel i eUpravnik** nemaju upotrebljiv API, pa — *za sada* — aplikacija čita PDF računa iz vašeg sandučeta preko IMAP-a; njihovi `identifier` / `password` su vaša **Gmail adresa i Google App Password**, a ne prijava za provajdera. Vidi [eUpravnik & Yettel](#eupravnik--yettel--preko-sandučeta-za-sada-samo-gmail) niže.
 

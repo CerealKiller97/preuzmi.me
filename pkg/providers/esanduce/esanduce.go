@@ -34,8 +34,6 @@ const (
 	// statusDugaPaid is the Cyrillic value of status_duga that marks a bill as
 	// paid; anything else counts as unpaid.
 	statusDugaPaid = "плаћен"
-
-	fileName = "esanduce"
 )
 
 type (
@@ -45,6 +43,10 @@ type (
 		receipts *receipts.Repository
 		http     *http.Client
 		config   config.Credentials
+		// name is the account key: "esanduce" for the primary account, or
+		// "esanduce-<slug>" for an extra one. It is the receipt's base filename
+		// and its provider column in the receipts index.
+		name string
 	}
 
 	LoginResponse struct {
@@ -130,8 +132,9 @@ type (
 
 var _ provider.Interface = &Service{}
 
-func New(config config.Credentials, logger zerolog.Logger, storage storage.Interface, receiptsStore *receipts.Repository) *Service {
+func New(name string, config config.Credentials, logger zerolog.Logger, storage storage.Interface, receiptsStore *receipts.Repository) *Service {
 	return &Service{
+		name:     name,
 		config:   config,
 		logger:   logger,
 		storage:  storage,
@@ -189,10 +192,10 @@ func (s Service) DownloadReceipt() error {
 		if amount, ok := ipsqr.AmountFromPDF(pdf); ok {
 			price = amount
 		}
-		if err := s.receipts.SetPrice(ctx, fileName, period, price); err != nil {
+		if err := s.receipts.SetPrice(ctx, s.name, period, price); err != nil {
 			s.logger.Err(err).Str("period", period).Msg("Failed to record esanduce receipt price")
 		}
-		if err := s.receipts.SetStatus(ctx, fileName, period, billStatus(bill)); err != nil {
+		if err := s.receipts.SetStatus(ctx, s.name, period, billStatus(bill)); err != nil {
 			s.logger.Err(err).Str("period", period).Msg("Failed to record esanduce receipt status")
 		}
 	}
@@ -286,7 +289,7 @@ func (s Service) downloadReceipt(token string, ident, ggmm int, period string) (
 		return nil, fmt.Errorf("esanduce pdf base64 decode: %w", err)
 	}
 
-	key := fmt.Sprintf("%s/%s.pdf", period, fileName)
+	key := fmt.Sprintf("%s/%s.pdf", period, s.name)
 
 	if err := s.storage.Save(context.Background(), key, data); err != nil {
 		return nil, err

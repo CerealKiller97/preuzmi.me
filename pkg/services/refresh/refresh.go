@@ -25,7 +25,11 @@ const fileName = "refresh.json"
 // available, so notifications can report which month's bill was fetched and how
 // much it was.
 type Result struct {
-	Provider   string  `json:"provider"`
+	Provider string `json:"provider"`
+	// Label is the account's family-member name (from config), shown next to the
+	// brand when a provider holds more than one account. It is filled in after
+	// the run for display in notifications and the UI; empty for a single account.
+	Label      string  `json:"label,omitempty"`
 	Error      string  `json:"error,omitempty"`
 	Period     string  `json:"period,omitempty"`
 	DurationMS int64   `json:"duration_ms"`

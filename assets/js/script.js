@@ -86,15 +86,49 @@
     yettel: 'ЈЕТЕЛ',
   };
 
-  // providerLabel returns the display name for a provider key. In Cyrillic mode a
-  // pinned form wins; otherwise the Latin name (override or uppercased key)
-  // transliterates — so Serbian acronyms like MTS/EPS become МТС/ЕПС.
-  window.providerLabel = function providerLabel(key) {
+  // baseProvider maps an account key to its base provider type: the key itself
+  // when it is a known provider ("a1"), otherwise the part before the first "-"
+  // ("a1-mama" → "a1"). Mirrors config.BaseProvider on the server.
+  const knownProviders = { mts: 1, a1: 1, yettel: 1, eps: 1, esanduce: 1, eupravnik: 1 };
+  function baseProvider(key) {
     const k = String(key || '').toLowerCase();
-    const latin = providerNames[k] || String(key || '').toUpperCase();
-    if ((lang() === 'cyrillic' || lang() === 'cyrilic') && providerCyrillic[k]) {
-      return providerCyrillic[k];
+    if (knownProviders[k]) return k;
+    const dash = k.indexOf('-');
+    return dash === -1 ? k : k.slice(0, dash);
+  }
+  window.baseProvider = baseProvider;
+
+  // accountLabels maps an account key to its family-member label. Populated from
+  // /api/providers via setProviderAccounts, so receipt/stats data (which carry a
+  // bare account key) can still render the label. Refresh results carry their own
+  // label and pass it to providerLabel directly.
+  const accountLabels = {};
+  window.setProviderAccounts = function setProviderAccounts(list) {
+    if (!Array.isArray(list)) return;
+    for (const a of list) {
+      if (a && a.key) accountLabels[a.key] = a.label || '';
+    }
+  };
+
+  // providerBrand returns the brand display name for an account key, resolved
+  // from its base provider. In Cyrillic mode a pinned form wins; otherwise the
+  // Latin name transliterates — so Serbian acronyms like MTS/EPS become МТС/ЕПС.
+  function providerBrand(key) {
+    const base = baseProvider(key);
+    const latin = providerNames[base] || base.toUpperCase();
+    if ((lang() === 'cyrillic' || lang() === 'cyrilic') && providerCyrillic[base]) {
+      return providerCyrillic[base];
     }
     return window.t(latin);
+  }
+
+  // providerLabel returns the display name for an account. The brand comes from
+  // the base provider; when the account has a family-member label it is appended
+  // ("A1 — Mama"). label may be passed explicitly (refresh results); otherwise it
+  // is looked up from the accounts fetched via setProviderAccounts.
+  window.providerLabel = function providerLabel(key, label) {
+    const brand = providerBrand(key);
+    const l = (label === undefined || label === null ? accountLabels[key] : label) || '';
+    return l ? `${brand} — ${l}` : brand;
   };
 })();

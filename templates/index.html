@@ -221,7 +221,7 @@
               Plati skeniranjem
             </h3>
             <p class="mt-0.5 truncate text-sm text-muted-foreground"
-               x-text="qrItem ? (qrItem.provider.toUpperCase() + ' · ' + qrItem.period) : ''"></p>
+               x-text="qrItem ? (providerLabel(qrItem.provider) + ' · ' + qrItem.period) : ''"></p>
           </div>
           <button type="button" class="btn btn-ghost btn-icon shrink-0" @click="closeQR()" aria-label="Zatvori">
             <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"

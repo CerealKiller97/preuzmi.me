@@ -2,6 +2,13 @@
  * Settings page: editable config form with apply/reload, notification test,
  * and step-by-step setup guides for the selected driver.
  */
+// KNOWN_BASES lists the base providers, in display order. Kept in step with the
+// server's config.knownProviders / container.implemented. EMAIL_BASES are the
+// providers that read the invoice from a mailbox, so their accounts also expose
+// a mailbox (Gmail label / IMAP folder) field.
+const KNOWN_BASES = ['a1', 'mts', 'yettel', 'eps', 'esanduce', 'eupravnik'];
+const EMAIL_BASES = ['yettel', 'eupravnik'];
+
 document.addEventListener('alpine:init', () => {
   Alpine.data('settingsPage', () => ({
     form: {},
@@ -255,7 +262,89 @@ document.addEventListener('alpine:init', () => {
         form.lang = 'cyrillic';
       }
 
+      // Seed an empty primary account for every known provider so each renders a
+      // card even when config.json has no entry for it yet. Empty primaries are
+      // pruned before save (pruneEmptyProviders), so this never writes blank
+      // provider entries back to config.json.
+      for (const base of KNOWN_BASES) {
+        if (!form.providers[base]) {
+          form.providers[base] = { identifier: '', password: '' };
+        }
+      }
+
       return form;
+    },
+
+    // baseOf returns the base provider type for an account key ("a1-mama" → "a1").
+    baseOf(key) {
+      return window.baseProvider ? window.baseProvider(key) : String(key || '').toLowerCase();
+    },
+
+    // providerBases returns the base providers to render, in display order.
+    providerBases() {
+      return KNOWN_BASES.slice();
+    },
+
+    // isEmailProvider reports whether a base reads its invoice from a mailbox, so
+    // its account cards expose a mailbox (Gmail label / IMAP folder) field.
+    isEmailProvider(base) {
+      return EMAIL_BASES.includes(base);
+    },
+
+    // accountsFor returns the account keys belonging to a base provider, the
+    // primary (key === base) first, then any extra accounts sorted.
+    accountsFor(base) {
+      const keys = Object.keys(this.form.providers || {}).filter(k => this.baseOf(k) === base);
+      return keys.sort((a, b) => {
+        if (a === base) return -1;
+        if (b === base) return 1;
+        return a.localeCompare(b);
+      });
+    },
+
+    // isPrimary reports whether a key is a provider's primary account (its base).
+    // Primary accounts cannot be removed — clear their fields instead.
+    isPrimary(key) {
+      return key === this.baseOf(key);
+    },
+
+    // addAccount appends a new empty extra account for a base, keyed "base-N" with
+    // the smallest free N, and marks the form dirty.
+    addAccount(base) {
+      let n = 2;
+      while (this.form.providers[`${base}-${n}`]) {
+        n += 1;
+      }
+      this.form.providers[`${base}-${n}`] = { identifier: '', password: '', label: '' };
+      this.markDirty();
+    },
+
+    // removeAccount deletes an extra account and marks the form dirty. The primary
+    // account is never removed here (its remove control is hidden).
+    removeAccount(key) {
+      if (this.isPrimary(key)) {
+        return;
+      }
+      delete this.form.providers[key];
+      this.markDirty();
+    },
+
+    // pruneEmptyProviders drops accounts that carry nothing worth saving: no
+    // identifier, label or mailbox, no typed password, and no password already on
+    // disk. This keeps seeded-but-unused primaries out of config.json.
+    pruneEmptyProviders(providers) {
+      const hints = (this.secretHints && this.secretHints.providers) || {};
+      const kept = {};
+      for (const [key, c] of Object.entries(providers || {})) {
+        const identifier = (c.identifier || '').trim();
+        const password = (c.password || '').trim();
+        const label = (c.label || '').trim();
+        const mailbox = (c.mailbox || '').trim();
+        if (identifier || password || label || mailbox || hints[key]) {
+          kept[key] = c;
+        }
+      }
+      return kept;
     },
 
     providerNames() {
@@ -284,6 +373,8 @@ document.addEventListener('alpine:init', () => {
         payload.check_until = Number(payload.check_until) || 0;
         payload.notifications.smtp.port = Number(payload.notifications.smtp.port) || 0;
         payload.pretty_print = !!payload.pretty_print;
+        // Drop empty seeded/removed accounts so config.json only holds real ones.
+        payload.providers = this.pruneEmptyProviders(payload.providers);
 
         const res = await fetch('/api/settings', {
           method: 'PUT',

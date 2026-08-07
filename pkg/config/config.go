@@ -31,6 +31,12 @@ type (
 		// instead of the shared config.Email.Mailbox. Empty falls back to
 		// config.Email.Mailbox, then INBOX.
 		Mailbox string `json:"mailbox,omitempty"`
+		// Label is the human name for this account, shown in the UI and
+		// notifications (e.g. a family member's name, "Mama"). It only matters
+		// when a provider holds more than one account: the map key carries the
+		// account identity (see BaseProvider), and this names it for display.
+		// Empty on a single (primary) account, which is shown by its brand alone.
+		Label string `json:"label,omitempty"`
 	}
 
 	// S3 configures any S3-compatible object storage (AWS S3, Linode Object
@@ -154,6 +160,38 @@ var emailProviders = map[string]struct{}{
 
 // SecretPlaceholder is what the settings UI sends back for an unchanged secret.
 const SecretPlaceholder = "••••••••"
+
+// knownProviders is the set of base provider types. A provider may hold several
+// accounts, each keyed in Config.Providers as "<base>" (the primary account) or
+// "<base>-<slug>" (an extra family-member account); BaseProvider maps either
+// form back to its base type. Kept in step with the container's `implemented`
+// list, which decides which of these can actually download.
+var knownProviders = map[string]struct{}{
+	"mts":       {},
+	"a1":        {},
+	"yettel":    {},
+	"eps":       {},
+	"esanduce":  {},
+	"eupravnik": {},
+}
+
+// BaseProvider returns the base provider type for an account key. A key that is
+// itself a known provider (a primary account like "a1") is returned unchanged;
+// otherwise the part before the first "-" is taken ("a1-mama" -> "a1"). No
+// provider name contains a "-", so a label that does (e.g. "a1-baka-mara") still
+// resolves to its base. An unrecognised key is returned as-is.
+func BaseProvider(key string) string {
+	k := strings.ToLower(strings.TrimSpace(key))
+	if _, ok := knownProviders[k]; ok {
+		return k
+	}
+
+	if base, _, ok := strings.Cut(k, "-"); ok {
+		return base
+	}
+
+	return k
+}
 
 // Path returns the absolute path of config.json in the process working directory.
 func Path() (string, error) {
@@ -318,9 +356,12 @@ func (next *Config) MergeSecrets(prev Config) {
 		next.Providers = map[Provider]Credentials{}
 	}
 
-	for name, prevCreds := range prev.Providers {
-		cur := next.Providers[name]
-		cur.Password = KeepSecret(cur.Password, prevCreds.Password)
+	// Iterate the incoming accounts (not the previous ones) so that an account
+	// the user removed in the UI stays removed rather than being resurrected with
+	// its old secret, and a newly added account keeps the password it submitted
+	// (prev has none, so KeepSecret returns the incoming value).
+	for name, cur := range next.Providers {
+		cur.Password = KeepSecret(cur.Password, prev.Providers[name].Password)
 		next.Providers[name] = cur
 	}
 }

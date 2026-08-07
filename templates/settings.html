@@ -394,30 +394,69 @@
         {{t "Preuzimaju se samo provajderi kod kojih su popunjena oba polja i za koje postoji implementacija."}}
       </p>
 
+      <p class="mt-1 text-sm text-muted-foreground">
+        {{t "Za člana porodice sa zasebnim nalogom klikni „Dodaj nalog“ i daj mu ime (npr. Mama)."}}
+      </p>
+
       <div class="mt-5 flex flex-col gap-4">
-        <template x-for="name in providerNames()" :key="name">
+        <template x-for="base in providerBases()" :key="base">
           <div class="rounded-lg border p-4">
             <div class="flex flex-wrap items-center justify-between gap-2">
-              <h3 class="text-sm font-semibold uppercase tracking-tight" x-text="name"></h3>
+              <h3 class="text-sm font-semibold uppercase tracking-tight" x-text="providerLabel(base)"></h3>
+              <button type="button" class="btn btn-ghost h-7 px-2 text-xs" @click="addAccount(base)">
+                + {{t "Dodaj nalog"}}
+              </button>
             </div>
-            <div class="mt-3 grid gap-3 sm:grid-cols-2">
-              <div class="flex flex-col gap-1.5">
-                <label class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                  {{t "Nalog"}}
-                  {{template "hint" "Korisničko ime ili email za prijavu kod ovog provajdera (identifier u config.json)."}}
-                </label>
-                <input type="text" class="input font-mono text-xs"
-                       x-model="form.providers[name].identifier" placeholder="—">
-              </div>
-              <div class="flex flex-col gap-1.5">
-                <label class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                  {{t "Lozinka"}}
-                  {{template "hint" "Lozinka naloga. Ostavi prazno da zadržiš postojeću vrednost."}}
-                </label>
-                <input type="password" class="input font-mono text-xs" autocomplete="new-password"
-                       x-model="form.providers[name].password"
-                       :placeholder="secretPlaceholder(!!secretHints.providers[name])">
-              </div>
+
+            <div class="mt-3 flex flex-col gap-3">
+              <template x-for="key in accountsFor(base)" :key="key">
+                <div class="rounded-md border border-dashed p-3">
+                  <div class="flex items-end justify-between gap-2">
+                    <div class="flex grow flex-col gap-1.5">
+                      <label class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                        {{t "Ime naloga"}}
+                        {{template "hint" "Ime člana porodice ili opis naloga, prikazuje se uz provajdera (npr. Mama). Opciono za jedini nalog."}}
+                      </label>
+                      <input type="text" class="input text-xs"
+                             x-model="form.providers[key].label"
+                             :placeholder="isPrimary(key) ? '{{t "Opciono"}}' : '{{t "npr. Mama"}}'">
+                    </div>
+                    <button type="button" x-show="!isPrimary(key)"
+                            class="btn btn-ghost btn-icon h-8 shrink-0 text-destructive"
+                            @click="removeAccount(key)" :aria-label="'{{t "Ukloni nalog"}}'">
+                      {{t "Ukloni"}}
+                    </button>
+                  </div>
+
+                  <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div class="flex flex-col gap-1.5">
+                      <label class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                        {{t "Nalog"}}
+                        {{template "hint" "Korisničko ime ili email za prijavu kod ovog provajdera (identifier u config.json)."}}
+                      </label>
+                      <input type="text" class="input font-mono text-xs"
+                             x-model="form.providers[key].identifier" placeholder="—">
+                    </div>
+                    <div class="flex flex-col gap-1.5">
+                      <label class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                        {{t "Lozinka"}}
+                        {{template "hint" "Lozinka naloga. Ostavi prazno da zadržiš postojeću vrednost."}}
+                      </label>
+                      <input type="password" class="input font-mono text-xs" autocomplete="new-password"
+                             x-model="form.providers[key].password"
+                             :placeholder="secretPlaceholder(!!secretHints.providers[key])">
+                    </div>
+                    <div class="flex flex-col gap-1.5 sm:col-span-2" x-show="isEmailProvider(base)">
+                      <label class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                        {{t "Folder / Gmail oznaka"}}
+                        {{template "hint" "IMAP folder ili Gmail oznaka u kojoj su računi ovog naloga. Prazno koristi zajednički email folder, pa INBOX."}}
+                      </label>
+                      <input type="text" class="input font-mono text-xs"
+                             x-model="form.providers[key].mailbox" placeholder="—">
+                    </div>
+                  </div>
+                </div>
+              </template>
             </div>
           </div>
         </template>

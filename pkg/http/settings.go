@@ -171,9 +171,11 @@ func editableForm(cfg *config.Config) config.Config {
 		out.Providers[name] = config.Credentials{
 			Username: creds.Username,
 			Password: "",
-			// Mailbox is not a secret; carry it through so a settings save from
-			// the UI does not blank a provider's configured folder/label.
+			// Mailbox and Label are not secrets; carry them through so a settings
+			// save from the UI does not blank a provider's configured folder or
+			// its account label.
 			Mailbox: creds.Mailbox,
+			Label:   creds.Label,
 		}
 	}
 

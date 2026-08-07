@@ -33,6 +33,28 @@ func TestMessagesPerReceipt(t *testing.T) {
 	assert.NotContains(t, msgs[0].Body, "s)", "duration must be removed")
 }
 
+// An extra account renders as its base brand plus the family-member label
+// ("A1 — Mama"); the brand comes from the base provider, not the raw account key.
+func TestMessagesExtraAccountLabel(t *testing.T) {
+	cfg := config.Notifications{Mode: config.NotifyModePerReceipt}
+
+	msgs := notify.Messages(cfg, []refresh.Result{
+		{Provider: "a1-mama", Label: "Mama", OK: true, New: true, Period: "05-2026"},
+	})
+	require.Len(t, msgs, 1)
+	assert.Contains(t, msgs[0].Subject, "A1 — Mama")
+	assert.Contains(t, msgs[0].Body, "A1 — Mama")
+	assert.NotContains(t, msgs[0].Subject, "A1-MAMA", "raw account key must not leak into display")
+
+	// A label-less (primary) account still shows just the brand, as before.
+	msgs = notify.Messages(cfg, []refresh.Result{
+		{Provider: "a1", OK: true, New: true, Period: "05-2026"},
+	})
+	require.Len(t, msgs, 1)
+	assert.Contains(t, msgs[0].Subject, "A1")
+	assert.NotContains(t, msgs[0].Subject, "—")
+}
+
 // Provider keys are ASCII, so uppercasing them directly mangles the ones that
 // should read "E-SANDUČE" / "E-UPRAVNIK" (→ "Е-САНДУЧЕ" / "Е-УПРАВНИК" in
 // Cyrillic) instead of the run-together "ESANDUCE" / "EUPRAVNIK".

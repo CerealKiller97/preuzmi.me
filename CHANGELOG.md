@@ -10,6 +10,10 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+### ✨ Added
+
+- 👪 **Multiple accounts per provider (family members).** A provider can now hold more than one account — e.g. each family member's own A1 login. Add an extra account under **Settings → Providers → Dodaj nalog**, give it a name (`Mama`), and its receipts download, index, and appear on the dashboard, stats, and notifications separately from your own — shown as `A1 — Mama`. In `config.json` the primary account keeps its plain key (`a1`) while each extra one is a key of the form `<provider>-<name>` (`a1-mama`) with its own `identifier` / `password` / `label`. Existing single-account setups are unaffected: nothing to migrate, and a provider with one account shows exactly as before.
+
 ## [1.3.1] - 06.08.2026
 
 ### 🐛 Fixed

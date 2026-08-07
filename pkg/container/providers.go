@@ -247,12 +247,16 @@ func IsImplemented(name string) bool {
 }
 
 // SkipAlreadyDownloaded drops any provider whose receipt for the current billing
-// period is fully settled, returning only the providers still worth running.
+// period is already downloaded and confirmed paid, returning only the providers
+// still worth running.
 //
-// Settled means paid_at is set, status is "plaćeno", and confirmed_at is set.
-// Until all three are true a refresh still runs — an unpaid bill may flip to
-// paid on a later fetch, and that flip is what triggers paid-confirmation
-// notifications.
+// A provider is skipped once its bill for the period is on disk (a real download
+// time), the provider reports status "plaćeno", and confirmed_at is set. Until
+// then a refresh still runs: an undownloaded bill must be fetched, and a
+// downloaded-but-unpaid bill may flip to paid on a later fetch — that flip is
+// what triggers the paid-confirmation notification. Note this does NOT wait for
+// the user to mark the receipt paid in the app; once the provider itself
+// confirms payment there is nothing left to learn, so we stop logging in.
 //
 // A refresh otherwise logs back into every provider account and re-downloads
 // bills that are already done; consulting the receipts database first turns a
@@ -262,8 +266,8 @@ func IsImplemented(name string) bool {
 // The period checked is the previous calendar month — the month whose bill a run
 // now publishes, and the folder every provider files its latest receipt under.
 // The check is conservative: it only ever skips a provider whose bill for that
-// exact period is genuinely settled, so it can miss an optimization but never
-// skips a receipt we still need to fetch or verify.
+// exact period is downloaded and confirmed paid, so it can miss an optimization
+// but never skips a receipt we still need to fetch or verify.
 //
 // With no receipts database to consult it returns the providers untouched, so
 // downloads still happen — just without the optimization.
@@ -277,11 +281,11 @@ func (c *Container) SkipAlreadyDownloaded(providers map[string]provider.Interfac
 
 	pending := make(map[string]provider.Interface, len(providers))
 	for name, p := range providers {
-		if store.IsSettled(c.Ctx, name, period) {
+		if store.IsConfirmedPaid(c.Ctx, name, period) {
 			c.Logger.Info().
 				Str("provider", name).
 				Str("period", period).
-				Msg("Skipping download: receipt settled (paid_at + status plaćeno + confirmed_at)")
+				Msg("Skipping download: receipt downloaded and confirmed paid (status plaćeno + confirmed_at)")
 
 			continue
 		}

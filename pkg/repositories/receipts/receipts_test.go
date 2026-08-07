@@ -350,7 +350,7 @@ func TestHasDownloaded(t *testing.T) {
 	}
 }
 
-func TestIsSettled(t *testing.T) {
+func TestIsConfirmedPaid(t *testing.T) {
 	store, err := New(t.TempDir())
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -360,46 +360,45 @@ func TestIsSettled(t *testing.T) {
 	ctx := context.Background()
 
 	// Never recorded.
-	if store.IsSettled(ctx, "eps", "06-2026") {
-		t.Fatal("IsSettled true for an unrecorded receipt")
+	if store.IsConfirmedPaid(ctx, "eps", "06-2026") {
+		t.Fatal("IsConfirmedPaid true for an unrecorded receipt")
 	}
 
-	// Downloaded but unpaid and unmarked — still worth re-checking.
+	// Downloaded but unpaid — still worth re-checking so payment can be caught.
 	if err := store.Record(ctx, Receipt{Provider: "eps", Period: "06-2026", StorageKey: "06-2026/eps.pdf", SizeBytes: 100}); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
-	if store.IsSettled(ctx, "eps", "06-2026") {
-		t.Fatal("IsSettled true for a downloaded unpaid receipt")
+	if store.IsConfirmedPaid(ctx, "eps", "06-2026") {
+		t.Fatal("IsConfirmedPaid true for a downloaded unpaid receipt")
 	}
 
-	// Provider confirms paid (status + confirmed_at), but paid_at is still 0.
+	// Provider confirms paid (status + confirmed_at). No manual paid_at needed:
+	// once downloaded and provider-confirmed, there is nothing left to re-check.
 	if err := store.SetStatus(ctx, "eps", "06-2026", StatusPaid); err != nil {
 		t.Fatalf("SetStatus: %v", err)
 	}
-	if store.IsSettled(ctx, "eps", "06-2026") {
-		t.Fatal("IsSettled true without paid_at")
+	if !store.IsConfirmedPaid(ctx, "eps", "06-2026") {
+		t.Fatal("IsConfirmedPaid false after download + status paid + confirmed_at (without paid_at)")
 	}
 
-	// User marks paid too — now settled (paid_at != 0, status plaćeno, confirmed_at != 0).
-	if _, err := store.MarkPaid(ctx, "eps", "06-2026", true); err != nil {
-		t.Fatalf("MarkPaid: %v", err)
-	}
-	if !store.IsSettled(ctx, "eps", "06-2026") {
-		t.Fatal("IsSettled false after paid_at + status paid + confirmed_at")
-	}
-
-	// paid_at alone is not enough — status/confirmed_at must also be set.
+	// A paid-only stub that the provider confirms but that was never downloaded
+	// (downloaded_at 0) is NOT skippable — its PDF still needs fetching.
 	if _, err := store.MarkPaid(ctx, "a1", "06-2026", true); err != nil {
 		t.Fatalf("MarkPaid stub: %v", err)
-	}
-	if store.IsSettled(ctx, "a1", "06-2026") {
-		t.Fatal("IsSettled true with only paid_at")
 	}
 	if err := store.SetStatus(ctx, "a1", "06-2026", StatusPaid); err != nil {
 		t.Fatalf("SetStatus stub: %v", err)
 	}
-	if !store.IsSettled(ctx, "a1", "06-2026") {
-		t.Fatal("IsSettled false after paid_at + status paid + confirmed_at on stub")
+	if store.IsConfirmedPaid(ctx, "a1", "06-2026") {
+		t.Fatal("IsConfirmedPaid true for a confirmed-but-never-downloaded stub")
+	}
+
+	// Once that stub is actually downloaded, it becomes skippable.
+	if err := store.Record(ctx, Receipt{Provider: "a1", Period: "06-2026", StorageKey: "06-2026/a1.pdf", SizeBytes: 50}); err != nil {
+		t.Fatalf("Record stub download: %v", err)
+	}
+	if !store.IsConfirmedPaid(ctx, "a1", "06-2026") {
+		t.Fatal("IsConfirmedPaid false after the confirmed stub was downloaded")
 	}
 }
 

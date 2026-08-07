@@ -26,5 +26,19 @@ CREATE TABLE IF NOT EXISTS receipts (
     -- extraction runs, so a bill with no QR is not re-parsed on every page load.
     ips_qr        TEXT    NOT NULL DEFAULT '',
     ips_checked   INTEGER NOT NULL DEFAULT 0,
+    -- notified_download_at / notified_confirmed_at record that a download or a
+    -- paid-confirmation notification has already gone out for this receipt, so a
+    -- daily re-run never re-announces it. They are set once, when the first
+    -- notification fires, and are deliberately NOT cleared when a provider churns
+    -- the status column (some providers rewrite status on every run): "already
+    -- told the user once" must survive that.
+    --
+    -- Nullable on purpose: these are added to existing databases with a plain
+    -- ALTER TABLE ADD COLUMN (see database.Apply), so every row that predates the
+    -- columns starts as NULL. NULL means "not yet notified" — callers COALESCE it
+    -- to 0 — and the migration backfill (receipts.migrate) fills in the rows that
+    -- were already downloaded/confirmed so upgrading does not re-announce history.
+    notified_download_at  INTEGER,
+    notified_confirmed_at INTEGER,
     UNIQUE (provider, period)
 );

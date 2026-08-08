@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-  ghcr.io/cerealkiller97/preuzmi.me:1.3.2
+  ghcr.io/cerealkiller97/preuzmi.me:1.4.0
 ```
 
 ### docker compose
@@ -65,7 +65,7 @@ docker run -d --name preuzmi \
 ```yaml
 services:
   preuzmi:
-    image: ghcr.io/cerealkiller97/preuzmi.me:1.3.2
+    image: ghcr.io/cerealkiller97/preuzmi.me:1.4.0
     container_name: preuzmi.me
     ports:
       - "5500:5500"
@@ -99,6 +99,7 @@ docker exec preuzmi /app/preuzmi checks
 - **QR za plaćanje** — na karticama neplaćenih računa stoji *Plati skeniranjem (QR)*: sopstveni NBS IPS QR računa, izvučen direktno iz PDF-a i prikazan u modalu za skeniranje u banking aplikaciji. Iznos se čita iz tog QR-a, pa je ono što vidiš isto što banka naplaćuje
 - **Statistika** — godišnji zbir, mesečni prosek, grafikoni po provajderu
 - **Obaveštenja** — Telegram ili SMTP (`off` / `per_receipt` / `all_done`)
+- **Praćenje roka i podsetnici** — na karticama neplaćenih računa stoji oznaka *dospelo* / *uskoro dospeva* i sam rok; uključi `notifications.due_reminders` za poruku sa svim računima koji dospevaju u roku od `notifications.due_reminder_days` (podrazumevano 7)
 - **Skladište** — lokalni folder ili S3-kompatibilni bucket
 - **Živa podešavanja** — izmena `config.json` iz UI-ja; hot-reload bez restarta
 - **`check_until`** — bez bespotrebnog osvežavanja posle dana kada provajderi više ne izdaju račune
@@ -147,6 +148,8 @@ docker exec preuzmi /app/preuzmi checks
   "notifications": {
     "mode": "off",
     "driver": "telegram",
+    "due_reminders": false,
+    "due_reminder_days": 7,
     "smtp": {
       "host": "smtp.example.com",
       "port": 587,
@@ -185,6 +188,8 @@ docker exec preuzmi /app/preuzmi checks
 | `lang` | Pismo UI-ja i obaveštenja: `latin` (podrazumevano) ili `cyrillic` |
 | `notifications.mode` | `off` · `per_receipt` · `all_done` |
 | `notifications.driver` | `telegram` ili `smtp` |
+| `notifications.due_reminders` | Šalje podsetnik za neplaćene račune koji su dospeli ili uskoro dospevaju — `true` / `false` (podrazumevano `false`) |
+| `notifications.due_reminder_days` | Koliko dana pre roka počinju podsetnici (podrazumevano `7`) |
 | `email.provider` | Drajver sandučeta za email provajdere (eUpravnik / Yettel). **Trenutno samo `gmail`.** |
 | `providers.<ime>.mailbox` | Gmail labela koja se pretražuje za račun tog provajdera. Prazno → pada na `email.mailbox`, pa na `INBOX`. |
 

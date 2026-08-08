@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-  ghcr.io/cerealkiller97/preuzmi.me:1.3.2
+  ghcr.io/cerealkiller97/preuzmi.me:1.4.0
 ```
 
 ### docker compose
@@ -65,7 +65,7 @@ docker run -d --name preuzmi \
 ```yaml
 services:
   preuzmi:
-    image: ghcr.io/cerealkiller97/preuzmi.me:1.3.2
+    image: ghcr.io/cerealkiller97/preuzmi.me:1.4.0
     container_name: preuzmi.me
     ports:
       - '5500:5500'
@@ -99,6 +99,7 @@ docker exec preuzmi /app/preuzmi checks
 - **Payment QR** — unpaid receipt cards show *Plati skeniranjem (QR)*: the bill's own NBS IPS QR, lifted straight from the PDF and shown in a modal to scan in your banking app. The amount is read from that QR, so what you see matches what the bank charges
 - **Stats** — yearly totals, monthly averages, per-provider charts
 - **Notifications** — Telegram or SMTP (`off` / `per_receipt` / `all_done`)
+- **Due-date tracking & reminders** — unpaid cards show an *overdue* / *due-soon* badge and the deadline; opt into `notifications.due_reminders` for a message listing every bill due within `notifications.due_reminder_days` (default 7)
 - **Storage** — local folder or S3-compatible bucket
 - **Live settings** — edit `config.json` from the UI; hot-reload without restart
 - **`check_until`** — skip wasted refreshes after the day providers stop issuing bills
@@ -147,6 +148,8 @@ docker exec preuzmi /app/preuzmi checks
   "notifications": {
     "mode": "off",
     "driver": "telegram",
+    "due_reminders": false,
+    "due_reminder_days": 7,
     "smtp": {
       "host": "smtp.example.com",
       "port": 587,
@@ -185,6 +188,8 @@ docker exec preuzmi /app/preuzmi checks
 | `lang`                     | UI and notification script: `latin` (default) or `cyrillic`                                                                                                        |
 | `notifications.mode`       | `off` · `per_receipt` · `all_done`                                                                                                                                 |
 | `notifications.driver`     | `telegram` or `smtp`                                                                                                                                               |
+| `notifications.due_reminders`     | Send a reminder for unpaid receipts that are overdue or due soon — `true` / `false` (default `false`)                                                       |
+| `notifications.due_reminder_days` | How many days before the deadline reminders start (default `7`)                                                                                             |
 | `email.provider`           | Mailbox driver for the email-based providers (eUpravnik / Yettel). **Currently `gmail` only.**                                                                     |
 | `providers.<name>.mailbox` | Gmail label to search for that provider's invoice. Empty → falls back to `email.mailbox`, then `INBOX`.                                                            |
 

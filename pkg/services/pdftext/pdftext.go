@@ -3,8 +3,8 @@
 // The raw PDF content stream lists glyphs in draw order, which interleaves
 // right-aligned columns (totals, amounts) out of reading order. Rows regroups
 // glyphs by their Y coordinate and orders each row left-to-right, recovering the
-// "LABEL: value" adjacency that a naive text dump loses. The amount and period
-// helpers then parse the Serbian-locale values invoices carry.
+// "LABEL: value" adjacency that a naive text dump loses. The amount, period, and
+// due-date helpers then parse the Serbian-locale values invoices carry.
 package pdftext
 
 import (
@@ -15,6 +15,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
+	"unicode"
 
 	"github.com/ledongthuc/pdf"
 )
@@ -25,6 +27,26 @@ var numberRe = regexp.MustCompile(`\d[\d.,]*\d|\d`)
 
 // yearRe matches a four-digit year.
 var yearRe = regexp.MustCompile(`\b(\d{4})\b`)
+
+// dateRe matches a Serbian calendar date DD.MM.YYYY, with an optional trailing
+// period (common on invoices: "15.07.2026.").
+var dateRe = regexp.MustCompile(`(\d{1,2})\.(\d{1,2})\.(\d{4})`)
+
+// dueLabelHints are substrings that mark a due-date (datum dospeća / rok za
+// plaćanje / datum valute) row. Matched against a lower-cased, diacritic-folded
+// form of each PDF row so Latin and Cyrillic invoices both hit.
+var dueLabelHints = []string{
+	"dospec",         // dospeća / доспећа
+	"rok za placanj", // rok za plaćanje / рок за плаћање
+	"datum valute",   // datum valute / датум валуте
+}
+
+// dueLabelRejects are substrings that look date-ish but are not a payment due
+// date (e.g. the complaint deadline "Rok za prigovor").
+var dueLabelRejects = []string{
+	"prigovor",
+	"приговор",
+}
 
 // serbianMonths maps a lower-cased Serbian month name (Latin and Cyrillic) onto
 // its month number, so "Račun period: Maj 2026" resolves to month 5.
@@ -166,6 +188,158 @@ func ParseAmount(s string) (float64, bool) {
 	}
 
 	return f, true
+}
+
+// DueDate extracts the payment due date (datum dospeća / rok za plaćanje /
+// datum valute) from a PDF. It returns false when the PDF cannot be parsed or
+// no due-date label is found.
+func DueDate(data []byte) (time.Time, bool) {
+	rows, err := Rows(data)
+	if err != nil {
+		return time.Time{}, false
+	}
+
+	return FindDueDate(rows)
+}
+
+// FindDueDate scans reconstructed PDF rows for a due-date label and the
+// DD.MM.YYYY that follows it — on the same row, or the next one when the
+// layout puts the value on its own line (mts).
+func FindDueDate(rows []string) (time.Time, bool) {
+	for i, row := range rows {
+		if !hasDueLabel(row) {
+			continue
+		}
+		if t, ok := ParseDate(row); ok {
+			return t, true
+		}
+		if i+1 < len(rows) {
+			if t, ok := ParseDate(rows[i+1]); ok {
+				return t, true
+			}
+		}
+	}
+
+	return time.Time{}, false
+}
+
+// ParseDate extracts the first DD.MM.YYYY calendar date from s. The returned
+// time is midnight in the local timezone so day-based comparisons stay stable.
+func ParseDate(s string) (time.Time, bool) {
+	m := dateRe.FindStringSubmatch(s)
+	if m == nil {
+		return time.Time{}, false
+	}
+
+	day, errD := strconv.Atoi(m[1])
+	month, errM := strconv.Atoi(m[2])
+	year, errY := strconv.Atoi(m[3])
+	if errD != nil || errM != nil || errY != nil {
+		return time.Time{}, false
+	}
+	if month < 1 || month > 12 || day < 1 || day > 31 {
+		return time.Time{}, false
+	}
+
+	t := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local)
+	if t.Day() != day || t.Month() != time.Month(month) || t.Year() != year {
+		// time.Date rolled an invalid day (e.g. 31.02) into the next month.
+		return time.Time{}, false
+	}
+
+	return t, true
+}
+
+// hasDueLabel reports whether row carries a payment-due label and not a
+// rejected lookalike (complaint deadline, etc.).
+func hasDueLabel(row string) bool {
+	folded := foldForMatch(row)
+	for _, reject := range dueLabelRejects {
+		if strings.Contains(folded, foldForMatch(reject)) {
+			return false
+		}
+	}
+	for _, hint := range dueLabelHints {
+		if strings.Contains(folded, hint) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// foldForMatch lower-cases s and strips combining marks / maps common Serbian
+// letters onto ASCII so "plaćanje", "плаћање" and "placanje" share a key.
+func foldForMatch(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range strings.ToLower(s) {
+		switch r {
+		case 'č', 'ć', 'ц', 'ћ':
+			b.WriteByte('c')
+		case 'š', 'ш':
+			b.WriteByte('s')
+		case 'ž', 'ж':
+			b.WriteByte('z')
+		case 'đ', 'ђ':
+			b.WriteString("dj")
+		case 'љ':
+			b.WriteString("lj")
+		case 'њ':
+			b.WriteString("nj")
+		case 'а':
+			b.WriteByte('a')
+		case 'б':
+			b.WriteByte('b')
+		case 'в':
+			b.WriteByte('v')
+		case 'г':
+			b.WriteByte('g')
+		case 'д':
+			b.WriteByte('d')
+		case 'е', 'ё':
+			b.WriteByte('e')
+		case 'з':
+			b.WriteByte('z')
+		case 'и':
+			b.WriteByte('i')
+		case 'ј':
+			b.WriteByte('j')
+		case 'к':
+			b.WriteByte('k')
+		case 'л':
+			b.WriteByte('l')
+		case 'м':
+			b.WriteByte('m')
+		case 'н':
+			b.WriteByte('n')
+		case 'о':
+			b.WriteByte('o')
+		case 'п':
+			b.WriteByte('p')
+		case 'р':
+			b.WriteByte('r')
+		case 'с':
+			b.WriteByte('s')
+		case 'т':
+			b.WriteByte('t')
+		case 'у':
+			b.WriteByte('u')
+		case 'ф':
+			b.WriteByte('f')
+		case 'х':
+			b.WriteByte('h')
+		case 'џ':
+			b.WriteString("dz")
+		default:
+			if unicode.Is(unicode.Mn, r) {
+				continue
+			}
+			b.WriteRune(r)
+		}
+	}
+
+	return b.String()
 }
 
 // ParsePeriod extracts a billing month and year from a "Račun period: Maj 2026"

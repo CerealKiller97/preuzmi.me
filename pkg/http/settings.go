@@ -94,6 +94,8 @@ type redactedNotifications struct {
 	Mode             string           `json:"mode"`
 	Driver           string           `json:"driver"`
 	PaidConfirmation bool             `json:"paid_confirmation"`
+	DueReminders     bool             `json:"due_reminders"`
+	DueReminderDays  int              `json:"due_reminder_days"`
 	SMTP             redactedSMTP     `json:"smtp"`
 	Telegram         redactedTelegram `json:"telegram"`
 }
@@ -123,6 +125,8 @@ func redact(cfg *config.Config) redactedConfig {
 	out.Notifications.Mode = cfg.Notifications.Mode
 	out.Notifications.Driver = cfg.Notifications.Driver
 	out.Notifications.PaidConfirmation = cfg.Notifications.PaidConfirmation
+	out.Notifications.DueReminders = cfg.Notifications.DueReminders
+	out.Notifications.DueReminderDays = cfg.Notifications.DueReminderDays
 	out.Notifications.SMTP.Host = cfg.Notifications.SMTP.Host
 	out.Notifications.SMTP.Port = cfg.Notifications.SMTP.Port
 	out.Notifications.SMTP.Username = cfg.Notifications.SMTP.Username

@@ -10,6 +10,11 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+### ✨ Added
+
+- ⏰ **Due-date tracking.** The payment deadline — `datum dospeća` / `rok za plaćanje` / `datum valute` — is parsed from each PDF (and taken from e.Sanduče's API) into a new `due_at`. Unpaid receipt cards show an **overdue** or **due-soon** badge and the deadline itself, so what needs paying next is visible at a glance. Opening an existing `receipts.db` adds the `due_at` and `due_reminded_at` columns automatically — no manual migration or data wipe, and paid receipts and history stay put.
+- 🔔 **Due-payment reminders.** With `notifications.due_reminders` on, one message lists every unpaid receipt that is overdue or due soon — **one line per bill** with its provider and amount (e.g. "• ЈЕТЕЛ рачун доспева за 2 дана — 400,52 RSD"), plus a total when more than one is due. Each bill is reminded once (until its deadline changes) and paid bills are skipped, so the daily `checks` run never re-nags. The lead time is configurable via `notifications.due_reminder_days` (or **Settings → Obaveštenja**) and **defaults to 7 days** — existing installs without the key keep working unchanged, no config edit needed.
+
 ## [1.3.2] - 07.08.2026
 
 ### 🐛 Fixed

@@ -5,6 +5,7 @@ import (
 	"embed"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
 	"github.com/CerealKiller97/preuzmi.me/pkg/repositories/receipts"
@@ -175,19 +176,63 @@ func (c *Container) NotifyRefreshResults(results []refresh.Result) {
 	notifier.HandleResults(enriched)
 
 	verified := store.DrainNewlyVerified()
-	if len(verified) == 0 {
+	if len(verified) > 0 {
+		items := make([]notify.VerifiedReceipt, 0, len(verified))
+		for _, r := range verified {
+			items = append(items, notify.VerifiedReceipt{
+				Provider: r.Provider,
+				Period:   r.Period,
+				Price:    r.Price,
+			})
+		}
+		notifier.HandleVerified(items)
+	}
+
+	c.notifyDueReminders(store, notifier)
+}
+
+// notifyDueReminders sends one summary for unpaid receipts that are overdue or
+// due within a few days, then stamps them so the next run stays quiet.
+func (c *Container) notifyDueReminders(store *receipts.Repository, notifier *notify.Service) {
+	if store == nil || !notifier.DueReminderEnabled() {
 		return
 	}
 
-	items := make([]notify.VerifiedReceipt, 0, len(verified))
-	for _, r := range verified {
-		items = append(items, notify.VerifiedReceipt{
+	rows, err := store.List(c.Ctx)
+	if err != nil {
+		c.Logger.Err(err).Msg("Failed to list receipts for due reminders")
+		return
+	}
+
+	candidates := make([]notify.DueReceipt, 0)
+	for _, r := range rows {
+		if r.DueAt <= 0 || r.DueRemindedAt > 0 {
+			continue
+		}
+		// Treat as paid the same way the dashboard does: user mark or provider.
+		if r.PaidAt > 0 || r.Status == receipts.StatusPaid {
+			continue
+		}
+		candidates = append(candidates, notify.DueReceipt{
 			Provider: r.Provider,
 			Period:   r.Period,
 			Price:    r.Price,
+			DueAt:    r.DueAt,
 		})
 	}
-	notifier.HandleVerified(items)
+
+	sent := notifier.HandleDueReminders(candidates, time.Now())
+	if len(sent) == 0 {
+		return
+	}
+
+	stamped := make([]receipts.Receipt, 0, len(sent))
+	for _, it := range sent {
+		stamped = append(stamped, receipts.Receipt{Provider: it.Provider, Period: it.Period})
+	}
+	if err := store.MarkDueReminded(c.Ctx, stamped, time.Now().Unix()); err != nil {
+		c.Logger.Err(err).Msg("Failed to stamp due reminders")
+	}
 }
 
 // downloadKey joins a receipt's provider and period into the map key used to

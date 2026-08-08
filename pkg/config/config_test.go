@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -58,6 +59,27 @@ func TestValidateRejectsBadCheckUntil(t *testing.T) {
 	err := cfg.Validate()
 	require.Error(t, err)
 	assert.Contains(t, FriendlyError(err), "1 i 31")
+}
+
+// An older config.json predates due_reminder_days, so the key is simply absent.
+// Loading it must apply the default lead time, never a 0-day window.
+func TestValidateDefaultsDueReminderDays(t *testing.T) {
+	var cfg Config
+	require.NoError(t, json.Unmarshal(
+		[]byte(`{"storage":"local","download_path":"/tmp"}`), &cfg))
+	require.NoError(t, cfg.Validate())
+	assert.Equal(t, DefaultDueReminderDays, cfg.Notifications.DueReminderDays)
+
+	// An explicitly configured value is preserved.
+	cfg = Config{Storage: StorageLocal, DownloadPath: "/tmp"}
+	cfg.Notifications.DueReminderDays = 3
+	require.NoError(t, cfg.Validate())
+	assert.Equal(t, 3, cfg.Notifications.DueReminderDays)
+
+	// Out-of-range is rejected.
+	cfg = Config{Storage: StorageLocal, DownloadPath: "/tmp"}
+	cfg.Notifications.DueReminderDays = 61
+	require.Error(t, cfg.Validate())
 }
 
 func TestValidateLang(t *testing.T) {

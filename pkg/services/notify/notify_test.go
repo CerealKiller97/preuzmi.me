@@ -3,6 +3,7 @@ package notify_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
 	"github.com/CerealKiller97/preuzmi.me/pkg/services/notify"
@@ -200,6 +201,129 @@ func TestHandleVerifiedSilentWhenPaidConfirmationOff(t *testing.T) {
 	svc := notify.New(config.Notifications{Mode: config.NotifyModePerReceipt, Driver: config.NotifyDriverTelegram}, sender, zerolog.Nop())
 	svc.HandleVerified([]notify.VerifiedReceipt{{Provider: "eps", Period: "06-2026"}})
 	assert.Equal(t, 0, count)
+}
+
+func TestHandleDueRemindersSummary(t *testing.T) {
+	var sent []struct{ subject, body string }
+	sender := senderFunc(func(subject, body string) error {
+		sent = append(sent, struct{ subject, body string }{subject, body})
+		return nil
+	})
+
+	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.Local)
+	inTwoDays := time.Date(2026, 7, 31, 0, 0, 0, 0, time.Local).Unix()
+
+	svc := notify.New(config.Notifications{
+		Mode:         config.NotifyModeOff,
+		Driver:       config.NotifyDriverTelegram,
+		DueReminders: true,
+	}, sender, zerolog.Nop())
+
+	announced := svc.HandleDueReminders([]notify.DueReceipt{
+		{Provider: "mts", Period: "06/2026", Price: 1819.46, DueAt: inTwoDays},
+		{Provider: "eps", Period: "06/2026", Price: 2364.66, DueAt: inTwoDays},
+		{Provider: "a1", Period: "06/2026", Price: 4215.88, DueAt: inTwoDays},
+	}, now)
+
+	require.Len(t, announced, 3)
+	require.Len(t, sent, 1)
+	assert.True(t, strings.HasPrefix(sent[0].subject, "⏰ "))
+	// One line per receipt, each naming its provider, plus a total footer.
+	assert.Contains(t, sent[0].body, "MTS račun dospeva za 2 dana — 1.819,46 RSD.")
+	assert.Contains(t, sent[0].body, "EPS račun dospeva za 2 dana — 2.364,66 RSD.")
+	assert.Contains(t, sent[0].body, "A1 račun dospeva za 2 dana — 4.215,88 RSD.")
+	assert.Contains(t, sent[0].body, "Ukupno: 8.400,00 RSD.")
+}
+
+// The per-receipt reminder transliterates to Cyrillic, applying each provider's
+// name rule and keeping day words, bullets and the total intact.
+func TestHandleDueRemindersCyrillic(t *testing.T) {
+	var got struct{ subject, body string }
+	sender := senderFunc(func(subject, body string) error {
+		got.subject, got.body = subject, body
+		return nil
+	})
+	svc := notify.NewWithLang(
+		config.Notifications{Driver: config.NotifyDriverTelegram, DueReminders: true},
+		sender, zerolog.Nop(), config.LangCyrillic,
+	)
+
+	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.Local)
+	day := func(d int) int64 {
+		m := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+		return m.AddDate(0, 0, d).Unix()
+	}
+
+	svc.HandleDueReminders([]notify.DueReceipt{
+		{Provider: "yettel", Period: "07/2026", Price: 400.52, DueAt: day(2)},
+		{Provider: "eps", Period: "07/2026", Price: 4001.55, DueAt: day(0)},
+		{Provider: "a1", Period: "07/2026", Price: 1200, DueAt: day(-3)},
+		{Provider: "esanduce", Period: "07/2026", Price: 8123.50, DueAt: day(1)},
+	}, now)
+
+	assert.Contains(t, got.subject, "доспеће рачуна")
+	// Sorted most-urgent first, each provider by its own rule.
+	assert.Contains(t, got.body, "A1 рачун је доспео — 1.200,00 РСД.")             // brand kept Latin
+	assert.Contains(t, got.body, "ЕПС рачун доспева данас — 4.001,55 РСД.")        // acronym transliterated
+	assert.Contains(t, got.body, "Е-САНДУЧЕ рачун доспева за 1 дан — 8.123,50 РСД.") // Serbian word, singular "дан"
+	assert.Contains(t, got.body, "ЈЕТЕЛ рачун доспева за 2 дана — 400,52 РСД.")     // custom Cyrillic spelling
+	assert.Contains(t, got.body, "Укупно: 13.725,57 РСД.")
+	// No Latin provider names or currency leak through.
+	assert.NotContains(t, got.body, "YETTEL")
+	assert.NotContains(t, got.body, "EPS")
+	assert.NotContains(t, got.body, "RSD")
+}
+
+func TestHandleDueRemindersSilentWhenOff(t *testing.T) {
+	var count int
+	sender := senderFunc(func(string, string) error { count++; return nil })
+	svc := notify.New(config.Notifications{Mode: config.NotifyModePerReceipt, Driver: config.NotifyDriverTelegram}, sender, zerolog.Nop())
+
+	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.Local)
+	due := time.Date(2026, 7, 31, 0, 0, 0, 0, time.Local).Unix()
+	assert.Empty(t, svc.HandleDueReminders([]notify.DueReceipt{
+		{Provider: "mts", DueAt: due, Price: 100},
+	}, now))
+	assert.Equal(t, 0, count)
+}
+
+func TestFilterDueRemindersWindow(t *testing.T) {
+	now := time.Date(2026, 7, 29, 15, 0, 0, 0, time.Local)
+	items := []notify.DueReceipt{
+		{Provider: "overdue", DueAt: time.Date(2026, 7, 20, 0, 0, 0, 0, time.Local).Unix()},
+		{Provider: "today", DueAt: time.Date(2026, 7, 29, 0, 0, 0, 0, time.Local).Unix()},
+		{Provider: "in3", DueAt: time.Date(2026, 8, 1, 0, 0, 0, 0, time.Local).Unix()},
+		{Provider: "in4", DueAt: time.Date(2026, 8, 2, 0, 0, 0, 0, time.Local).Unix()},
+		{Provider: "none", DueAt: 0},
+	}
+
+	got := notify.FilterDueReminders(items, now, 3)
+	require.Len(t, got, 3)
+	assert.Equal(t, "overdue", got[0].Provider)
+	assert.Equal(t, "today", got[1].Provider)
+	assert.Equal(t, "in3", got[2].Provider)
+
+	// A wider window pulls in the 4-days-out bill too.
+	assert.Len(t, notify.FilterDueReminders(items, now, 7), 4)
+}
+
+func TestHandleDueRemindersRespectsConfiguredWindow(t *testing.T) {
+	var sent int
+	sender := senderFunc(func(string, string) error { sent++; return nil })
+
+	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.Local)
+	inFiveDays := time.Date(2026, 8, 3, 0, 0, 0, 0, time.Local).Unix()
+
+	// Default lead time is 7, so a bill 5 days out is announced...
+	def := notify.New(config.Notifications{Driver: config.NotifyDriverTelegram, DueReminders: true}, sender, zerolog.Nop())
+	require.Len(t, def.HandleDueReminders([]notify.DueReceipt{{Provider: "eps", Price: 100, DueAt: inFiveDays}}, now), 1)
+	assert.Equal(t, 1, sent)
+
+	// ...but a tighter window of 3 keeps quiet about the same bill.
+	sent = 0
+	tight := notify.New(config.Notifications{Driver: config.NotifyDriverTelegram, DueReminders: true, DueReminderDays: 3}, sender, zerolog.Nop())
+	assert.Empty(t, tight.HandleDueReminders([]notify.DueReceipt{{Provider: "eps", Price: 100, DueAt: inFiveDays}}, now))
+	assert.Equal(t, 0, sent)
 }
 
 func TestMessagesOffSendsNothing(t *testing.T) {

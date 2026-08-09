@@ -38,7 +38,7 @@ func (c Command) Usage() string {
 	case checks:
 		desc = "Checks that you have the configured parameters"
 	case receipts:
-		desc = "Manage receipts: 'receipts list', 'receipts mark:as-paid <key>', 'receipts mark:as-unpaid <key>'"
+		desc = "Manage receipts: 'receipts list', 'receipts view <key>', 'receipts mark:as-paid <key>', 'receipts mark:as-unpaid <key>'"
 	case help:
 		desc = "Print this help dialog"
 	}

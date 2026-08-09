@@ -157,6 +157,22 @@ func Amount(payload string) (float64, bool) {
 	return 0, false
 }
 
+// Field returns the value of a single pipe-delimited IPS field by its key,
+// matched case-insensitively — e.g. "R" (recipient account), "N" (recipient
+// name), "S" (payment purpose), "RO" (recipient reference). ok is false when the
+// field is absent. It is the read-only counterpart to Amount for the fields a
+// CLI or card wants to show alongside the QR.
+func Field(payload, key string) (string, bool) {
+	for _, part := range strings.Split(payload, "|") {
+		k, v, found := strings.Cut(part, ":")
+		if found && strings.EqualFold(strings.TrimSpace(k), key) {
+			return strings.TrimSpace(v), true
+		}
+	}
+
+	return "", false
+}
+
 // invert returns a value-inverted grayscale copy of an image so a QR printed as
 // white-on-black scans as well as black-on-white.
 func invert(src image.Image) image.Image {

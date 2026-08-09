@@ -12,6 +12,14 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// ResolveIPSPayload exposes resolveIPSPayload to callers outside the HTTP layer
+// (the `receipts view` CLI command), so they render the QR from the very same
+// cached-then-parsed payload — and trigger the same price reconciliation — as
+// the dashboard card. ok is false when the bill carries no readable QR.
+func ResolveIPSPayload(ctx context.Context, store storage.Interface, rec *receipts.Repository, provider, period string) (string, bool) {
+	return resolveIPSPayload(ctx, store, rec, provider, period)
+}
+
 // resolveIPSPayload returns the NBS IPS QR payload for a receipt, reading the
 // database cache first and falling back to parsing the PDF on a cache miss (then
 // caching the result — including an empty payload for a bill with no QR, so it

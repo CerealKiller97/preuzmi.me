@@ -132,18 +132,19 @@ var single = map[rune]rune{
 	'Š': 'Ш', 'š': 'ш',
 }
 
-// brandPlaceholders keep the product name / domain in Latin.
+// brandPlaceholders keep product names, domains, and filenames in Latin.
 // Tokens use the Unicode Private Use Area so ToCyrillic never rewrites them.
 var brandPlaceholders = []struct{ from, token string }{
 	{"Preuzmi.me", "\uE000"},
 	{"preuzmi.me", "\uE001"},
+	{"config.json", "\uE002"},
 }
 
 var urlPattern = regexp.MustCompile(`https?://[^\s<>"']+`)
 
 // ToCyrillic transliterates Serbian Latin orthography to Cyrillic.
 // Digraphs (lj, nj, dž) are handled before single letters; "dj" is not mapped.
-// The product name Preuzmi.me and http(s) URLs are left in Latin.
+// The product name Preuzmi.me, config.json, and http(s) URLs are left in Latin.
 func ToCyrillic(s string) string {
 	if s == "" {
 		return s

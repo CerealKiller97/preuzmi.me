@@ -30,6 +30,7 @@
     const brands = [
       ['Preuzmi.me', '\uE000'],
       ['preuzmi.me', '\uE001'],
+      ['config.json', '\uE002'],
     ];
     for (const [from, token] of brands) {
       s = s.split(from).join(token);

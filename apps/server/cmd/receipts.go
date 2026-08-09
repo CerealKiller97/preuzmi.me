@@ -432,7 +432,7 @@ func receiptsView(c *container.Container, args []string) {
 
 	// Resolve and render the payment QR. A bill whose layout embeds no readable QR
 	// simply shows a note — the receipt details above are still useful on their own.
-	payload, ok := handlers.ResolveIPSPayload(context.Background(), c.GetStorage(), c.GetReceiptsStore(), provider, period)
+	payload, ok := handlers.ResolveIPSPayload(context.Background(), c.GetStorage(), c.GetReceiptsStore(), provider, rec.Account, period)
 	if !ok {
 		fmt.Println()
 		fmt.Println(p.c(ansiDim, tr("Ovaj račun nema QR kod za plaćanje.")))
@@ -730,7 +730,9 @@ func receiptsMark(c *container.Container, args []string, paidState bool) {
 		log.Fatal().Msg("Receipts database unavailable, cannot record paid state")
 	}
 
-	if _, err := rec.MarkPaid(context.Background(), provider, period, paidState); err != nil {
+	// The CLI mark key is <provider>/<period> with no account, so it targets the
+	// solo account (""). Multi-account marking is done from the web/mobile UI.
+	if _, err := rec.MarkPaid(context.Background(), provider, "", period, paidState); err != nil {
 		log.Fatal().Err(err).
 			Str("provider", provider).
 			Str("period", period).

@@ -21,6 +21,17 @@ type fakeProvider struct {
 
 var _ provider.Interface = (*fakeProvider)(nil)
 
+// jobs wraps provider implementations as refresh jobs keyed by provider name
+// (solo account), matching what the container builds for a single-account setup.
+func jobs(m map[string]provider.Interface) map[string]provider.Job {
+	out := make(map[string]provider.Job, len(m))
+	for name, impl := range m {
+		out[name] = provider.Job{Impl: impl, Provider: name}
+	}
+
+	return out
+}
+
 func (f *fakeProvider) DownloadReceipt() error {
 	f.calls.Add(1)
 
@@ -41,7 +52,7 @@ func TestRunReportsEveryProviderIndependently(t *testing.T) {
 	}
 
 	// Act
-	results := refresh.Run(providers)
+	results := refresh.Run(jobs(providers))
 
 	// Assert: one failure must not suppress the other provider's success.
 	assert.Len(results, 2)
@@ -62,7 +73,7 @@ func TestRunMarksNoReceiptAsEmptyNotFailed(t *testing.T) {
 	}
 
 	// Act
-	results := refresh.Run(providers)
+	results := refresh.Run(jobs(providers))
 
 	// Assert: "no receipt" is a success flagged Empty, not a failure with an error.
 	assert.Len(results, 2)
@@ -86,10 +97,10 @@ func TestStartRefusesConcurrentRuns(t *testing.T) {
 	providers := map[string]provider.Interface{"mts": slow}
 
 	// Act
-	_, err = svc.Start(providers, nil)
+	_, err = svc.Start(jobs(providers), nil)
 	assert.NoError(err)
 
-	_, secondErr := svc.Start(providers, nil)
+	_, secondErr := svc.Start(jobs(providers), nil)
 
 	// Assert: the second call is rejected rather than logging in twice.
 	assert.ErrorIs(secondErr, refresh.ErrAlreadyRunning)
@@ -111,7 +122,7 @@ func TestStateSurvivesRestartAndIsNeverLeftRunning(t *testing.T) {
 	svc, err := refresh.New(dir)
 	assert.NoError(err)
 
-	_, err = svc.Start(map[string]provider.Interface{"mts": &fakeProvider{}}, nil)
+	_, err = svc.Start(jobs(map[string]provider.Interface{"mts": &fakeProvider{}}), nil)
 	assert.NoError(err)
 	assert.Eventually(func() bool {
 		return !svc.State().Running
@@ -138,7 +149,7 @@ func TestRunOncePersistsSoTheDashboardSeesTheRun(t *testing.T) {
 	assert.NoError(err)
 
 	// Act: the `checks` command runs synchronously and records the run.
-	results, err := svc.RunOnce(map[string]provider.Interface{"mts": &fakeProvider{}})
+	results, err := svc.RunOnce(jobs(map[string]provider.Interface{"mts": &fakeProvider{}}))
 	assert.NoError(err)
 	assert.Len(results, 1)
 	assert.False(svc.State().Running)
@@ -164,7 +175,7 @@ func TestSyncFromDiskAdoptsANewerOutOfProcessRun(t *testing.T) {
 
 	checks, err := refresh.New(dir)
 	assert.NoError(err)
-	_, err = checks.RunOnce(map[string]provider.Interface{"mts": &fakeProvider{}})
+	_, err = checks.RunOnce(jobs(map[string]provider.Interface{"mts": &fakeProvider{}}))
 	assert.NoError(err)
 
 	// Act: the long-running server pulls the newer run off disk.
@@ -183,7 +194,7 @@ func TestSyncFromDiskDoesNotRegressAnEqualOrNewerRun(t *testing.T) {
 
 	svc, err := refresh.New(dir)
 	assert.NoError(err)
-	_, err = svc.RunOnce(map[string]provider.Interface{"mts": &fakeProvider{}})
+	_, err = svc.RunOnce(jobs(map[string]provider.Interface{"mts": &fakeProvider{}}))
 	assert.NoError(err)
 	fresh := svc.State().FinishedAt
 

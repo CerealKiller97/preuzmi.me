@@ -52,7 +52,7 @@ func TestRecordInvoiceCurrentUnpaidPreviousPaid(t *testing.T) {
 	seedReceipt(t, store, "05-2026") // current (Maj)
 	seedReceipt(t, store, "04-2026") // previous (April)
 
-	s := New(nil, zerolog.Nop(), nil, store)
+	s := New(nil, "", zerolog.Nop(), nil, store)
 
 	// DUG == 0 → current stays unpaid, previous flips to paid.
 	in := invoice{
@@ -80,11 +80,11 @@ func TestRecordInvoiceWithDebtLeavesPreviousUnpaid(t *testing.T) {
 	seedReceipt(t, store, "05-2026")
 	seedReceipt(t, store, "04-2026")
 	// The previous receipt was recorded unpaid when it was the current one.
-	if err := store.SetStatus(context.Background(), fileName, "04-2026", receipts.StatusUnpaid); err != nil {
+	if err := store.SetStatus(context.Background(), fileName, "", "04-2026", receipts.StatusUnpaid); err != nil {
 		t.Fatal(err)
 	}
 
-	s := New(nil, zerolog.Nop(), nil, store)
+	s := New(nil, "", zerolog.Nop(), nil, store)
 
 	// DUG > 0 → previous is not settled; current still recorded as unpaid.
 	in := invoice{

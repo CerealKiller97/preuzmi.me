@@ -28,8 +28,8 @@ func TestMergeSecrets(t *testing.T) {
 			SMTP:     SMTP{Password: "smtp-pass"},
 			Telegram: Telegram{BotToken: "token"},
 		},
-		Providers: map[Provider]Credentials{
-			"mts": {Username: "u", Password: "p"},
+		Providers: map[Provider]ProviderAccounts{
+			"mts": {{Username: "u", Password: "p"}},
 		},
 	}
 
@@ -39,8 +39,8 @@ func TestMergeSecrets(t *testing.T) {
 			SMTP:     SMTP{},
 			Telegram: Telegram{},
 		},
-		Providers: map[Provider]Credentials{
-			"mts": {Username: "u2", Password: ""},
+		Providers: map[Provider]ProviderAccounts{
+			"mts": {{Username: "u2", Password: ""}},
 		},
 	}
 
@@ -50,8 +50,8 @@ func TestMergeSecrets(t *testing.T) {
 	assert.Equal(t, "sk", next.S3.SecretKey)
 	assert.Equal(t, "smtp-pass", next.Notifications.SMTP.Password)
 	assert.Equal(t, "token", next.Notifications.Telegram.BotToken)
-	assert.Equal(t, "u2", next.Providers["mts"].Username)
-	assert.Equal(t, "p", next.Providers["mts"].Password)
+	assert.Equal(t, "u2", next.Providers["mts"][0].Username)
+	assert.Equal(t, "p", next.Providers["mts"][0].Password)
 }
 
 func TestValidateRejectsBadCheckUntil(t *testing.T) {

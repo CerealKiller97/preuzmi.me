@@ -44,105 +44,49 @@ func (c *Container) providerLogger(name string) zerolog.Logger {
 	return c.Logger.With().Str("provider", name).Logger()
 }
 
-func (c *Container) MTSProvider() provider.Interface {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+// buildProviderLocked constructs the implementation for one (provider, account)
+// with that account's credentials. It assumes c.mu is held. An email-based
+// provider whose mailbox cannot be built yields nil so the account is skipped
+// with a warning rather than crashing the run — matching how unconfigured
+// providers behave.
+func (c *Container) buildProviderLocked(name, account string, creds config.Credentials) provider.Interface {
+	log := c.providerLogger(name)
 
-	if c.mtsProvider == nil {
-		c.mtsProvider = mts.New(
-			c.config.Providers["mts"],
-			c.getStorageLocked(),
-			c.providerLogger("mts"),
-			c.getReceiptsStoreLocked(),
-		)
-	}
-
-	return c.mtsProvider
-}
-
-func (c *Container) A1Provider() provider.Interface {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.a1Provider == nil {
-		c.a1Provider = a1.New(
-			c.config.Providers["a1"],
-			c.providerLogger("a1"),
-			c.getStorageLocked(),
-			c.getReceiptsStoreLocked(),
-		)
-	}
-
-	return c.a1Provider
-}
-
-func (c *Container) EsanduceProvider() provider.Interface {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.esanduceProvider == nil {
-		c.esanduceProvider = esanduce.New(
-			c.config.Providers["esanduce"],
-			c.providerLogger("esanduce"),
-			c.getStorageLocked(),
-			c.getReceiptsStoreLocked(),
-		)
-	}
-
-	return c.esanduceProvider
-}
-
-// YettelProvider builds the Yettel provider, which reads the invoice PDF from
-// the configured mailbox over IMAP (Yettel emails it as an attachment). A
-// mailbox that cannot be constructed yields nil, so the provider is skipped with
-// a warning rather than crashing the run.
-func (c *Container) YettelProvider() provider.Interface {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.yettelProvider == nil {
-		reader, err := c.newMailboxReaderLocked("yettel")
+	switch config.Provider(name) {
+	case "mts":
+		return mts.New(creds, account, c.getStorageLocked(), log, c.getReceiptsStoreLocked())
+	case "a1":
+		return a1.New(creds, account, log, c.getStorageLocked(), c.getReceiptsStoreLocked())
+	case "esanduce":
+		return esanduce.New(creds, account, log, c.getStorageLocked(), c.getReceiptsStoreLocked())
+	case "eps":
+		return eps.New(creds, account, log, c.getStorageLocked(), c.getReceiptsStoreLocked())
+	case "yettel":
+		reader, err := c.newMailboxReaderLocked(name, creds)
 		if err != nil {
-			c.Logger.Err(err).Msg("Could not configure Yettel mailbox, provider unavailable")
+			c.Logger.Err(err).Str("account", account).Msg("Could not configure Yettel mailbox, account unavailable")
 			return nil
 		}
-
-		c.yettelProvider = yettel.New(
-			reader,
-			c.providerLogger("yettel"),
-			c.getStorageLocked(),
-			c.getReceiptsStoreLocked(),
-		)
+		return yettel.New(reader, account, log, c.getStorageLocked(), c.getReceiptsStoreLocked())
+	case "eupravnik":
+		reader, err := c.newMailboxReaderLocked(name, creds)
+		if err != nil {
+			c.Logger.Err(err).Str("account", account).Msg("Could not configure eUpravnik mailbox, account unavailable")
+			return nil
+		}
+		return eupravnik.New(reader, account, log, c.getStorageLocked(), c.getReceiptsStoreLocked())
+	default:
+		return nil
 	}
-
-	return c.yettelProvider
-}
-
-func (c *Container) EPSProvider() provider.Interface {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.epsProvider == nil {
-		c.epsProvider = eps.New(
-			c.config.Providers["eps"],
-			c.providerLogger("eps"),
-			c.getStorageLocked(),
-			c.getReceiptsStoreLocked(),
-		)
-	}
-
-	return c.epsProvider
 }
 
 // newMailboxReaderLocked builds an IMAP reader for an email-based provider. The
 // mailbox login and app password are the provider's own credentials under
 // config.Providers[key]; config.Email only selects the IMAP server. Assumes
 // c.mu is held.
-func (c *Container) newMailboxReaderLocked(key string) (mailbox.Reader, error) {
-	creds := c.config.Providers[config.Provider(key)]
-
-	// A provider may pin its own folder/Gmail label; otherwise fall back to the
-	// shared email folder (and mailbox.Config defaults that to INBOX).
+func (c *Container) newMailboxReaderLocked(key string, creds config.Credentials) (mailbox.Reader, error) {
+	// A provider account may pin its own folder/Gmail label; otherwise fall back
+	// to the shared email folder (and mailbox.Config defaults that to INBOX).
 	folder := creds.Mailbox
 	if folder == "" {
 		folder = c.config.Email.Mailbox
@@ -163,34 +107,6 @@ func (c *Container) newMailboxReaderLocked(key string) (mailbox.Reader, error) {
 		creds.Username,
 		creds.Password,
 	)
-}
-
-// EupravnikProvider builds the eUpravnik provider, which reads the invoice from
-// the configured mailbox over IMAP.
-//
-// A mailbox that cannot be constructed (e.g. an unknown provider or a custom
-// provider with no host) yields nil, so the provider is skipped with a warning
-// rather than crashing the run — matching how unconfigured providers behave.
-func (c *Container) EupravnikProvider() provider.Interface {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.eupravnikProvider == nil {
-		reader, err := c.newMailboxReaderLocked("eupravnik")
-		if err != nil {
-			c.Logger.Err(err).Msg("Could not configure eUpravnik mailbox, provider unavailable")
-			return nil
-		}
-
-		c.eupravnikProvider = eupravnik.New(
-			reader,
-			c.providerLogger("eupravnik"),
-			c.getStorageLocked(),
-			c.getReceiptsStoreLocked(),
-		)
-	}
-
-	return c.eupravnikProvider
 }
 
 // getStorageLocked assumes c.mu is already held. The backend is wrapped so that
@@ -271,76 +187,87 @@ func IsImplemented(name string) bool {
 //
 // With no receipts database to consult it returns the providers untouched, so
 // downloads still happen — just without the optimization.
-func (c *Container) SkipAlreadyDownloaded(providers map[string]provider.Interface) map[string]provider.Interface {
+func (c *Container) SkipAlreadyDownloaded(jobs map[string]provider.Job) map[string]provider.Job {
 	store := c.GetReceiptsStore()
 	if store == nil {
-		return providers
+		return jobs
 	}
 
 	period := utils.PreviousMonthFolder()
 
-	pending := make(map[string]provider.Interface, len(providers))
-	for name, p := range providers {
-		if store.IsConfirmedPaid(c.Ctx, name, period) {
+	pending := make(map[string]provider.Job, len(jobs))
+	for key, job := range jobs {
+		if store.IsConfirmedPaid(c.Ctx, job.Provider, job.Account, period) {
 			c.Logger.Info().
-				Str("provider", name).
+				Str("provider", job.Provider).
+				Str("account", job.Account).
 				Str("period", period).
 				Msg("Skipping download: receipt downloaded and confirmed paid (status plaćeno + confirmed_at)")
 
 			continue
 		}
 
-		pending[name] = p
+		pending[key] = job
 	}
 
 	return pending
 }
 
-// GetProviders resolves configured provider names to their implementations,
-// keyed by name so callers can report results per provider.
+// GetProviders resolves configured accounts to their implementations, keyed by
+// provider.JobKey so callers can report results per (provider, account). Each
+// job carries its provider, account id and display label.
 //
-// Names without an implementation yet are skipped with a warning rather than
-// failing the whole run, so filling them into config.json ahead of time is
-// harmless.
-func (c *Container) GetProviders(names []string) map[string]provider.Interface {
-	providers := make(map[string]provider.Interface, len(names))
+// Accounts whose provider has no implementation yet, or whose email mailbox
+// could not be initialized, are skipped with a warning rather than failing the
+// whole run — so filling a not-yet-supported provider into config.json ahead of
+// time is harmless. Instances are cached per account across calls.
+func (c *Container) GetProviders(accounts []config.ProviderAccount) map[string]provider.Job {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	for _, name := range names {
-		switch config.Provider(name) {
-		case "mts":
-			providers[name] = c.MTSProvider()
-		case "a1":
-			providers[name] = c.A1Provider()
-		case "esanduce":
-			providers[name] = c.EsanduceProvider()
-		case "eps":
-			providers[name] = c.EPSProvider()
-		case "yettel":
-			// A misconfigured mailbox yields a nil provider; skip it rather than
-			// adding a nil that would panic in the refresh runner.
-			if p := c.YettelProvider(); p != nil {
-				providers[name] = p
-			} else {
-				c.Logger.Warn().
-					Str("provider", name).
-					Msg("Yettel is configured but its mailbox could not be initialized, skipping")
-			}
-		case "eupravnik":
-			// A misconfigured mailbox yields a nil provider; skip it rather than
-			// adding a nil that would panic in the refresh runner.
-			if p := c.EupravnikProvider(); p != nil {
-				providers[name] = p
-			} else {
-				c.Logger.Warn().
-					Str("provider", name).
-					Msg("eUpravnik is configured but its mailbox could not be initialized, skipping")
-			}
-		default:
+	if c.providers == nil {
+		c.providers = make(map[string]provider.Interface)
+	}
+
+	jobs := make(map[string]provider.Job, len(accounts))
+	for _, pa := range accounts {
+		if !IsImplemented(pa.Provider) {
 			c.Logger.Warn().
-				Str("provider", name).
+				Str("provider", pa.Provider).
 				Msg("Configured provider has no implementation yet, skipping")
+
+			continue
+		}
+
+		acc, _ := c.config.AccountByID(pa.Provider, pa.Account)
+		key := provider.JobKey(pa.Provider, pa.Account)
+
+		impl, ok := c.providers[key]
+		if !ok {
+			impl = c.buildProviderLocked(pa.Provider, pa.Account, acc.Credentials())
+			// Only cache a real instance: a nil (e.g. a mailbox that failed to
+			// build) is left uncached so a later config fix can retry.
+			if impl != nil {
+				c.providers[key] = impl
+			}
+		}
+
+		if impl == nil {
+			c.Logger.Warn().
+				Str("provider", pa.Provider).
+				Str("account", pa.Account).
+				Msg("Provider is configured but could not be initialized, skipping")
+
+			continue
+		}
+
+		jobs[key] = provider.Job{
+			Impl:     impl,
+			Provider: pa.Provider,
+			Account:  pa.Account,
+			Label:    acc.Label,
 		}
 	}
 
-	return providers
+	return jobs
 }

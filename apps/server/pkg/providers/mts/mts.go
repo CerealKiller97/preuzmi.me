@@ -49,17 +49,22 @@ type (
 		receipts *receipts.Repository
 		http     *http.Client
 		config   config.Credentials
+		// account is the provider account id this instance downloads for: "" for a
+		// solo deployment, or a config account id for a named family-member login.
+		account string
 	}
 )
 
 func New(
 	config config.Credentials,
+	account string,
 	storage storage.Interface,
 	logger zerolog.Logger,
 	receiptsStore *receipts.Repository,
 ) *Service {
 	return &Service{
-		config: config,
+		config:  config,
+		account: account,
 		http: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -116,10 +121,10 @@ func (s *Service) DownloadReceipt() error {
 	// saved, so a database hiccup must not fail the download.
 	if s.receipts != nil {
 		ctx := context.Background()
-		if err := s.receipts.SetPrice(ctx, fileName, period, billPrice(bill)); err != nil {
+		if err := s.receipts.SetPrice(ctx, fileName, s.account, period, billPrice(bill)); err != nil {
 			s.logger.Err(err).Str("period", period).Msg("Failed to record MTS receipt price")
 		}
-		if err := s.receipts.SetStatus(ctx, fileName, period, billStatus(bill)); err != nil {
+		if err := s.receipts.SetStatus(ctx, fileName, s.account, period, billStatus(bill)); err != nil {
 			s.logger.Err(err).Str("period", period).Msg("Failed to record MTS receipt status")
 		}
 	}
@@ -334,7 +339,7 @@ func (s *Service) downloadReceipt(invoiceNumber string, billingAccountId string,
 		return err
 	}
 
-	key := fmt.Sprintf("%s/%s.pdf", period, fileName)
+	key := storage.ReceiptKey(period, fileName, s.account)
 
 	if err := s.storage.Save(context.Background(), key, data); err != nil {
 		return err

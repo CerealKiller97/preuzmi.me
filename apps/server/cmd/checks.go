@@ -23,14 +23,14 @@ func Checks(c *container.Container) {
 		return
 	}
 
-	pairs, err := utils.GetPairs(cfg)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to get configured providers")
+	accounts := cfg.ConfiguredAccounts()
+	if len(accounts) == 0 {
+		log.Fatal().Err(utils.ErrEmptyProviders).Msg("Failed to get configured providers")
 	}
 
-	log.Info().Interface("providers", pairs).Msg("Providers configured")
+	log.Info().Interface("accounts", accounts).Msg("Provider accounts configured")
 
-	providers := c.GetProviders(pairs)
+	providers := c.GetProviders(accounts)
 	if len(providers) == 0 {
 		log.Fatal().Msg("No providers with an implementation are configured")
 	}

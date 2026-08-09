@@ -4,10 +4,20 @@
       "identifier": "",
       "password": ""
     },
-    "eps": {
-      "identifier": "",
-      "password": ""
-    },
+    "eps": [
+      {
+        "id": "mama",
+        "label": "Mama",
+        "identifier": "",
+        "password": ""
+      },
+      {
+        "id": "tata",
+        "label": "Tata",
+        "identifier": "",
+        "password": ""
+      }
+    ],
     "esanduce": {
       "identifier": "",
       "password": ""

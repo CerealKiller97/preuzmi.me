@@ -22,7 +22,12 @@ import (
 // API models
 
 type APIReceipt struct {
-	Provider     string  `json:"provider"`
+	Provider string `json:"provider"`
+	// Account is the provider account id ("" for a solo deployment); Label is its
+	// display name ("Mama"). Both are omitted for solo so the payload is unchanged
+	// from before multi-account support.
+	Account      string  `json:"account,omitempty"`
+	Label        string  `json:"label,omitempty"`
 	Period       string  `json:"period"`
 	URL          string  `json:"url"`
 	FileName     string  `json:"filename"`
@@ -49,10 +54,10 @@ type APIReceipt struct {
 // paid state from the payments store, so the UI sees an identical shape.
 func collectReceipts(cfg *config.Config, rec *receipts.Repository) ([]APIReceipt, error) {
 	if cfg.Storage == config.StorageS3 {
-		return scanReceiptsDB(cfg.DownloadPath, rec)
+		return scanReceiptsDB(cfg, rec)
 	}
 
-	return scanReceipts(cfg.DownloadPath, rec)
+	return scanReceipts(cfg, rec)
 }
 
 // CollectReceipts exposes the dashboard's receipt view to out-of-band callers
@@ -72,14 +77,14 @@ func NormalizePeriod(p string) string {
 // filesystem, for backends (S3) whose objects are not on local disk. A nil
 // store yields an empty list: without the index there is nothing to enumerate,
 // since the PDFs are remote.
-func scanReceiptsDB(dir string, rec *receipts.Repository) ([]APIReceipt, error) {
+func scanReceiptsDB(cfg *config.Config, rec *receipts.Repository) ([]APIReceipt, error) {
 	if rec == nil {
 		return []APIReceipt{}, nil
 	}
 
 	// meta.json (hand-curated amounts/currency) still lives on disk and is
 	// optional, matching the on-disk walk's behaviour.
-	meta, err := loadReceiptMeta(dir)
+	meta, err := loadReceiptMeta(cfg.DownloadPath)
 	if err != nil {
 		return nil, err
 	}
@@ -101,12 +106,20 @@ func scanReceiptsDB(dir string, rec *receipts.Repository) ([]APIReceipt, error) 
 			continue
 		}
 
+		period := normalizePeriod(row.Period)
+		label := ""
+		if row.Account != "" {
+			label = accountLabels(cfg, row.Provider)[row.Account]
+		}
+
 		receipt := APIReceipt{
 			Provider: row.Provider,
-			Period:   normalizePeriod(row.Period),
+			Account:  row.Account,
+			Label:    label,
+			Period:   period,
 			// The period column is slash-form; the route embeds it as a path
 			// segment, so build the URL with the dash form.
-			URL:          fmt.Sprintf("/receipt/%s/%s", normalizePeriod(row.Period), row.Provider),
+			URL:          receiptURL(period, row.Provider, row.Account),
 			FileName:     fmt.Sprintf("%s.pdf", row.Provider),
 			Status:       row.Status,
 			Size:         row.SizeBytes,
@@ -120,8 +133,10 @@ func scanReceiptsDB(dir string, rec *receipts.Repository) ([]APIReceipt, error) 
 			DueAt:        row.DueAt,
 		}
 
+		// Hand-curated meta.json predates multi-account, so only a solo receipt can
+		// match it (account ''); a named account keeps its database price.
 		key := metaKey(row.Period, row.Provider)
-		if m, ok := amounts[key]; ok {
+		if m, ok := amounts[key]; ok && row.Account == "" {
 			// Hand-curated metadata wins over the database price, mirroring the
 			// on-disk walk.
 			if m.Amount != 0 {
@@ -139,12 +154,12 @@ func scanReceiptsDB(dir string, rec *receipts.Repository) ([]APIReceipt, error) 
 // scanReceipts walks the ./receipts directory and returns all available
 // receipts. A nil receipts store simply leaves every receipt unpaid and its
 // provider-reported status empty.
-func scanReceipts(dir string, rec *receipts.Repository) ([]APIReceipt, error) {
-	root := dir
+func scanReceipts(cfg *config.Config, rec *receipts.Repository) ([]APIReceipt, error) {
+	root := cfg.DownloadPath
 	ctx := context.Background()
 
 	// Index the metadata so each receipt can be annotated with its amount.
-	meta, err := loadReceiptMeta(dir)
+	meta, err := loadReceiptMeta(root)
 	if err != nil {
 		return nil, err
 	}
@@ -153,8 +168,8 @@ func scanReceipts(dir string, rec *receipts.Repository) ([]APIReceipt, error) {
 		amounts[metaKey(m.Period, m.Provider)] = m
 	}
 
-	// Index the database rows so each receipt can carry its provider-reported
-	// status (and price, when metadata does not provide one).
+	// Index the database rows (keyed by provider, account and period) so each
+	// receipt can carry its provider-reported status and price.
 	dbByKey := map[string]receipts.Receipt{}
 	if rec != nil {
 		rows, listErr := rec.List(ctx)
@@ -162,12 +177,13 @@ func scanReceipts(dir string, rec *receipts.Repository) ([]APIReceipt, error) {
 			return nil, listErr
 		}
 		for _, row := range rows {
-			dbByKey[metaKey(row.Period, row.Provider)] = row
+			dbByKey[dbKey(row.Period, row.Provider, row.Account)] = row
 		}
 	}
 
 	entries := make([]APIReceipt, 0, 16)
-	// Walk directories like receipts/{period}/*.pdf
+	// Walk both the solo layout receipts/{period}/{provider}.pdf and the
+	// per-account layout receipts/{period}/{provider}/{account}.pdf.
 	err = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -178,34 +194,44 @@ func scanReceipts(dir string, rec *receipts.Repository) ([]APIReceipt, error) {
 		if strings.ToLower(filepath.Ext(d.Name())) != ".pdf" {
 			return nil
 		}
-		// Extract period and provider
-		dir := filepath.Base(filepath.Dir(p))
-		provider := strings.TrimSuffix(filepath.Base(p), filepath.Ext(p))
-		// Build URL
-		url := fmt.Sprintf("/receipt/%s/%s", dir, provider)
+
+		period, provider, account, ok := receiptPathParts(root, p)
+		if !ok {
+			// A PDF somewhere other than a receipt path (e.g. a stray file); skip it.
+			return nil
+		}
+
 		// Stat for size/mod time
 		fi, statErr := os.Stat(p)
 		if statErr != nil {
 			return statErr
 		}
 
+		label := ""
+		if account != "" {
+			label = accountLabels(cfg, provider)[account]
+		}
+
 		receipt := APIReceipt{
 			Provider: provider,
-			Period:   normalizePeriod(dir),
-			URL:      url,
+			Account:  account,
+			Label:    label,
+			Period:   normalizePeriod(period),
+			URL:      receiptURL(normalizePeriod(period), provider, account),
 			FileName: filepath.Base(p),
 			Size:     fi.Size(),
 			Modified: fi.ModTime().Unix(),
 		}
 
-		key := metaKey(dir, provider)
-
-		if m, ok := amounts[key]; ok {
-			receipt.Amount = m.Amount
-			receipt.Currency = m.Currency
+		// meta.json predates multi-account, so it only annotates solo receipts.
+		if account == "" {
+			if m, ok := amounts[metaKey(period, provider)]; ok {
+				receipt.Amount = m.Amount
+				receipt.Currency = m.Currency
+			}
 		}
 
-		if row, ok := dbByKey[key]; ok {
+		if row, ok := dbByKey[dbKey(period, provider, account)]; ok {
 			receipt.Status = row.Status
 			receipt.DownloadedAt = row.DownloadedAt
 			// Fall back to the database price when hand-curated metadata does
@@ -228,6 +254,32 @@ func scanReceipts(dir string, rec *receipts.Repository) ([]APIReceipt, error) {
 		return nil, err
 	}
 	return entries, nil
+}
+
+// receiptPathParts splits a walked PDF path under root into its period, provider
+// and account, mirroring storage.ReceiptKey. A solo receipt sits at
+// {period}/{provider}.pdf (account ""); a per-account receipt at
+// {period}/{provider}/{account}.pdf. ok is false for a PDF at any other depth,
+// so state files or stray PDFs are ignored rather than misread.
+func receiptPathParts(root, p string) (period, provider, account string, ok bool) {
+	rel, err := filepath.Rel(root, p)
+	if err != nil {
+		return "", "", "", false
+	}
+
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	base := strings.TrimSuffix(parts[len(parts)-1], filepath.Ext(parts[len(parts)-1]))
+
+	switch len(parts) {
+	case 2:
+		// {period}/{provider}.pdf
+		return parts[0], base, "", true
+	case 3:
+		// {period}/{provider}/{account}.pdf
+		return parts[0], parts[1], base, true
+	default:
+		return "", "", "", false
+	}
 }
 
 // parsePeriod parses a period like "04-2025" or "010-2025" into (month, year). Returns (0,0) on error.
@@ -267,6 +319,44 @@ func normalizePeriod(p string) string {
 // state. Both use the same key so the two can never drift apart.
 func metaKey(period, provider string) string {
 	return payments.Key(normalizePeriod(period), provider)
+}
+
+// dbKey is the account-aware lookup key joining a walked file to its database
+// row, so several accounts of one provider and period stay distinct. It extends
+// metaKey with the account id (empty for a solo receipt, keeping the solo key
+// equal to what a lookup by (period, provider) would build).
+func dbKey(period, provider, account string) string {
+	if account == "" {
+		return metaKey(period, provider)
+	}
+
+	return metaKey(period, provider) + "\x00" + account
+}
+
+// receiptURL builds the receipt's download URL. A solo receipt keeps the bare
+// /receipt/{period}/{provider} path; a named account adds ?account=<id>, which
+// every receipt handler reads (see accountParam).
+func receiptURL(period, provider, account string) string {
+	u := fmt.Sprintf("/receipt/%s/%s", period, provider)
+	if account != "" {
+		u += "?account=" + account
+	}
+
+	return u
+}
+
+// accountLabels builds an id→label map for a provider from config, so the
+// listing can annotate database rows (which carry only the account id) with the
+// friendly name. A solo provider yields an empty map.
+func accountLabels(cfg *config.Config, provider string) map[string]string {
+	out := map[string]string{}
+	for _, a := range cfg.Accounts(provider) {
+		if a.ID != "" {
+			out[a.ID] = a.Label
+		}
+	}
+
+	return out
 }
 
 type ReceiptMeta struct {
@@ -376,6 +466,7 @@ func markPaidHandler(rec *receipts.Repository) Handler {
 			log.Err(err).Msg("Error validating mark-paid request")
 			return
 		}
+		account := accountParam(r)
 
 		var body struct {
 			Paid bool `json:"paid"`
@@ -385,10 +476,11 @@ func markPaidHandler(rec *receipts.Repository) Handler {
 			return
 		}
 
-		at, err := rec.MarkPaid(r.Context(), provider, period, body.Paid)
+		at, err := rec.MarkPaid(r.Context(), provider, account, period, body.Paid)
 		if err != nil {
 			log.Err(err).
 				Str("provider", provider).
+				Str("account", account).
 				Str("period", period).
 				Msg("Error persisting paid state")
 			http.Error(w, "could not persist paid state", http.StatusInternalServerError)
@@ -399,6 +491,7 @@ func markPaidHandler(rec *receipts.Repository) Handler {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		if err := json.NewEncoder(w).Encode(map[string]any{
 			"provider": provider,
+			"account":  account,
 			"period":   normalizePeriod(period),
 			"paid":     body.Paid,
 			"paid_at":  at,

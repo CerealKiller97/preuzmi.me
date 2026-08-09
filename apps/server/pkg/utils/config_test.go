@@ -12,15 +12,9 @@ func TestGetPairsReturnsOnlyFullyConfiguredProviders(t *testing.T) {
 	// Arrange
 	assert := require.New(t)
 	cfg := config.Config{
-		Providers: map[config.Provider]config.Credentials{
-			"mts": {
-				Username: "username",
-				Password: "password",
-			},
-			"a1": {
-				Username: "",
-				Password: "",
-			},
+		Providers: map[config.Provider]config.ProviderAccounts{
+			"mts": {{Username: "username", Password: "password"}},
+			"a1":  {{Username: "", Password: ""}},
 		},
 	}
 
@@ -36,15 +30,9 @@ func TestGetPairsSkipsProvidersMissingOneHalfOfThePair(t *testing.T) {
 	// Arrange
 	assert := require.New(t)
 	cfg := config.Config{
-		Providers: map[config.Provider]config.Credentials{
-			"mts": {
-				Username: "username",
-				Password: "",
-			},
-			"a1": {
-				Username: "",
-				Password: "password",
-			},
+		Providers: map[config.Provider]config.ProviderAccounts{
+			"mts": {{Username: "username", Password: ""}},
+			"a1":  {{Username: "", Password: "password"}},
 		},
 	}
 
@@ -60,9 +48,9 @@ func TestGetPairsErrorsWhenNothingIsConfigured(t *testing.T) {
 	// Arrange
 	assert := require.New(t)
 	cfg := config.Config{
-		Providers: map[config.Provider]config.Credentials{
-			"mts": {Username: "", Password: ""},
-			"a1":  {Username: "", Password: ""},
+		Providers: map[config.Provider]config.ProviderAccounts{
+			"mts": {{Username: "", Password: ""}},
+			"a1":  {{Username: "", Password: ""}},
 		},
 	}
 

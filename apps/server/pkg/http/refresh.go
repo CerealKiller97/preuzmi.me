@@ -36,8 +36,8 @@ func refreshStatusHandler(cfg *config.Config, svc *refresh.Service) Handler {
 // providers and can take a while.
 func startRefreshHandler(
 	cfg *config.Config,
-	getProviders func([]string) map[string]provider.Interface,
-	skip func(map[string]provider.Interface) map[string]provider.Interface,
+	getProviders func([]config.ProviderAccount) map[string]provider.Job,
+	skip func(map[string]provider.Job) map[string]provider.Job,
 	svc *refresh.Service,
 	after func([]refresh.Result),
 ) Handler {
@@ -54,15 +54,15 @@ func startRefreshHandler(
 			return
 		}
 
-		pairs, err := utils.GetPairs(cfg)
-		if err != nil {
-			log.Err(err).Msg("Refresh requested with no providers configured")
+		accounts := cfg.ConfiguredAccounts()
+		if len(accounts) == 0 {
+			log.Err(utils.ErrEmptyProviders).Msg("Refresh requested with no providers configured")
 			http.Error(w, "no providers configured", http.StatusBadRequest)
 
 			return
 		}
 
-		providers := getProviders(pairs)
+		providers := getProviders(accounts)
 		if len(providers) == 0 {
 			http.Error(w, "no providers with an implementation are configured", http.StatusBadRequest)
 			return
@@ -101,7 +101,7 @@ func startRefreshHandler(
 			return
 		}
 
-		log.Info().Interface("providers", pairs).Msg("Refresh started from the UI")
+		log.Info().Interface("accounts", accounts).Msg("Refresh started from the UI")
 
 		writeJSONStatus(w, http.StatusAccepted, state)
 	}

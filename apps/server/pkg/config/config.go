@@ -1,12 +1,15 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -26,8 +29,21 @@ const (
 )
 
 type (
-	Provider    string
-	Credentials struct {
+	Provider string
+
+	// Account is one login for a provider. A provider may hold several — family
+	// members sharing one deployment — and each files its own bills separately.
+	//
+	// ID is the stable slug that identifies the account in storage keys, the
+	// receipts database, and receipt URLs; renaming Label (a free-form display
+	// name like "Mama" or "Tata") never moves anything. A solo deployment has
+	// exactly one account with an EMPTY ID, and everything it produces is
+	// byte-identical to the single-credential layout that predates multi-account
+	// support: storage key "07-2026/eps.pdf", URL /receipt/07-2026/eps. A
+	// non-empty ID files under "07-2026/eps/<id>.pdf" and /receipt/07-2026/eps/<id>.
+	Account struct {
+		ID       string `json:"id,omitempty"`
+		Label    string `json:"label,omitempty"`
 		Username string `json:"identifier"`
 		Password string `json:"password"`
 		// Mailbox is optional and only used by email-based providers (eUpravnik,
@@ -37,6 +53,23 @@ type (
 		// config.Email.Mailbox, then INBOX.
 		Mailbox string `json:"mailbox,omitempty"`
 	}
+
+	// Credentials is the per-account login handed to a provider implementation.
+	// A provider knows nothing about multi-account; the container picks one
+	// account and passes its Credentials plus its Account ID.
+	Credentials struct {
+		Username string
+		Password string
+		Mailbox  string
+	}
+
+	// ProviderAccounts is the list of accounts configured for one provider. It
+	// unmarshals from EITHER a single credential object (the solo shape that
+	// predates multi-account: providers.mts = {"identifier": …, "password": …})
+	// OR an array of accounts, and marshals back to whichever shape round-trips
+	// the input, so a solo config.json the settings screen re-saves stays
+	// byte-identical.
+	ProviderAccounts []Account
 
 	// S3 configures any S3-compatible object storage (AWS S3, Linode Object
 	// Storage, MinIO, ...). Endpoint may be left empty for AWS S3 proper; for
@@ -106,18 +139,9 @@ type (
 		Telegram        Telegram `json:"telegram"`
 	}
 
-	Providers struct {
-		MTS       Credentials `json:"mts"`
-		A1        Credentials `json:"a1"`
-		Yettel    Credentials `json:"yettel"`
-		EPS       Credentials `json:"eps"`
-		Esanduce  Credentials `json:"esanduce"`
-		EUpravnik Credentials `json:"eupravnik"`
-	}
-
 	Config struct {
-		Providers     map[Provider]Credentials `json:"providers"`
-		Notifications Notifications            `json:"notifications"`
+		Providers     map[Provider]ProviderAccounts `json:"providers"`
+		Notifications Notifications                 `json:"notifications"`
 		Email         Email                    `json:"email"`
 		S3            S3                       `json:"s3"`
 		Application   struct {
@@ -167,6 +191,115 @@ var emailProviders = map[string]struct{}{
 
 // SecretPlaceholder is what the settings UI sends back for an unchanged secret.
 const SecretPlaceholder = "••••••••"
+
+// slugRe bounds an account ID to a filesystem- and URL-safe slug so it can be
+// used verbatim in storage keys ("07-2026/eps/<id>.pdf") and receipt URLs.
+var slugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
+
+// UnmarshalJSON accepts either a single credential object (the solo shape) or an
+// array of accounts (multi-account), normalizing both to a slice.
+func (pa *ProviderAccounts) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || string(trimmed) == "null" {
+		*pa = nil
+		return nil
+	}
+
+	if trimmed[0] == '[' {
+		var arr []Account
+		if err := json.Unmarshal(trimmed, &arr); err != nil {
+			return err
+		}
+		*pa = arr
+
+		return nil
+	}
+
+	var one Account
+	if err := json.Unmarshal(trimmed, &one); err != nil {
+		return err
+	}
+	*pa = ProviderAccounts{one}
+
+	return nil
+}
+
+// MarshalJSON re-emits a solo account (a single account with an empty ID) as a
+// bare object so a solo config.json round-trips byte-identically; anything with
+// more than one account, or an explicit ID, marshals as an array.
+func (pa ProviderAccounts) MarshalJSON() ([]byte, error) {
+	if len(pa) == 1 && pa[0].ID == "" {
+		return json.Marshal(pa[0])
+	}
+
+	return json.Marshal([]Account(pa))
+}
+
+// Credentials returns the per-account login handed to a provider.
+func (a Account) Credentials() Credentials {
+	return Credentials{
+		Username: a.Username,
+		Password: a.Password,
+		Mailbox:  a.Mailbox,
+	}
+}
+
+// Configured reports whether the account carries both a username and password.
+func (a Account) Configured() bool {
+	return a.Username != "" && a.Password != ""
+}
+
+// ProviderAccount names one configured account: its provider and account ID ("" for
+// the solo account). It is the unit a refresh run iterates over.
+type ProviderAccount struct {
+	Provider string
+	Account  string
+}
+
+// ConfiguredAccounts returns every fully-configured (username+password) account
+// across all providers as (provider, account) pairs, sorted for stable output.
+func (c *Config) ConfiguredAccounts() []ProviderAccount {
+	out := make([]ProviderAccount, 0, len(c.Providers))
+	for name, accounts := range c.Providers {
+		for _, a := range accounts {
+			if a.Configured() {
+				out = append(out, ProviderAccount{Provider: string(name), Account: a.ID})
+			}
+		}
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Provider != out[j].Provider {
+			return out[i].Provider < out[j].Provider
+		}
+
+		return out[i].Account < out[j].Account
+	})
+
+	return out
+}
+
+// Accounts returns the accounts configured for provider (nil when none).
+func (c *Config) Accounts(provider string) ProviderAccounts {
+	return c.Providers[Provider(provider)]
+}
+
+// AccountByID returns the account with the given ID under provider (id "" for
+// the solo account), and whether it was found.
+func (c *Config) AccountByID(provider, id string) (Account, bool) {
+	return findAccount(c.Providers[Provider(provider)], id)
+}
+
+// findAccount looks up an account by ID within a provider's account list.
+func findAccount(accounts ProviderAccounts, id string) (Account, bool) {
+	for _, a := range accounts {
+		if a.ID == id {
+			return a, true
+		}
+	}
+
+	return Account{}, false
+}
 
 // Path returns the absolute path of config.json in the process working directory.
 func Path() (string, error) {
@@ -291,12 +424,44 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid lang %q, allowed values are %q and %q", c.Lang, LangLatin, LangCyrillic)
 	}
 
+	if err := c.validateProviders(); err != nil {
+		return err
+	}
+
 	if err := c.validateNotifications(); err != nil {
 		return err
 	}
 
 	if err := c.validateEmail(); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// validateProviders checks the per-provider account lists. A provider with a
+// single account may leave its ID empty (the solo case, byte-identical to the
+// pre-multi-account layout); once a provider holds more than one account, each
+// needs a unique, path-safe slug ID so its bills file under a stable location.
+func (c *Config) validateProviders() error {
+	for name, accounts := range c.Providers {
+		multi := len(accounts) > 1
+		seen := make(map[string]struct{}, len(accounts))
+
+		for i, a := range accounts {
+			if multi && a.ID == "" {
+				return fmt.Errorf("provider %q has multiple accounts but account #%d has no id", name, i+1)
+			}
+			if a.ID != "" && !slugRe.MatchString(a.ID) {
+				return fmt.Errorf("provider %q account id %q is invalid: use lowercase letters, digits, '-' or '_' (must start alphanumeric)", name, a.ID)
+			}
+			if a.ID != "" {
+				if _, dup := seen[a.ID]; dup {
+					return fmt.Errorf("provider %q has duplicate account id %q", name, a.ID)
+				}
+				seen[a.ID] = struct{}{}
+			}
+		}
 	}
 
 	return nil
@@ -328,13 +493,20 @@ func (next *Config) MergeSecrets(prev Config) {
 	next.Notifications.Telegram.BotToken = KeepSecret(next.Notifications.Telegram.BotToken, prev.Notifications.Telegram.BotToken)
 
 	if next.Providers == nil {
-		next.Providers = map[Provider]Credentials{}
+		next.Providers = map[Provider]ProviderAccounts{}
 	}
 
-	for name, prevCreds := range prev.Providers {
-		cur := next.Providers[name]
-		cur.Password = KeepSecret(cur.Password, prevCreds.Password)
-		next.Providers[name] = cur
+	// Restore each account's password from the previous config when the form
+	// omitted it. Accounts are matched by ID (empty for a solo account), so a
+	// reordered or renamed-label account still keeps its secret.
+	for name, nextAccounts := range next.Providers {
+		prevAccounts := prev.Providers[name]
+		for i := range nextAccounts {
+			if prevA, ok := findAccount(prevAccounts, nextAccounts[i].ID); ok {
+				nextAccounts[i].Password = KeepSecret(nextAccounts[i].Password, prevA.Password)
+			}
+		}
+		next.Providers[name] = nextAccounts
 	}
 }
 

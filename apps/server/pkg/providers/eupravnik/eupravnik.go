@@ -40,19 +40,24 @@ type Service struct {
 	storage  storage.Interface
 	receipts *receipts.Repository
 	reader   mailbox.Reader
+	// account is the provider account id this instance downloads for: "" for a
+	// solo deployment, or a config account id for a named family-member login.
+	account string
 }
 
 // New builds the provider. reader is the mailbox to search (injected so tests can
 // supply a fake inbox); storage and receiptsStore are shared with the other
-// providers.
+// providers. account is the provider account id ("" for solo).
 func New(
 	reader mailbox.Reader,
+	account string,
 	logger zerolog.Logger,
 	storage storage.Interface,
 	receiptsStore *receipts.Repository,
 ) *Service {
 	return &Service{
 		reader:   reader,
+		account:  account,
 		logger:   logger,
 		storage:  storage,
 		receipts: receiptsStore,
@@ -97,7 +102,7 @@ func (s *Service) DownloadReceipt() error {
 		period = in.periodString()
 	}
 
-	key := fmt.Sprintf("%s/%s.pdf", period, fileName)
+	key := storage.ReceiptKey(period, fileName, s.account)
 	if err := s.storage.Save(ctx, key, attachment.Data); err != nil {
 		s.logger.Err(err).Str("key", key).Msg("Error saving eUpravnik receipt")
 		return err
@@ -134,18 +139,18 @@ func (s *Service) recordInvoice(ctx context.Context, in invoice, period string, 
 	// source of truth for the price. Fall back to the PDF's "UKUPNO" total only
 	// when the bill has no readable QR.
 	if amount, ok := ipsqr.AmountFromPDF(pdf); ok {
-		if err := s.receipts.SetPrice(ctx, fileName, period, amount); err != nil {
+		if err := s.receipts.SetPrice(ctx, fileName, s.account, period, amount); err != nil {
 			s.logger.Err(err).Str("period", period).Msg("Failed to record eUpravnik receipt price")
 		}
 	} else if in.hasTotal {
-		if err := s.receipts.SetPrice(ctx, fileName, period, in.total); err != nil {
+		if err := s.receipts.SetPrice(ctx, fileName, s.account, period, in.total); err != nil {
 			s.logger.Err(err).Str("period", period).Msg("Failed to record eUpravnik receipt price")
 		}
 	}
 
 	// Never leave the status empty: the current invoice is unpaid until a later
 	// invoice confirms it.
-	if err := s.receipts.SetStatus(ctx, fileName, period, receipts.StatusUnpaid); err != nil {
+	if err := s.receipts.SetStatus(ctx, fileName, s.account, period, receipts.StatusUnpaid); err != nil {
 		s.logger.Err(err).Str("period", period).Msg("Failed to record eUpravnik receipt status")
 	}
 
@@ -153,7 +158,7 @@ func (s *Service) recordInvoice(ctx context.Context, in invoice, period string, 
 	// period so we know which month "previous" is.
 	if in.hasDebt && in.hasPeriod && in.paid() {
 		prev := in.previousPeriodString()
-		if err := s.receipts.SetStatus(ctx, fileName, prev, receipts.StatusPaid); err != nil {
+		if err := s.receipts.SetStatus(ctx, fileName, s.account, prev, receipts.StatusPaid); err != nil {
 			s.logger.Err(err).Str("period", prev).Msg("Failed to mark previous eUpravnik receipt paid")
 		}
 	}

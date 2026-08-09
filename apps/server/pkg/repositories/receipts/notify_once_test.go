@@ -21,7 +21,7 @@ func TestNotifyOncePersistsAcrossRuns(t *testing.T) {
 	if err := s1.Record(ctx, Receipt{Provider: "yettel", Period: "06-2026", StorageKey: "06-2026/yettel.pdf"}); err != nil {
 		t.Fatalf("Record run1: %v", err)
 	}
-	if err := s1.SetStatus(ctx, "yettel", "06-2026", StatusPaid); err != nil {
+	if err := s1.SetStatus(ctx, "yettel", "", "06-2026", StatusPaid); err != nil {
 		t.Fatalf("SetStatus run1: %v", err)
 	}
 	if n := len(s1.DrainNewlyDownloaded()); n != 1 {
@@ -43,10 +43,10 @@ func TestNotifyOncePersistsAcrossRuns(t *testing.T) {
 	if err := s2.Record(ctx, Receipt{Provider: "yettel", Period: "06-2026", StorageKey: "06-2026/yettel.pdf"}); err != nil {
 		t.Fatalf("Record run2: %v", err)
 	}
-	if err := s2.SetStatus(ctx, "yettel", "06-2026", StatusUnpaid); err != nil {
+	if err := s2.SetStatus(ctx, "yettel", "", "06-2026", StatusUnpaid); err != nil {
 		t.Fatalf("SetStatus unpaid run2: %v", err)
 	}
-	if err := s2.SetStatus(ctx, "yettel", "06-2026", StatusPaid); err != nil {
+	if err := s2.SetStatus(ctx, "yettel", "", "06-2026", StatusPaid); err != nil {
 		t.Fatalf("SetStatus paid run2: %v", err)
 	}
 	if n := len(s2.DrainNewlyDownloaded()); n != 0 {
@@ -72,7 +72,7 @@ func TestUpgradeDoesNotReannounceHistory(t *testing.T) {
 	if err := s1.Record(ctx, Receipt{Provider: "eps", Period: "06-2026", StorageKey: "06-2026/eps.pdf"}); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
-	if err := s1.SetStatus(ctx, "eps", "06-2026", StatusPaid); err != nil {
+	if err := s1.SetStatus(ctx, "eps", "", "06-2026", StatusPaid); err != nil {
 		t.Fatalf("SetStatus: %v", err)
 	}
 	s1.DrainNewlyDownloaded()
@@ -95,7 +95,7 @@ func TestUpgradeDoesNotReannounceHistory(t *testing.T) {
 	if err := s2.Record(ctx, Receipt{Provider: "eps", Period: "06-2026", StorageKey: "06-2026/eps.pdf"}); err != nil {
 		t.Fatalf("Record after upgrade: %v", err)
 	}
-	if err := s2.SetStatus(ctx, "eps", "06-2026", StatusPaid); err != nil {
+	if err := s2.SetStatus(ctx, "eps", "", "06-2026", StatusPaid); err != nil {
 		t.Fatalf("SetStatus after upgrade: %v", err)
 	}
 	if n := len(s2.DrainNewlyDownloaded()); n != 0 {

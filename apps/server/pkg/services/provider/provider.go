@@ -12,3 +12,31 @@ var ErrNoReceipt = errors.New("no receipt available to download")
 type Interface interface {
 	DownloadReceipt() error
 }
+
+// Job pairs a provider implementation with the identity of the account it runs
+// for, so a refresh over several accounts can report each outcome against the
+// right provider and account. Account is "" for a solo deployment; Label is the
+// human-friendly account name for notifications and the dashboard (falls back to
+// the account id, then to nothing, when unset).
+type Job struct {
+	Impl     Interface
+	Provider string
+	Account  string
+	Label    string
+}
+
+// Key is the stable identifier for a job within a refresh run: the provider for
+// a solo account, or "provider\x00account" for a named one. It is used as the
+// map key so per-account jobs never collide.
+func (j Job) Key() string {
+	return JobKey(j.Provider, j.Account)
+}
+
+// JobKey builds the per-account job key (see Job.Key).
+func JobKey(provider, account string) string {
+	if account == "" {
+		return provider
+	}
+
+	return provider + "\x00" + account
+}

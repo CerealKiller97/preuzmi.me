@@ -1,0 +1,78 @@
+name: mobile build
+
+# Produces production APK + (unsigned) IPA artifacts. Run manually, or
+# automatically when a vX.Y.Z tag is pushed. Artifacts are attached to the
+# workflow run (Actions → run → Artifacts).
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+
+concurrency:
+  group: mobile-build-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    name: build release APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.9
+          cache: true
+
+      - name: Build release APK
+        working-directory: apps/mobile
+        run: bash scripts/build-apk.sh
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: preuzmi-apk
+          path: apps/mobile/dist/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  ipa:
+    name: build release IPA (unsigned)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.9
+          cache: true
+
+      # Unsigned build (no Apple certificate needed). Sideload the .ipa with
+      # Sideloadly/AltStore, or set up signing + secrets for a signed build.
+      - name: Build unsigned IPA
+        working-directory: apps/mobile
+        run: bash scripts/build-ipa.sh
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: preuzmi-ipa
+          path: apps/mobile/dist/*.ipa
+          if-no-files-found: error
+          retention-days: 30

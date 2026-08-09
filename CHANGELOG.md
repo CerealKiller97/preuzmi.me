@@ -10,6 +10,13 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+## [1.6.0] - 09.08.2026
+
+### ✨ Added
+
+- 📱 **Preuzmi.me on your phone.** A native Flutter client for **iOS and Android** that mirrors the web dashboard: browse and search your receipts, track paid status, open a bill's NBS IPS **payment QR**, and check spending stats — all against your own Preuzmi.me server. It talks to the same API the web UI does and honours the server's Latin / Cyrillic `lang` setting.
+- 📦 **Mobile builds attached to each release.** Every `vX.Y.Z` GitHub Release now carries downloadable mobile binaries: a universal Android **APK** (`preuzmi-<version>.apk`) and an **unsigned iOS IPA** (`preuzmi-<version>-unsigned.ipa`). The APK installs directly on Android. The IPA is unsigned — sideload it with **Sideloadly / AltStore** (which re-signs it with your own Apple ID), or produce a signed build with `SIGNED=1 scripts/build-ipa.sh` once Xcode signing is set up.
+
 ## [1.5.0] - 09.08.2026
 
 ### ✨ Added
@@ -127,7 +134,8 @@ stats, and notifications, so no bill goes unintentionally unpaid.
 - 🐳 Multi-arch (amd64 + arm64), distroless Docker image published to GHCR.
 - 🌐 Bilingual documentation — English and Serbian.
 
-[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.3.2...v1.4.0
 [1.3.2]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.3.1...v1.3.2

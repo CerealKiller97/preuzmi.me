@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-  ghcr.io/cerealkiller97/preuzmi.me:1.4.0
+  ghcr.io/cerealkiller97/preuzmi.me:1.5.0
 ```
 
 ### docker compose
@@ -65,7 +65,7 @@ docker run -d --name preuzmi \
 ```yaml
 services:
   preuzmi:
-    image: ghcr.io/cerealkiller97/preuzmi.me:1.4.0
+    image: ghcr.io/cerealkiller97/preuzmi.me:1.5.0
     container_name: preuzmi.me
     ports:
       - '5500:5500'
@@ -260,6 +260,7 @@ Browse and update receipts without opening the dashboard — it reads and writes
 
 ```text
 preuzmi.me receipts list [MM/YYYY]        List a period's receipts (defaults to the previous month)
+preuzmi.me receipts view <key>            Show a receipt's details and its payment QR
 preuzmi.me receipts mark:as-paid   <key>  Mark a receipt paid (key is PROVIDER/PERIOD, e.g. eps/06-2026)
 preuzmi.me receipts mark:as-unpaid <key>  Clear the paid mark
 ```
@@ -273,6 +274,16 @@ preuzmi.me receipts mark:as-unpaid <key>  Clear the paid mark
 > **When is a receipt considered paid?** When the **provider confirms** it — i.e. STATUS is `plaćeno` / VERIFIKOVANO is set. STATUS and VERIFIKOVANO are the same signal (VERIFIKOVANO is just the date STATUS became `plaćeno`), so they always agree. **PLAĆENO** is your own record that you've sent the payment and is independent of the provider — a receipt can be PLAĆENO but not yet VERIFIKOVANO (as with `eps` above: paid by you, awaiting the provider's confirmation).
 
 Colour and box drawing are auto-disabled when output isn't a terminal; it respects `NO_COLOR`, and `FORCE_COLOR` forces colour when piping.
+
+#### `receipts view <key>`
+
+`receipts view` shows a single bill's details and its NBS IPS **payment QR** right in the terminal, so you can scan and pay without opening the dashboard. Alongside the amount, status and dates it prints the payment fields the QR carries — recipient, account, purpose and reference (`PRIMALAC` / `RAČUN` / `SVRHA` / `POZIV NA BROJ`).
+
+<p align="center">
+  <img src="docs/screenshots/receipts-view.png" alt="receipts view" width="560" />
+</p>
+
+The display is **auto-detected** so the code always reaches your screen: an inline image on terminals that support it (iTerm2, Warp), the PNG opened in your image viewer on a local desktop session, or a text QR on a remote / headless shell (SSH, RPi Connect …). The image modes reuse the exact PNG the dashboard serves, which scans reliably. Force a specific mode with the `PREUZMI_QR` environment variable — `inline` · `image` · `path` · `blocks` · `braille`.
 
 ## Scheduling (cron)
 

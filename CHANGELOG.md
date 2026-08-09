@@ -10,6 +10,17 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+## [1.5.0] - 09.08.2026
+
+### ✨ Added
+
+- 🧾 **`receipts view <key>`** — show a single bill's details and its NBS IPS **payment QR** right in the terminal, so you can scan and pay without opening the dashboard. It prints the amount, provider status, the **VERIFIKOVANO** / **PLAĆENO** / **ROK** dates, and the payment fields the QR carries (recipient, account, purpose, reference — `PRIMALAC` / `RAČUN` / `SVRHA` / `POZIV NA BROJ`). The key is `PROVIDER/PERIOD`, e.g. `mts/08-2025`. The payload is resolved exactly as the dashboard card does (cache first, PDF fallback), so the terminal and the UI always show the same code.
+- 🖼️ **Auto-detected QR rendering.** `receipts view` picks the display that will actually reach your screen: an **inline image** on terminals that support it (iTerm2, Warp), the **PNG opened in your image viewer** on a local desktop session, or a **text QR** on a remote / headless shell (SSH, RPi Connect …) where no image protocol works. The image modes reuse the exact PNG the web dashboard serves, which scans reliably; the text QR is the fallback. Force a specific mode with the `PREUZMI_QR` environment variable — `inline` · `image` · `path` · `blocks` · `braille`.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/CerealKiller97/preuzmi.me/main/docs/screenshots/receipts-view.png" alt="receipts view — a bill's details and payment QR in the terminal" width="560" />
+</p>
+
 ## [1.4.0] - 08.08.2026
 
 ### ✨ Added
@@ -116,7 +127,8 @@ stats, and notifications, so no bill goes unintentionally unpaid.
 - 🐳 Multi-arch (amd64 + arm64), distroless Docker image published to GHCR.
 - 🌐 Bilingual documentation — English and Serbian.
 
-[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.3.2...v1.4.0
 [1.3.2]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.3.0...v1.3.1

@@ -2,9 +2,13 @@ package cmd
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +17,7 @@ import (
 	handlers "github.com/CerealKiller97/preuzmi.me/pkg/http"
 	receiptsrepo "github.com/CerealKiller97/preuzmi.me/pkg/repositories/receipts"
 	"github.com/CerealKiller97/preuzmi.me/pkg/script"
+	"github.com/CerealKiller97/preuzmi.me/pkg/services/ipsqr"
 	"github.com/mattn/go-isatty"
 	"github.com/rs/zerolog/log"
 )
@@ -101,6 +106,8 @@ func Receipts(c *container.Container) {
 	switch sub {
 	case "list", "ls":
 		receiptsList(c, os.Args[3:])
+	case "view", "show":
+		receiptsView(c, os.Args[3:])
 	case "mark:as-paid":
 		receiptsMark(c, os.Args[3:], true)
 	case "mark:as-unpaid":
@@ -122,6 +129,12 @@ func receiptsUsage() {
 		"  list [MM/YYYY]\n"+
 		"    List receipts and their paid state for a period.\n"+
 		"    Defaults to the previous month; pass a period to override, e.g. 07/2026\n"+
+		"  view <key>\n"+
+		"    Show a receipt's details and its payment QR code.\n"+
+		"    The display is auto-detected: an inline image on terminals that\n"+
+		"    support it (iTerm2, Warp), a PNG opened in the viewer on a desktop,\n"+
+		"    or a text QR on a remote/headless shell. Force it with PREUZMI_QR:\n"+
+		"      inline  image / open  path  |  blocks  braille  (text QR)\n"+
 		"  mark:as-paid <key>\n"+
 		"    Mark the receipt with the given key as paid\n"+
 		"  mark:as-unpaid <key>\n"+
@@ -338,6 +351,366 @@ func receiptsList(c *container.Container, args []string) {
 
 	fmt.Println()
 	fmt.Println(p.c(ansiDim, tr(fmt.Sprintf("%d račun(a) · %d označeni kao plaćeni", len(items), paidCount))))
+}
+
+// receiptsView shows a single receipt's details and renders its NBS IPS payment
+// QR straight in the terminal, so the download → scan → pay loop closes without
+// leaving the shell. The receipt facts come from the same source the dashboard
+// uses; the QR payload is resolved (cache first, PDF fallback) exactly as the web
+// card does, so the two always show the identical, scannable code.
+func receiptsView(c *container.Container, args []string) {
+	provider, period, err := parseReceiptKey(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n\n", err.Error())
+		receiptsUsage()
+		os.Exit(1)
+	}
+	period = handlers.NormalizePeriod(period)
+
+	cfg := c.GetConfig()
+	p := newPainter()
+	tr := func(s string) string { return script.Apply(cfg.Lang, s) }
+	key := fmt.Sprintf("%s/%s", provider, strings.ReplaceAll(period, "-", "/"))
+
+	all, err := handlers.CollectReceipts(cfg, c.GetReceiptsStore())
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to collect receipts")
+	}
+
+	var rec *handlers.APIReceipt
+	for i := range all {
+		if all[i].Provider == provider && all[i].Period == period {
+			rec = &all[i]
+			break
+		}
+	}
+	if rec == nil {
+		fmt.Fprintln(os.Stderr, tr(fmt.Sprintf("🧾 Nema računa za %s.", key)))
+		os.Exit(1)
+	}
+
+	// line prints one "  LABEL  value" row; labels are transliterated, values are
+	// printed verbatim.
+	line := func(label, value string) {
+		fmt.Printf("  %s  %s\n", p.c(ansiDim, tr(label)), value)
+	}
+	date := func(at int64) string {
+		if at <= 0 {
+			return "❌ " + p.c(ansiDim, "—")
+		}
+		return "✅ " + p.c(ansiGreen, time.Unix(at, 0).Format("02.01.2006"))
+	}
+
+	fmt.Println(p.c(ansiBold, "🧾 "+p.c(ansiCyan, key)))
+	fmt.Println()
+
+	amount := "—"
+	if rec.Amount != 0 {
+		amount = fmt.Sprintf("%.2f", rec.Amount)
+		if rec.Currency != "" {
+			amount += " " + rec.Currency
+		}
+	}
+	line("IZNOS", p.c(ansiBold, amount))
+
+	switch rec.Status {
+	case receiptsrepo.StatusPaid:
+		line("STATUS", "🟢 "+p.c(ansiGreen, tr(rec.Status)))
+	case receiptsrepo.StatusUnpaid:
+		line("STATUS", "🔴 "+p.c(ansiYellow, tr(rec.Status)))
+	default:
+		line("STATUS", "⚪ "+p.c(ansiDim, tr("nepoznato")))
+	}
+
+	line("VERIFIKOVANO", date(rec.ConfirmedAt))
+	line("PLAĆENO", date(rec.PaidAt))
+	if rec.DueAt > 0 {
+		line("ROK", p.c(ansiYellow, time.Unix(rec.DueAt, 0).Format("02.01.2006")))
+	}
+
+	// Resolve and render the payment QR. A bill whose layout embeds no readable QR
+	// simply shows a note — the receipt details above are still useful on their own.
+	payload, ok := handlers.ResolveIPSPayload(context.Background(), c.GetStorage(), c.GetReceiptsStore(), provider, period)
+	if !ok {
+		fmt.Println()
+		fmt.Println(p.c(ansiDim, tr("Ovaj račun nema QR kod za plaćanje.")))
+		return
+	}
+
+	// Payment details carried by the QR itself: recipient, account, purpose and
+	// reference number — the fields a banking app fills in from the scan.
+	fmt.Println()
+	if name, hasName := ipsqr.Field(payload, "N"); hasName {
+		line("PRIMALAC", name)
+	}
+	if acc, hasAcc := ipsqr.Field(payload, "R"); hasAcc {
+		line("RAČUN", acc)
+	}
+	if purpose, hasPurpose := ipsqr.Field(payload, "S"); hasPurpose {
+		line("SVRHA", purpose)
+	}
+	if ref, hasRef := ipsqr.Field(payload, "RO"); hasRef {
+		line("POZIV NA BROJ", ref)
+	}
+
+	fmt.Println()
+	emitReceiptQR(p, tr, provider, period, payload)
+}
+
+// qrMode is a way of showing the payment QR, chosen by resolveQRMode.
+type qrMode int
+
+const (
+	qrInline   qrMode = iota // real raster drawn in place (iTerm2/Warp protocol)
+	qrFileOpen               // PNG written to disk and opened in a desktop viewer
+	qrFilePath               // PNG written to disk; only its path is printed
+	qrBlocks                 // half-block text QR
+	qrBraille                // compact braille text QR
+)
+
+// emitReceiptQR shows a receipt's payment QR, picking the rendering that will
+// actually reach the user's screen for their terminal (see resolveQRMode). The
+// image modes reuse the exact PNG the web dashboard serves, which scans reliably;
+// the text modes are the fallback where no image can be shown.
+func emitReceiptQR(p painter, tr func(string) string, provider, period, payload string) {
+	switch resolveQRMode(payload) {
+	case qrBraille:
+		emitTextQR(ipsqr.RenderTerminalCompact, p, tr, provider, period, payload)
+	case qrBlocks:
+		emitTextQR(ipsqr.RenderTerminal, p, tr, provider, period, payload)
+	case qrInline:
+		png := renderQRPNG(provider, period, payload)
+		fmt.Print(iterm2InlineImage(png))
+		fmt.Println()
+		fmt.Println(p.c(ansiDim, tr("Skenirajte QR kod u mobilnoj banci da platite.")))
+	case qrFileOpen:
+		path := writeQRFileOrDie(provider, period, renderQRPNG(provider, period, payload))
+		openInViewer(path)
+		fmt.Println(tr("QR kod (slika): ") + p.c(ansiCyan, path))
+		fmt.Println(p.c(ansiDim, tr("Otvorite sliku i skenirajte je mobilnom bankom.")))
+	case qrFilePath:
+		path := writeQRFileOrDie(provider, period, renderQRPNG(provider, period, payload))
+		fmt.Println(tr("QR kod (slika): ") + path)
+	}
+}
+
+// resolveQRMode decides how to display the QR. PREUZMI_QR forces a specific mode;
+// otherwise ("auto", the default) it runs a capability ladder from the richest
+// rendering the environment can show down to a plain text QR:
+//
+//  1. not a TTY (piped/redirected) → write the PNG, print only its path
+//  2. terminal speaks an inline-image protocol (iTerm2, Warp) → draw it in place
+//  3. local desktop session with an image viewer → open the PNG in it
+//  4. remote or headless shell (SSH, RPi Connect, …) → text QR, which is the only
+//     thing that reaches the user's own screen
+func resolveQRMode(payload string) qrMode {
+	if m, ok := parseQRModeOverride(os.Getenv("PREUZMI_QR")); ok {
+		return m
+	}
+
+	return autoQRMode(
+		stdoutIsTTY(),
+		inlineImagesSupported(),
+		localDesktopViewer(),
+		terminalWidth() >= qrBlockColumns(payload),
+	)
+}
+
+// parseQRModeOverride reads a mode forced through PREUZMI_QR. ok is false for an
+// empty, "auto", or unrecognised value — all of which mean "auto-detect".
+func parseQRModeOverride(v string) (qrMode, bool) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "inline":
+		return qrInline, true
+	case "image", "file", "open":
+		return qrFileOpen, true
+	case "path":
+		return qrFilePath, true
+	case "blocks", "block", "ascii":
+		return qrBlocks, true
+	case "braille", "compact":
+		return qrBraille, true
+	default:
+		return 0, false
+	}
+}
+
+// autoQRMode is the capability ladder, from the richest rendering the
+// environment can show down to a text QR. It is a pure function of the detected
+// capabilities so the decision can be tested without a real terminal:
+//   - not a TTY (piped/redirected): leave the PNG on disk, print only its path
+//   - an inline-image terminal: draw the raster in place
+//   - a local desktop session: open the PNG in the image viewer
+//   - otherwise (remote/headless): a text QR, the only thing that reaches the
+//     user's screen — solid blocks when they fit the window, else braille
+func autoQRMode(isTTY, inline, desktop, blockFits bool) qrMode {
+	switch {
+	case !isTTY:
+		return qrFilePath
+	case inline:
+		return qrInline
+	case desktop:
+		return qrFileOpen
+	case blockFits:
+		return qrBlocks
+	default:
+		return qrBraille
+	}
+}
+
+// renderQRPNG renders the receipt's QR as the same PNG the dashboard serves.
+func renderQRPNG(provider, period, payload string) []byte {
+	png, err := ipsqr.RenderPNG(payload, 512)
+	if err != nil {
+		log.Fatal().Err(err).Str("provider", provider).Str("period", period).Msg("Failed to render QR image")
+	}
+
+	return png
+}
+
+// writeQRFileOrDie writes the PNG and returns its path, aborting on failure.
+func writeQRFileOrDie(provider, period string, png []byte) string {
+	path, err := writeQRFile(provider, period, png)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to write QR image")
+	}
+
+	return path
+}
+
+// emitTextQR renders a text QR with the given renderer. Text QRs are opt-in
+// because their scannability depends on the terminal's font and line spacing.
+func emitTextQR(render func(string) (string, error), p painter, tr func(string) string, provider, period, payload string) {
+	qr, err := render(payload)
+	if err != nil {
+		log.Fatal().Err(err).Str("provider", provider).Str("period", period).Msg("Failed to render QR")
+	}
+	fmt.Print(qr)
+	fmt.Println(p.c(ansiDim, tr("Skenirajte QR kod u mobilnoj banci da platite.")))
+}
+
+// inlineImagesSupported reports whether the terminal speaks the iTerm2 inline-
+// image protocol. tmux/screen swallow the escape unless configured for
+// passthrough, so those are excluded even under a supported terminal.
+func inlineImagesSupported() bool {
+	if os.Getenv("TMUX") != "" || strings.HasPrefix(os.Getenv("TERM"), "screen") {
+		return false
+	}
+
+	switch os.Getenv("TERM_PROGRAM") {
+	case "iTerm.app", "WarpTerminal":
+		return true
+	default:
+		return false
+	}
+}
+
+// stdoutIsTTY reports whether standard output is a terminal (rather than a pipe
+// or file), the same test the colour painter uses.
+func stdoutIsTTY() bool {
+	fd := os.Stdout.Fd()
+
+	return isatty.IsTerminal(fd) || isatty.IsCygwinTerminal(fd)
+}
+
+// isRemoteSession reports whether the shell is reached over the network, where a
+// file written locally or a viewer launched locally lands on the wrong machine.
+// It recognises SSH by its environment; other remote shells that do not set it
+// are still handled by the headless checks in localDesktopViewer.
+func isRemoteSession() bool {
+	return os.Getenv("SSH_CONNECTION") != "" || os.Getenv("SSH_TTY") != "" || os.Getenv("SSH_CLIENT") != ""
+}
+
+// localDesktopViewer reports whether opening the PNG in a viewer would actually
+// show it to the user: a local (non-remote) session with a graphical desktop.
+func localDesktopViewer() bool {
+	if isRemoteSession() {
+		return false
+	}
+
+	switch runtime.GOOS {
+	case "darwin", "windows":
+		return true
+	case "linux":
+		return os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != ""
+	default:
+		return false
+	}
+}
+
+// qrBlockColumns is the column width the half-block QR occupies for payload, used
+// to decide whether it fits the terminal before falling back to braille.
+func qrBlockColumns(payload string) int {
+	n, err := ipsqr.TerminalSize(payload)
+	if err != nil {
+		return 0
+	}
+
+	return n
+}
+
+// iterm2InlineImage wraps a PNG in the iTerm2 inline-image escape (OSC 1337),
+// which iTerm2 and Warp render as a real raster in the scrollback.
+func iterm2InlineImage(png []byte) string {
+	b64 := base64.StdEncoding.EncodeToString(png)
+
+	return fmt.Sprintf("\033]1337;File=inline=1;size=%d;preserveAspectRatio=1:%s\a", len(png), b64)
+}
+
+// qrFileSlug reduces one part of a receipt key to a filename-safe token, keeping
+// only ASCII letters, digits, dash and underscore. Provider and period come from
+// user-supplied CLI arguments, so this guarantees the QR image name cannot carry
+// a path separator or "…" and escape the temp directory.
+func qrFileSlug(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+			return r
+		default:
+			return '-'
+		}
+	}, s)
+}
+
+// writeQRFile saves the QR PNG to a stable per-receipt path in the temp dir and
+// returns it. Reusing the same name means repeated views overwrite rather than
+// litter the directory. The key parts are slugged and the result reduced to a
+// bare basename, so the write stays inside the temp directory for any input.
+func writeQRFile(provider, period string, png []byte) (string, error) {
+	name := filepath.Base(fmt.Sprintf("preuzmi-qr-%s-%s.png", qrFileSlug(provider), qrFileSlug(period)))
+	path := filepath.Join(os.TempDir(), name)
+	if err := os.WriteFile(path, png, 0o600); err != nil {
+		return "", err
+	}
+
+	return path, nil
+}
+
+// openInViewer opens path in the OS image viewer, best-effort: the path is
+// printed regardless, so a headless or unsupported environment still works.
+func openInViewer(path string) {
+	var name string
+	var args []string
+	switch runtime.GOOS {
+	case "darwin":
+		name, args = "open", []string{path}
+	case "linux":
+		name, args = "xdg-open", []string{path}
+	case "windows":
+		name, args = "rundll32", []string{"url.dll,FileProtocolHandler", path}
+	default:
+		return
+	}
+
+	// The opener name is a fixed per-OS constant and path is a sanitized basename
+	// (see writeQRFile) under os.TempDir that this process just wrote — not shell-
+	// interpreted, so there is no injection surface here.
+	// #nosec G204,G702 -- fixed opener + sanitized temp path we just wrote
+	if err := exec.Command(name, args...).Start(); err != nil {
+		// Best-effort: the caller prints the path regardless, so a missing opener
+		// (headless box, no xdg-open) is a debug note, not a failure.
+		log.Debug().Err(err).Str("path", path).Msg("Could not open QR image in the viewer")
+	}
 }
 
 // receiptsMark marks a single receipt paid (or unpaid) by stamping paid_at on

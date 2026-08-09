@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-  ghcr.io/cerealkiller97/preuzmi.me:1.4.0
+  ghcr.io/cerealkiller97/preuzmi.me:1.5.0
 ```
 
 ### docker compose
@@ -65,7 +65,7 @@ docker run -d --name preuzmi \
 ```yaml
 services:
   preuzmi:
-    image: ghcr.io/cerealkiller97/preuzmi.me:1.4.0
+    image: ghcr.io/cerealkiller97/preuzmi.me:1.5.0
     container_name: preuzmi.me
     ports:
       - "5500:5500"
@@ -260,6 +260,7 @@ Pregledaj i menjaj račune bez otvaranja dashboard-a — čita i piše u istu ba
 
 ```text
 preuzmi.me receipts list [MM/YYYY]        Ispiši račune za period (podrazumevano prethodni mesec)
+preuzmi.me receipts view <key>            Prikaži detalje računa i QR za plaćanje
 preuzmi.me receipts mark:as-paid   <key>  Označi račun kao plaćen (ključ je PROVAJDER/PERIOD, npr. eps/06-2026)
 preuzmi.me receipts mark:as-unpaid <key>  Ukloni oznaku plaćeno
 ```
@@ -273,6 +274,16 @@ preuzmi.me receipts mark:as-unpaid <key>  Ukloni oznaku plaćeno
 > **Kada se račun smatra plaćenim?** Kada ga **provajder potvrdi** — tj. kada je STATUS `plaćeno` / VERIFIKOVANO postavljeno. STATUS i VERIFIKOVANO su isti signal (VERIFIKOVANO je samo datum kada je STATUS postao `plaćeno`), pa se uvek slažu. **PLAĆENO** je tvoja sopstvena beleška da si poslao uplatu i nezavisno je od provajdera — račun može biti PLAĆENO a još ne i VERIFIKOVANO (kao `eps` gore: ti si platio, čeka se potvrda provajdera).
 
 Boje i okvir se automatski isključuju kada izlaz nije terminal; poštuje `NO_COLOR`, a `FORCE_COLOR` forsira boje pri prosleđivanju kroz pipe.
+
+#### `receipts view <key>`
+
+`receipts view` prikazuje detalje jednog računa i njegov NBS IPS **QR za plaćanje** direktno u terminalu, pa možeš da skeniraš i platiš bez otvaranja dashboard-a. Pored iznosa, statusa i datuma, ispisuje i podatke za plaćanje iz QR-a — primaoca, račun, svrhu i poziv na broj (`PRIMALAC` / `RAČUN` / `SVRHA` / `POZIV NA BROJ`).
+
+<p align="center">
+  <img src="docs/screenshots/receipts-view.png" alt="receipts view" width="560" />
+</p>
+
+Prikaz se **automatski bira** tako da QR uvek stigne do tvog ekrana: slika unutar terminala na terminalima koji to podržavaju (iTerm2, Warp), PNG otvoren u pregledaču slika na lokalnoj desktop sesiji, ili tekstualni QR na udaljenoj / headless ljusci (SSH, RPi Connect …). Režimi sa slikom koriste isti PNG koji servira i dashboard, koji se pouzdano skenira. Konkretan režim se može forsirati preko `PREUZMI_QR` promenljive okruženja — `inline` · `image` · `path` · `blocks` · `braille`.
 
 ## Zakazivanje (cron)
 

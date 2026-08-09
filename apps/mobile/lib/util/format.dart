@@ -13,12 +13,23 @@ const Map<String, String> _providerNames = {
   'eupravnik': 'E-UPRAVNIK',
 };
 
-/// Display name for a provider key (Latin). E.g. `mts` → `MTS`,
+/// Brand display name for a provider key (Latin). E.g. `mts` → `MTS`,
 /// `esanduce` → `E-SANDUČE`.
-String providerLabel(String key) {
+String providerBrand(String key) {
   final k = key.toLowerCase();
   return _providerNames[k] ?? key.toUpperCase();
 }
+
+/// Display name for a provider account. When [label] is set it is appended
+/// ("A1 — Mama"); otherwise just the brand. Mirrors `providerLabel` in script.js.
+String providerLabel(String key, [String? label]) {
+  final brand = providerBrand(key);
+  final l = (label ?? '').trim();
+  return l.isEmpty ? brand : '$brand — $l';
+}
+
+/// Card/header title for a receipt that already carries provider + optional label.
+String receiptLabel(Receipt r) => providerLabel(r.provider, r.label);
 
 final NumberFormat _money = NumberFormat.currency(
   locale: 'sr',

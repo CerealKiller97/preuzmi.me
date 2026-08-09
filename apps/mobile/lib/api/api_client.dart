@@ -105,9 +105,17 @@ class ApiClient {
         .toList();
   }
 
-  Future<void> markPaid(String period, String provider, bool paid) async {
+  Future<void> markPaid(
+    String period,
+    String provider,
+    bool paid, {
+    String account = '',
+  }) async {
     await _dio.put<dynamic>(
       '/api/receipts/$period/$provider/paid',
+      queryParameters: {
+        if (account.isNotEmpty) 'account': account,
+      },
       data: {'paid': paid},
     );
   }
@@ -171,14 +179,42 @@ class ApiClient {
     );
   }
 
-  // URL helpers for assets rendered by the browser/PDF viewer.
-  String pdfUrl(Receipt r) => '$baseUrl${r.url}';
-  String qrImageUrl(Receipt r) => '$baseUrl${r.url}/qr.png';
-  String qrPayloadUrl(Receipt r) => '$baseUrl${r.url}/qr.txt';
+  /// Path-only receipt URL (`/receipt/{period}/{provider}`), without the
+  /// `?account=` query — used to build nested QR routes correctly.
+  String _receiptPath(Receipt r) => '/receipt/${r.period}/${r.provider}';
+
+  Map<String, dynamic> _accountQuery(Receipt r) => {
+    if (r.account.isNotEmpty) 'account': r.account,
+  };
+
+  // URL helpers for assets rendered by the browser/PDF viewer. Named accounts
+  // carry `?account=<id>` on every receipt route (see accountParam on the
+  // server); QR lives under `/qr.png` / `/qr.txt` on the path, with the same
+  // query — never append path segments after the query string.
+  String pdfUrl(Receipt r) {
+    final q = _accountQuery(r);
+    final path = _receiptPath(r);
+    if (q.isEmpty) return '$baseUrl$path';
+    return '$baseUrl$path?account=${Uri.encodeQueryComponent(r.account)}';
+  }
+
+  String qrImageUrl(Receipt r) {
+    final path = '${_receiptPath(r)}/qr.png';
+    if (r.account.isEmpty) return '$baseUrl$path';
+    return '$baseUrl$path?account=${Uri.encodeQueryComponent(r.account)}';
+  }
+
+  String qrPayloadUrl(Receipt r) {
+    final path = '${_receiptPath(r)}/qr.txt';
+    if (r.account.isEmpty) return '$baseUrl$path';
+    return '$baseUrl$path?account=${Uri.encodeQueryComponent(r.account)}';
+  }
 
   Future<String> qrPayload(Receipt r) async {
+    final path = '${_receiptPath(r)}/qr.txt';
     final res = await _dio.get<String>(
-      '${r.url}/qr.txt',
+      path,
+      queryParameters: _accountQuery(r),
       options: Options(responseType: ResponseType.plain),
     );
     return (res.data ?? '').trim();

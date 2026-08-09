@@ -159,7 +159,7 @@ class _QrDialogState extends State<QrDialog> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${r.provider.toUpperCase()} · ${r.period}'.t,
+                          '${fmt.receiptLabel(r)} · ${r.period}'.t,
                           style: TextStyle(
                             fontSize: 14,
                             color: c.mutedForeground,

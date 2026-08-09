@@ -42,7 +42,7 @@ class ReceiptCard extends StatelessWidget {
           // Header: provider badge + due/paid badges.
           Row(
             children: [
-              AppBadge(fmt.providerLabel(receipt.provider)),
+              AppBadge(fmt.receiptLabel(receipt)),
               const Spacer(),
               if (showDueBadge) ...[
                 AppBadge(

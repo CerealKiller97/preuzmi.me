@@ -657,13 +657,29 @@ func iterm2InlineImage(png []byte) string {
 	return fmt.Sprintf("\033]1337;File=inline=1;size=%d;preserveAspectRatio=1:%s\a", len(png), b64)
 }
 
+// qrFileSlug reduces one part of a receipt key to a filename-safe token, keeping
+// only ASCII letters, digits, dash and underscore. Provider and period come from
+// user-supplied CLI arguments, so this guarantees the QR image name cannot carry
+// a path separator or "…" and escape the temp directory.
+func qrFileSlug(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+			return r
+		default:
+			return '-'
+		}
+	}, s)
+}
+
 // writeQRFile saves the QR PNG to a stable per-receipt path in the temp dir and
 // returns it. Reusing the same name means repeated views overwrite rather than
-// litter the directory.
+// litter the directory. The key parts are slugged and the result reduced to a
+// bare basename, so the write stays inside the temp directory for any input.
 func writeQRFile(provider, period string, png []byte) (string, error) {
-	name := fmt.Sprintf("preuzmi-qr-%s-%s.png", provider, strings.ReplaceAll(period, "/", "-"))
+	name := filepath.Base(fmt.Sprintf("preuzmi-qr-%s-%s.png", qrFileSlug(provider), qrFileSlug(period)))
 	path := filepath.Join(os.TempDir(), name)
-	if err := os.WriteFile(path, png, 0o644); err != nil {
+	if err := os.WriteFile(path, png, 0o600); err != nil {
 		return "", err
 	}
 
@@ -673,19 +689,28 @@ func writeQRFile(provider, period string, png []byte) (string, error) {
 // openInViewer opens path in the OS image viewer, best-effort: the path is
 // printed regardless, so a headless or unsupported environment still works.
 func openInViewer(path string) {
-	var cmd *exec.Cmd
+	var name string
+	var args []string
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = exec.Command("open", path)
+		name, args = "open", []string{path}
 	case "linux":
-		cmd = exec.Command("xdg-open", path)
+		name, args = "xdg-open", []string{path}
 	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
+		name, args = "rundll32", []string{"url.dll,FileProtocolHandler", path}
 	default:
 		return
 	}
 
-	_ = cmd.Start()
+	// The opener name is a fixed per-OS constant and path is a sanitized basename
+	// (see writeQRFile) under os.TempDir that this process just wrote — not shell-
+	// interpreted, so there is no injection surface here.
+	// #nosec G204,G702 -- fixed opener + sanitized temp path we just wrote
+	if err := exec.Command(name, args...).Start(); err != nil {
+		// Best-effort: the caller prints the path regardless, so a missing opener
+		// (headless box, no xdg-open) is a debug note, not a failure.
+		log.Debug().Err(err).Str("path", path).Msg("Could not open QR image in the viewer")
+	}
 }
 
 // receiptsMark marks a single receipt paid (or unpaid) by stamping paid_at on

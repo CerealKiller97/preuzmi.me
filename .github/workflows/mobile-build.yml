@@ -1,8 +1,9 @@
 name: mobile build
 
 # Produces production APK + (unsigned) IPA artifacts. Run manually, or
-# automatically when a vX.Y.Z tag is pushed. Artifacts are attached to the
-# workflow run (Actions → run → Artifacts).
+# automatically when a vX.Y.Z tag is pushed. On a tag the binaries are also
+# attached to that tag's GitHub Release (which release.yml creates from the
+# CHANGELOG); on a manual run they are only kept as workflow-run artifacts.
 on:
   workflow_dispatch:
   push:
@@ -13,8 +14,9 @@ concurrency:
   group: mobile-build-${{ github.ref }}
   cancel-in-progress: false
 
+# contents: write lets the tag runs upload the APK / IPA as Release assets.
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   apk:
@@ -49,6 +51,15 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # On a tag, add the APK to that version's GitHub Release. Only the assets
+      # are touched (no name/body), so release.yml still owns the release notes.
+      - name: Attach APK to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apps/mobile/dist/*.apk
+          fail_on_unmatched_files: true
+
   ipa:
     name: build release IPA (unsigned)
     runs-on: macos-latest
@@ -76,3 +87,11 @@ jobs:
           path: apps/mobile/dist/*.ipa
           if-no-files-found: error
           retention-days: 30
+
+      # On a tag, add the unsigned IPA to that version's GitHub Release.
+      - name: Attach IPA to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apps/mobile/dist/*.ipa
+          fail_on_unmatched_files: true

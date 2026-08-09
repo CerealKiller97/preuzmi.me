@@ -134,7 +134,9 @@ func receiptsUsage() {
 		"    The display is auto-detected: an inline image on terminals that\n"+
 		"    support it (iTerm2, Warp), a PNG opened in the viewer on a desktop,\n"+
 		"    or a text QR on a remote/headless shell. Force it with PREUZMI_QR:\n"+
-		"      inline  image / open  path  |  blocks  braille  (text QR)\n"+
+		"      inline · image · open · path · blocks · braille\n"+
+		"    For a QR you must scan over SSH / RPi Connect, use PREUZMI_QR=blocks\n"+
+		"    (full-block text QR); braille is a smaller fallback if it is too wide.\n"+
 		"  mark:as-paid <key>\n"+
 		"    Mark the receipt with the given key as paid\n"+
 		"  mark:as-unpaid <key>\n"+
@@ -464,8 +466,8 @@ const (
 	qrInline   qrMode = iota // real raster drawn in place (iTerm2/Warp protocol)
 	qrFileOpen               // PNG written to disk and opened in a desktop viewer
 	qrFilePath               // PNG written to disk; only its path is printed
-	qrBlocks                 // half-block text QR
-	qrBraille                // compact braille text QR
+	qrBlocks                 // full-block text QR (most scan-robust)
+	qrBraille                // compact half-block text QR
 )
 
 // emitReceiptQR shows a receipt's payment QR, picking the rendering that will
@@ -526,9 +528,9 @@ func parseQRModeOverride(v string) (qrMode, bool) {
 		return qrFileOpen, true
 	case "path":
 		return qrFilePath, true
-	case "blocks", "block", "ascii":
+	case "blocks", "block", "ascii", "solid", "ansi", "big":
 		return qrBlocks, true
-	case "braille", "compact":
+	case "braille", "compact", "small":
 		return qrBraille, true
 	default:
 		return 0, false

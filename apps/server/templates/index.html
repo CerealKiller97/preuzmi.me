@@ -125,7 +125,14 @@
         <article class="card animate-fade-in-up flex h-full flex-col p-5 transition-shadow hover:shadow-md"
                  :style="`--stagger: ${index}`">
           <div class="flex items-center justify-between gap-2">
-            <span class="badge badge-secondary shrink-0" x-text="providerLabel(item.provider)"></span>
+            <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+              <span class="badge badge-secondary shrink-0" x-text="providerLabel(item.provider)"></span>
+              {{/* Account label ("Mama") — only for multi-account providers; solo receipts carry no account. */}}
+              <span x-show="item.account" x-cloak
+                    class="badge shrink-0 max-w-[10rem] truncate bg-transparent font-normal text-muted-foreground"
+                    :title="accountName(item)"
+                    x-text="accountName(item)"></span>
+            </div>
             <div class="flex items-center gap-1.5">
               {{/* Overdue / due-soon only for unpaid receipts with a known deadline. */}}
               <span x-show="!isPaid(item) && dueLabel(item)"
@@ -239,7 +246,7 @@
               Plati skeniranjem
             </h3>
             <p class="mt-0.5 truncate text-sm text-muted-foreground"
-               x-text="qrItem ? (qrItem.provider.toUpperCase() + ' · ' + qrItem.period) : ''"></p>
+               x-text="qrItem ? (providerLabel(qrItem.provider) + (accountName(qrItem) ? ' · ' + accountName(qrItem) : '') + ' · ' + qrItem.period) : ''"></p>
           </div>
           <button type="button" class="btn btn-ghost btn-icon shrink-0" @click="closeQR()" aria-label="Zatvori">
             <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor"

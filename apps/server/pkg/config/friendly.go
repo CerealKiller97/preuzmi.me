@@ -37,6 +37,12 @@ func FriendlyError(err error) string {
 		return "Za SMTP obaveštenja obavezna su polja Od i Za."
 	case strings.Contains(msg, "telegram.bot_token or telegram.chat_id"):
 		return "Za Telegram obaveštenja obavezni su bot token i chat ID."
+	case strings.Contains(msg, "has multiple accounts but account"):
+		return "Kada provajder ima više naloga, svaki mora imati oznaku (id)."
+	case strings.Contains(msg, "duplicate account id"):
+		return "Oznake naloga moraju biti jedinstvene kod istog provajdera."
+	case strings.Contains(msg, "account id") && strings.Contains(msg, "is invalid"):
+		return "Oznaka naloga sme da sadrži samo mala slova, cifre, „-“ i „_“."
 	case strings.Contains(msg, "invalid character") || strings.Contains(msg, "cannot unmarshal"):
 		return "Podaci nisu u ispravnom formatu."
 	default:

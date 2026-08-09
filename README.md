@@ -226,7 +226,7 @@ Prefer to run it without Docker? You'll need:
 
 ```bash
 git clone https://github.com/CerealKiller97/preuzmi.me.git
-cd preuzmi.me
+cd preuzmi.me/apps/server
 
 # CSS bundle (once, or after style changes)
 npm install
@@ -235,6 +235,8 @@ npm run build
 # Copy / edit config, then:
 go run . serve
 ```
+
+> The Go server now lives under [`apps/server`](apps/server) (see [Project layout](#project-layout)); run every `go` / `task` / `npm` command from there.
 
 Open `http://localhost:5500/dashboard`, then run a download pass:
 
@@ -291,14 +293,40 @@ Running from source instead? Schedule it from the host's crontab — `check_unti
 
 ## Project layout
 
+The repo is a monorepo: the Go web server and the Flutter mobile client are
+sibling apps under `apps/`.
+
 ```text
-assets/          CSS, JS, favicons, Open Graph art
-docs/screenshots README UI captures
-pkg/config       Load / validate / atomic save
-pkg/container    DI + hot reload
-pkg/http         Dashboard, stats, settings, APIs
-pkg/services/*   Providers, storage, refresh, notify, payments
-templates/       HTML (Alpine-driven)
+apps/server/                 Go web app + JSON API (run go/task/npm from here)
+  assets/                    CSS, JS, favicons, Open Graph art
+  pkg/config                 Load / validate / atomic save
+  pkg/container              DI + hot reload
+  pkg/http                   Dashboard, stats, settings, APIs
+  pkg/services/*             Providers, storage, refresh, notify, payments
+  templates/                 HTML (Alpine-driven)
+apps/mobile/                 Flutter app (iOS + Android) — same UI, consumes the JSON API
+docs/screenshots            README UI captures
+```
+
+## Mobile app
+
+[`apps/mobile`](apps/mobile) is a Flutter client that mirrors the web UI
+(Receipts, Stats, Settings) and talks to a running server over its JSON API.
+Point it at your server from **Settings → Server URL** (default
+`http://localhost:5500`; Android emulator uses `http://10.0.2.2:5500`).
+
+```bash
+cd apps/mobile
+flutter pub get
+flutter run
+```
+
+Production builds (output to `apps/mobile/dist/`, see [scripts/README](apps/mobile/scripts/README.md)):
+
+```bash
+cd apps/mobile
+scripts/build-apk.sh            # release APK
+scripts/build-ipa.sh            # unsigned release IPA (SIGNED=1 for a signed one)
 ```
 
 ## Open Graph

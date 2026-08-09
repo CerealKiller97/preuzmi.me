@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/img/og.png" alt="Preuzmi.me — automatic receipt downloads" width="880" />
+  <img src="apps/server/assets/img/og.png" alt="Preuzmi.me — automatic receipt downloads" width="880" />
 </p>
 
 <h1 align="center">Preuzmi.me</h1>

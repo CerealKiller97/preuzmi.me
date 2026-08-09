@@ -113,9 +113,7 @@ class ApiClient {
   }) async {
     await _dio.put<dynamic>(
       '/api/receipts/$period/$provider/paid',
-      queryParameters: {
-        if (account.isNotEmpty) 'account': account,
-      },
+      queryParameters: {if (account.isNotEmpty) 'account': account},
       data: {'paid': paid},
     );
   }

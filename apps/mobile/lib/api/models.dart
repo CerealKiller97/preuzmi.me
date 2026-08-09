@@ -29,8 +29,10 @@ class Receipt {
   });
 
   final String provider;
+
   /// Provider account id ("" for a solo deployment).
   final String account;
+
   /// Display name for [account] ("Mama"); empty for solo / unlabeled.
   final String label;
   final String period;
@@ -217,6 +219,7 @@ class ProviderStatus {
   });
 
   final String name;
+
   /// Account id ("" for solo); matches config Account.ID.
   final String account;
   final String label;

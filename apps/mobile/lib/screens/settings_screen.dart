@@ -728,7 +728,8 @@ class _SettingsEditorState extends ConsumerState<_SettingsEditor> {
         for (final a in withIds)
           {
             if ((a['id'] ?? '').isNotEmpty) 'id': a['id'],
-            if ((a['label'] ?? '').trim().isNotEmpty) 'label': a['label']!.trim(),
+            if ((a['label'] ?? '').trim().isNotEmpty)
+              'label': a['label']!.trim(),
             'identifier': (a['identifier'] ?? '').trim(),
             'password': a['password'] ?? '',
             if ((a['mailbox'] ?? '').trim().isNotEmpty)

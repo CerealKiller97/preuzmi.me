@@ -140,10 +140,12 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
     final buckets = <String, List<Receipt>>{};
     for (final r in items) {
       final key = '${r.provider.toLowerCase()}\x00${r.account}';
-      buckets.putIfAbsent(key, () {
-        order.add(key);
-        return <Receipt>[];
-      }).add(r);
+      buckets
+          .putIfAbsent(key, () {
+            order.add(key);
+            return <Receipt>[];
+          })
+          .add(r);
     }
     return [
       for (final key in order)

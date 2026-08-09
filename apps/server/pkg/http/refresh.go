@@ -48,8 +48,8 @@ func startRefreshHandler(
 		}
 
 		if !cfg.RefreshAllowed() {
-			w.WriteHeader(http.StatusForbidden)
-			writeJSON(w, svc.State().WithWindow(cfg.CheckUntil, false))
+			writeJSONStatus(w, http.StatusForbidden,
+				svc.State().WithWindow(cfg.CheckUntil, false))
 
 			return
 		}
@@ -90,8 +90,7 @@ func startRefreshHandler(
 			// Already running is not a failure, the client just gets the
 			// in-flight state back.
 			if errors.Is(err, refresh.ErrAlreadyRunning) {
-				w.WriteHeader(http.StatusConflict)
-				writeJSON(w, state)
+				writeJSONStatus(w, http.StatusConflict, state)
 
 				return
 			}
@@ -104,8 +103,7 @@ func startRefreshHandler(
 
 		log.Info().Interface("providers", pairs).Msg("Refresh started from the UI")
 
-		w.WriteHeader(http.StatusAccepted)
-		writeJSON(w, state)
+		writeJSONStatus(w, http.StatusAccepted, state)
 	}
 }
 

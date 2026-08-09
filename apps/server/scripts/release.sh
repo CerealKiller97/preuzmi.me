@@ -51,13 +51,16 @@ done
 
 [[ -n "$BUMP" ]] || usage 1
 
-# Run from the repo root so ./version and ./package.json resolve regardless of
-# where the script is invoked from.
+# Run from the repo root so git operations and CHANGELOG.md resolve regardless
+# of where the script is invoked from. The Go app (and its ./version +
+# package.json) lives under apps/server since the monorepo split.
 ROOT="$(git rev-parse --show-toplevel)" || die "not inside a git repository"
 cd "$ROOT"
 
-VERSION_FILE="version"
-[[ -f "$VERSION_FILE" ]] || die "missing $VERSION_FILE at repo root"
+SERVER_DIR="apps/server"
+VERSION_FILE="${SERVER_DIR}/version"
+PACKAGE_JSON="${SERVER_DIR}/package.json"
+[[ -f "$VERSION_FILE" ]] || die "missing $VERSION_FILE"
 
 SEMVER_RE='^[0-9]+\.[0-9]+\.[0-9]+$'
 
@@ -98,7 +101,7 @@ printf '%s' "$new" >"$VERSION_FILE"
 # Keep package.json's version field in step (best-effort; only the first
 # "version" key). awk keeps this portable across BSD (macOS) and GNU — the
 # sed "0,/re/" address form is GNU-only and no-ops silently on BSD sed.
-if [[ -f package.json ]]; then
+if [[ -f "$PACKAGE_JSON" ]]; then
 	tmp="$(mktemp)"
 	awk -v v="$new" '
 		!done && /"version"[[:space:]]*:/ {
@@ -106,12 +109,12 @@ if [[ -f package.json ]]; then
 			done = 1
 		}
 		{ print }
-	' package.json >"$tmp" && mv "$tmp" package.json
+	' "$PACKAGE_JSON" >"$tmp" && mv "$tmp" "$PACKAGE_JSON"
 fi
 
 # --- commit and tag -----------------------------------------------------------
 git add "$VERSION_FILE"
-[[ -f package.json ]] && git add package.json
+[[ -f "$PACKAGE_JSON" ]] && git add "$PACKAGE_JSON"
 
 git commit -m "chore(release): ${tag}"
 git tag -a "${tag}" -m "Release ${tag}"

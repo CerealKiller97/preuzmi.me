@@ -77,12 +77,26 @@ func Routes(c *container.Container) {
 		startRefreshHandler(c.GetConfig(), c.GetProviders, c.SkipAlreadyDownloaded, getRefresh(), c.NotifyRefreshResults)(w, r)
 	})
 	http.HandleFunc("POST /api/notifications/test", testNotificationHandler(c.GetNotifier()))
+	http.HandleFunc("GET /api/settings", settingsAPIHandler(c.GetConfig(), c.GetVersion(), c.GetNotifier()))
 	http.HandleFunc("PUT /api/settings", updateSettingsHandler(c.GetConfig(), c.Reload))
 }
 
 // writeJSON encodes v as the response body.
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Err(err).Msg("Error encoding response")
+	}
+}
+
+// writeJSONStatus writes v as JSON with an explicit status code. The
+// Content-Type MUST be set before WriteHeader — once WriteHeader is called the
+// header map is locked, so a later Set is ignored and Go sniffs the body as
+// text/plain. Strict JSON clients (e.g. Dio) then refuse to decode it.
+func writeJSONStatus(w http.ResponseWriter, code int, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(code)
 
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		log.Err(err).Msg("Error encoding response")

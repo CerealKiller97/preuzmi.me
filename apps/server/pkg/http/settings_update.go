@@ -26,8 +26,7 @@ func updateSettingsHandler(cfg *config.Config, reload func(*config.Config)) Hand
 
 		var incoming config.Config
 		if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			writeJSON(w, settingsUpdateResponse{
+			writeJSONStatus(w, http.StatusBadRequest, settingsUpdateResponse{
 				OK:    false,
 				Error: script.Apply(prev.Lang, "Neispravan JSON u zahtevu."),
 			})
@@ -41,8 +40,7 @@ func updateSettingsHandler(cfg *config.Config, reload func(*config.Config)) Hand
 		incoming.Application = prev.Application
 
 		if err := incoming.Validate(); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			writeJSON(w, settingsUpdateResponse{
+			writeJSONStatus(w, http.StatusBadRequest, settingsUpdateResponse{
 				OK:    false,
 				Error: script.Apply(incoming.Lang, config.FriendlyError(err)),
 			})
@@ -57,8 +55,7 @@ func updateSettingsHandler(cfg *config.Config, reload func(*config.Config)) Hand
 		path, err := config.Path()
 		if err != nil {
 			log.Err(err).Msg("Could not resolve config path")
-			w.WriteHeader(http.StatusInternalServerError)
-			writeJSON(w, settingsUpdateResponse{
+			writeJSONStatus(w, http.StatusInternalServerError, settingsUpdateResponse{
 				OK:    false,
 				Error: script.Apply(incoming.Lang, "Ne mogu da pronađem config.json."),
 			})
@@ -67,8 +64,7 @@ func updateSettingsHandler(cfg *config.Config, reload func(*config.Config)) Hand
 
 		if err := config.Save(path, incoming); err != nil {
 			log.Err(err).Msg("Could not write config.json")
-			w.WriteHeader(http.StatusInternalServerError)
-			writeJSON(w, settingsUpdateResponse{
+			writeJSONStatus(w, http.StatusInternalServerError, settingsUpdateResponse{
 				OK:    false,
 				Error: script.Apply(incoming.Lang, "Čuvanje config.json nije uspelo."),
 			})

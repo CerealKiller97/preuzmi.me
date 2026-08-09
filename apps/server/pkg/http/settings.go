@@ -272,6 +272,99 @@ func writable(dir string) bool {
 	return os.Remove(name) == nil
 }
 
+// APIProviderStatus is the JSON-friendly provider summary for GET /api/settings.
+type APIProviderStatus struct {
+	Name        string `json:"name"`
+	Identifier  string `json:"identifier"`
+	HasPassword bool   `json:"has_password"`
+	Configured  bool   `json:"configured"`
+	Implemented bool   `json:"implemented"`
+}
+
+// APISettings is the JSON the mobile client reads to render and edit settings.
+// Form is the editable config (secrets blanked) that goes straight back to
+// PUT /api/settings; the has_* flags say which secrets already exist so the UI
+// can show a "leave blank to keep" hint instead of wiping them. It mirrors the
+// data the server-rendered settings page (settingsHandler) puts on screen.
+type APISettings struct {
+	Form                 config.Config       `json:"form"`
+	Version              string              `json:"version"`
+	Storage              string              `json:"storage"`
+	StorageTarget        string              `json:"storage_target"`
+	DownloadPath         string              `json:"download_path"`
+	Providers            []APIProviderStatus `json:"providers"`
+	IgnoredKeys          []string            `json:"ignored_keys"`
+	ReceiptCount         int                 `json:"receipt_count"`
+	DownloadPathExists   bool                `json:"download_path_exists"`
+	DownloadPathWritable bool                `json:"download_path_writable"`
+	NotifyCanTest        bool                `json:"notify_can_test"`
+	HasS3Access          bool                `json:"has_s3_access"`
+	HasS3Secret          bool                `json:"has_s3_secret"`
+	HasSMTPPass          bool                `json:"has_smtp_pass"`
+	HasTgToken           bool                `json:"has_tg_token"`
+}
+
+// settingsAPIHandler returns the current settings as JSON for the mobile client.
+// It reuses the same redaction/edit-form helpers as the HTML settings page so
+// the two never drift: Form comes from editableForm (secrets blanked), and the
+// status fields mirror SettingsPageData.
+func settingsAPIHandler(cfg *config.Config, version string, notifier *notify.Service) Handler {
+	return func(w http.ResponseWriter, r *http.Request) {
+		names := make([]string, 0, len(cfg.Providers))
+		for name := range cfg.Providers {
+			names = append(names, string(name))
+		}
+		sort.Strings(names)
+
+		providers := make([]APIProviderStatus, 0, len(names))
+		for _, name := range names {
+			creds := cfg.Providers[config.Provider(name)]
+			providers = append(providers, APIProviderStatus{
+				Name:        name,
+				Identifier:  creds.Username,
+				HasPassword: creds.Password != "",
+				Configured:  creds.Username != "" && creds.Password != "",
+				Implemented: container.IsImplemented(name),
+			})
+		}
+
+		dir := cfg.DownloadPath
+		_, statErr := os.Stat(dir)
+		exists := statErr == nil
+
+		receipts, err := scanReceipts(dir, nil)
+		if err != nil {
+			log.Err(err).Msg("Error counting receipts for settings API")
+		}
+
+		storageTarget := cfg.DownloadPath
+		if cfg.Storage == config.StorageS3 {
+			storageTarget = cfg.S3.Bucket
+		}
+
+		wd, _ := os.Getwd()
+		configPath := path.Join(wd, "config.json")
+
+		writeJSON(w, APISettings{
+			Form:                 editableForm(cfg),
+			Version:              version,
+			Storage:              cfg.Storage,
+			StorageTarget:        storageTarget,
+			DownloadPath:         cfg.DownloadPath,
+			Providers:            providers,
+			IgnoredKeys:          ignoredConfigKeys(configPath),
+			ReceiptCount:         len(receipts),
+			DownloadPathExists:   exists,
+			DownloadPathWritable: exists && writable(dir),
+			NotifyCanTest:        notifier.CanTest(),
+			HasS3Access:          cfg.S3.AccessKey != "",
+			HasS3Secret:          cfg.S3.SecretKey != "",
+			HasSMTPPass:          cfg.Notifications.SMTP.Password != "",
+			HasTgToken:           cfg.Notifications.Telegram.BotToken != "",
+		})
+	}
+}
+
 func settingsHandler(cfg *config.Config, version string, notifier *notify.Service) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
 

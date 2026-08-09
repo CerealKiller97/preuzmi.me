@@ -17,6 +17,9 @@ jobs:
   lint:
     name: golangci-lint
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/server
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -24,9 +27,9 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: apps/server/go.mod
           cache: true
-          cache-dependency-path: go.sum
+          cache-dependency-path: apps/server/go.sum
 
       - name: Set up Task
         uses: arduino/setup-task@v2

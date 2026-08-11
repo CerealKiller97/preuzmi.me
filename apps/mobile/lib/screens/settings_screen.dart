@@ -575,11 +575,36 @@ class _SettingsEditorState extends ConsumerState<_SettingsEditor> {
   // Serbian Cyrillic → Latin, so an account name typed in Cyrillic still yields
   // a valid ASCII id slug. Mirrors web settings.js SR_CYR_TO_LAT.
   static const Map<String, String> _srCyrToLat = {
-    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'ђ': 'dj', 'е': 'e',
-    'ж': 'z', 'з': 'z', 'и': 'i', 'ј': 'j', 'к': 'k', 'л': 'l', 'љ': 'lj',
-    'м': 'm', 'н': 'n', 'њ': 'nj', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's',
-    'т': 't', 'ћ': 'c', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'c', 'ч': 'c',
-    'џ': 'dz', 'ш': 's',
+    'а': 'a',
+    'б': 'b',
+    'в': 'v',
+    'г': 'g',
+    'д': 'd',
+    'ђ': 'dj',
+    'е': 'e',
+    'ж': 'z',
+    'з': 'z',
+    'и': 'i',
+    'ј': 'j',
+    'к': 'k',
+    'л': 'l',
+    'љ': 'lj',
+    'м': 'm',
+    'н': 'n',
+    'њ': 'nj',
+    'о': 'o',
+    'п': 'p',
+    'р': 'r',
+    'с': 's',
+    'т': 't',
+    'ћ': 'c',
+    'у': 'u',
+    'ф': 'f',
+    'х': 'h',
+    'ц': 'c',
+    'ч': 'c',
+    'џ': 'dz',
+    'ш': 's',
   };
 
   String _slugify(String value) {
@@ -1065,8 +1090,9 @@ class _SettingsEditorState extends ConsumerState<_SettingsEditor> {
                                     'Ime naloga'.t,
                                     'prov.$base.$i.label',
                                     onChanged: (v) {
-                                      _ctl['prov.$base.$i.id']?.text =
-                                          _slugify(v);
+                                      _ctl['prov.$base.$i.id']?.text = _slugify(
+                                        v,
+                                      );
                                       setState(() {});
                                     },
                                   ),

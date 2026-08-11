@@ -36,10 +36,11 @@ void main() {
 
   group('receiptLabel', () {
     test('combines provider and label from the receipt', () {
-      expect(receiptLabel(buildReceipt(provider: 'a1', label: 'Tata')),
-          'A1 — Tata');
       expect(
-          receiptLabel(buildReceipt(provider: 'mts', label: '')), 'MTS');
+        receiptLabel(buildReceipt(provider: 'a1', label: 'Tata')),
+        'A1 — Tata',
+      );
+      expect(receiptLabel(buildReceipt(provider: 'mts', label: '')), 'MTS');
     });
   });
 

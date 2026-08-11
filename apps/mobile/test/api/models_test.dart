@@ -61,8 +61,11 @@ void main() {
     });
 
     test('includes account when present', () {
-      final r = Receipt.fromJson(
-          {'period': '06-2026', 'provider': 'a1', 'account': 'mama'});
+      final r = Receipt.fromJson({
+        'period': '06-2026',
+        'provider': 'a1',
+        'account': 'mama',
+      });
       expect(r.key, '06-2026/a1/mama');
     });
   });

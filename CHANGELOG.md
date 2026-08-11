@@ -10,6 +10,12 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+## [1.7.2] - 11.08.2026
+
+### 🎨 Changed
+
+- 🧾 **Cleaner receipt cards, matched across web and mobile.** The card's status and file details were reworked for a tidier read. The provider-confirmed **Verifikovano** mark now sits next to the paid badge in the card header as a compact check icon (hover on web or long-press on mobile shows the label), the **download date** gets a small download icon and sits flush to the card's right edge, and the paid line is simplified to just "Plaćeno &lt;date&gt;". The web dashboard and the mobile app now look identical.
+
 ## [1.7.1] - 11.08.2026
 
 ### 🐛 Fixed
@@ -150,7 +156,8 @@ stats, and notifications, so no bill goes unintentionally unpaid.
 - 🐳 Multi-arch (amd64 + arm64), distroless Docker image published to GHCR.
 - 🌐 Bilingual documentation — English and Serbian.
 
-[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.7.1...HEAD
+[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.7.2...HEAD
+[1.7.2]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.5.0...v1.6.0

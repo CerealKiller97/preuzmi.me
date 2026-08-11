@@ -14,8 +14,11 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
 cd "$MOBILE_DIR"
 mkdir -p "$DIST_DIR"
 version="$(version_tag)"
+name="$(build_name)"
+number="$(build_number)"
 
 log "Flutter: $FLUTTER"
+log "Version: ${name}+${number}"
 log "Java:    ${JAVA_HOME:-<system>}"
 log "Android: ${ANDROID_HOME:-<system>}"
 
@@ -24,7 +27,7 @@ log "Fetching packages…"
 
 if [[ "${SPLIT:-0}" == "1" ]]; then
   log "Building split-per-ABI release APKs…"
-  "$FLUTTER" build apk --release --split-per-abi
+  "$FLUTTER" build apk --release --split-per-abi --build-name="$name" --build-number="$number"
   for abi in armeabi-v7a arm64-v8a x86_64; do
     src="build/app/outputs/flutter-apk/app-${abi}-release.apk"
     [[ -f "$src" ]] || continue
@@ -34,7 +37,7 @@ if [[ "${SPLIT:-0}" == "1" ]]; then
   done
 else
   log "Building universal release APK…"
-  "$FLUTTER" build apk --release
+  "$FLUTTER" build apk --release --build-name="$name" --build-number="$number"
   src="build/app/outputs/flutter-apk/app-release.apk"
   dest="$DIST_DIR/preuzmi-${version}.apk"
   cp "$src" "$dest"

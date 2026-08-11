@@ -24,15 +24,18 @@ fi
 cd "$MOBILE_DIR"
 mkdir -p "$DIST_DIR"
 version="$(version_tag)"
+name="$(build_name)"
+number="$(build_number)"
 
 log "Flutter: $FLUTTER"
+log "Version: ${name}+${number}"
 log "Fetching packages…"
 "$FLUTTER" pub get
 
 if [[ "${SIGNED:-0}" == "1" ]]; then
   method="${EXPORT_METHOD:-development}"
   log "Building SIGNED .ipa (export method: $method)…"
-  "$FLUTTER" build ipa --release --export-method "$method"
+  "$FLUTTER" build ipa --release --export-method "$method" --build-name="$name" --build-number="$number"
   src="$(ls -t build/ios/ipa/*.ipa 2>/dev/null | head -1 || true)"
   if [[ -z "$src" ]]; then
     echo "error: no .ipa produced. Is signing configured in Xcode?" >&2
@@ -44,7 +47,7 @@ if [[ "${SIGNED:-0}" == "1" ]]; then
   log "→ $dest ($(du -h "$dest" | cut -f1))"
 else
   log "Building UNSIGNED release .app…"
-  "$FLUTTER" build ios --release --no-codesign
+  "$FLUTTER" build ios --release --no-codesign --build-name="$name" --build-number="$number"
   app="build/ios/iphoneos/Runner.app"
   [[ -d "$app" ]] || { echo "error: $app not found." >&2; exit 1; }
 

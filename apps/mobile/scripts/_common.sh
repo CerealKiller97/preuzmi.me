@@ -38,16 +38,32 @@ if [[ -z "${JAVA_HOME:-}" ]]; then
   done
 fi
 
-# App version from pubspec (e.g. "1.0.0+1" -> "1.0.0+1"); '+' is filename-safe
-# once turned into '_'.
+# App version, shaped "<name>[+<number>]" (e.g. "1.7.0+10700" or "1.7.0"):
+#   1. an explicit APP_VERSION wins — CI sets it from the pushed vX.Y.Z tag so
+#      the build carries the release version, not whatever pubspec.yaml holds;
+#   2. otherwise the pubspec value (the local-dev fallback).
 app_version() {
+  if [[ -n "${APP_VERSION:-}" ]]; then
+    echo "${APP_VERSION}"
+    return
+  fi
   local v
   v="$(grep '^version:' "$MOBILE_DIR/pubspec.yaml" | awk '{print $2}' | tr -d '\r')"
   echo "${v:-0.0.0}"
 }
 
-version_tag() {
-  app_version | tr '+' '_'
+# Flutter --build-name: the semver before '+', e.g. "1.7.0".
+build_name() { app_version | cut -d'+' -f1; }
+
+# Flutter --build-number: the integer after '+', or 1 when the version has none.
+build_number() {
+  local v
+  v="$(app_version)"
+  [[ "$v" == *+* ]] && echo "${v##*+}" || echo "1"
 }
+
+# Version used in the artifact filenames — the semver only, so the outputs are
+# preuzmi-<version>.apk / preuzmi-<version>-unsigned.ipa (as README/CHANGELOG say).
+version_tag() { build_name; }
 
 log() { printf '\033[1;36m▸ %s\033[0m\n' "$*"; }

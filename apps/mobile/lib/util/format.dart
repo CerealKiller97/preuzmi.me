@@ -90,6 +90,7 @@ int? daysUntilDue(Receipt r) {
 
 bool isOverdue(Receipt r) {
   final d = daysUntilDue(r);
+
   return d != null && d < 0;
 }
 
@@ -102,11 +103,26 @@ bool isPaid(Receipt r) => r.paid || isProviderPaid(r);
 /// Short badge label for unpaid receipts with a known deadline. `''` hides it.
 String dueLabel(Receipt r) {
   final days = daysUntilDue(r);
-  if (days == null) return '';
-  if (days < 0) return 'Dospeo';
-  if (days == 0) return 'Danas';
-  if (days == 1) return 'Sutra';
-  if (days <= 3) return 'Za $days dana';
+  if (days == null) {
+    return '';
+  }
+
+  if (days < 0) {
+    return 'Dospeo';
+  }
+
+  if (days == 0) {
+    return 'Danas';
+  }
+
+  if (days == 1) {
+    return 'Sutra';
+  }
+
+  if (days <= 3) {
+    return 'Za $days dana';
+  }
+
   return '';
 }
 

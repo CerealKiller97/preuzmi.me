@@ -572,9 +572,20 @@ class _SettingsEditorState extends ConsumerState<_SettingsEditor> {
 
   bool _isMulti(String base) => _accounts(base).length > 1;
 
+  // Serbian Cyrillic → Latin, so an account name typed in Cyrillic still yields
+  // a valid ASCII id slug. Mirrors web settings.js SR_CYR_TO_LAT.
+  static const Map<String, String> _srCyrToLat = {
+    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'ђ': 'dj', 'е': 'e',
+    'ж': 'z', 'з': 'z', 'и': 'i', 'ј': 'j', 'к': 'k', 'л': 'l', 'љ': 'lj',
+    'м': 'm', 'н': 'n', 'њ': 'nj', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's',
+    'т': 't', 'ћ': 'c', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'c', 'ч': 'c',
+    'џ': 'dz', 'ш': 's',
+  };
+
   String _slugify(String value) {
-    var s = value
-        .toLowerCase()
+    var s = value.toLowerCase();
+    _srCyrToLat.forEach((k, v) => s = s.replaceAll(k, v));
+    s = s
         .replaceAll(RegExp(r'[àáâãäå]'), 'a')
         .replaceAll(RegExp(r'[èéêë]'), 'e')
         .replaceAll(RegExp(r'[ìíîï]'), 'i')
@@ -1042,16 +1053,24 @@ class _SettingsEditorState extends ConsumerState<_SettingsEditor> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: _textField(
-                                  'Ime naloga'.t,
-                                  'prov.$base.$i.label',
+                          // Name + derived id preview — only for multi-account
+                          // providers, matching the web settings form. The id is
+                          // slugified from the name automatically (no manual id).
+                          if (_isMulti(base)) ...[
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: _textField(
+                                    'Ime naloga'.t,
+                                    'prov.$base.$i.label',
+                                    onChanged: (v) {
+                                      _ctl['prov.$base.$i.id']?.text =
+                                          _slugify(v);
+                                      setState(() {});
+                                    },
+                                  ),
                                 ),
-                              ),
-                              if (_isMulti(base)) ...[
                                 const SizedBox(width: 8),
                                 Padding(
                                   padding: const EdgeInsets.only(top: 22),
@@ -1062,14 +1081,19 @@ class _SettingsEditorState extends ConsumerState<_SettingsEditor> {
                                   ),
                                 ),
                               ],
-                            ],
-                          ),
-                          if (_isMulti(base))
-                            _textField(
-                              'ID naloga'.t,
-                              'prov.$base.$i.id',
-                              mono: true,
                             ),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Text(
+                                'id: ${_ctl['prov.$base.$i.id']?.text ?? ''}',
+                                style: TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontSize: 12,
+                                  color: c.mutedForeground,
+                                ),
+                              ),
+                            ),
+                          ],
                           _textField(
                             'Nalog'.t,
                             'prov.$base.$i.identifier',
@@ -1100,7 +1124,12 @@ class _SettingsEditorState extends ConsumerState<_SettingsEditor> {
 
   // --- field builders -------------------------------------------------------
 
-  Widget _textField(String label, String key, {bool mono = false}) {
+  Widget _textField(
+    String label,
+    String key, {
+    bool mono = false,
+    ValueChanged<String>? onChanged,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -1111,6 +1140,7 @@ class _SettingsEditorState extends ConsumerState<_SettingsEditor> {
             controller: _ctl[key],
             autocorrect: false,
             enableSuggestions: false,
+            onChanged: onChanged,
             style: mono
                 ? const TextStyle(fontFamily: 'monospace', fontSize: 13)
                 : null,

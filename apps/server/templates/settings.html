@@ -414,7 +414,7 @@
       </p>
 
       <p class="mt-2 text-xs text-muted-foreground">
-        {{t "Za više naloga kod istog provajdera (npr. članovi porodice) klikni „Dodaj nalog“ i daj svakom kratku oznaku."}}
+        {{t "Za više naloga kod istog provajdera (npr. članovi porodice) klikni „Dodaj nalog“ i daj svakom ime."}}
       </p>
 
       <div class="mt-5 flex flex-col gap-4">
@@ -441,22 +441,17 @@
                             @click="removeAccount(name, idx)">{{t "Ukloni"}}</button>
                   </div>
 
-                  {{/* Stable id + display label — only meaningful for multi-account. */}}
-                  <div class="grid gap-3 sm:grid-cols-2" x-show="multiAccount(name)" x-cloak>
-                    <div class="flex flex-col gap-1.5">
-                      <label class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                        {{t "Oznaka"}}
-                        {{template "hint" "Kratka stabilna oznaka naloga (id): mala slova, cifre, „-“ i „_“. Koristi se u putanjama do računa — ne menjaj je bez potrebe."}}
-                      </label>
-                      <input type="text" class="input font-mono text-xs" x-model="account.id" placeholder="npr. mama">
-                    </div>
-                    <div class="flex flex-col gap-1.5">
-                      <label class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                        {{t "Naziv"}}
-                        {{template "hint" "Ime koje se prikazuje uz račune (npr. „Mama“). Slobodan tekst, može se menjati kad god."}}
-                      </label>
-                      <input type="text" class="input text-xs" x-model="account.label" placeholder="npr. Mama">
-                    </div>
+                  {{/* Account name — the id slug is derived from it automatically. */}}
+                  <div class="flex flex-col gap-1.5" x-show="multiAccount(name)" x-cloak>
+                    <label class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                      {{t "Ime naloga"}}
+                      {{template "hint" "Ime koje se prikazuje uz račune (npr. „Mama“). Iz njega se automatski pravi oznaka (id) koja se koristi u putanjama do računa."}}
+                    </label>
+                    <input type="text" class="input text-xs" :value="account.label"
+                           @input="setAccountName(account, $event.target.value)" placeholder="npr. Mama">
+                    <p class="text-xs text-muted-foreground" x-show="account.id" x-cloak>
+                      {{t "id"}}: <span class="font-mono" x-text="account.id"></span>
+                    </p>
                   </div>
 
                   <div class="grid gap-3 sm:grid-cols-2" :class="multiAccount(name) ? 'mt-3' : ''">

@@ -2,6 +2,19 @@
  * Settings page: editable config form with apply/reload, notification test,
  * and step-by-step setup guides for the selected driver.
  */
+
+// Serbian Cyrillic + Latin-diacritic → ASCII, used to derive an account's
+// path-safe id slug from its display name. Lossy on purpose (č/ć→c): slugs only
+// need to be stable, unique and filesystem/URL-safe, and duplicates are caught
+// by validation.
+const SR_CYR_TO_LAT = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', ђ: 'dj', е: 'e', ж: 'z', з: 'z',
+  и: 'i', ј: 'j', к: 'k', л: 'l', љ: 'lj', м: 'm', н: 'n', њ: 'nj', о: 'o',
+  п: 'p', р: 'r', с: 's', т: 't', ћ: 'c', у: 'u', ф: 'f', х: 'h', ц: 'c',
+  ч: 'c', џ: 'dz', ш: 's',
+  č: 'c', ć: 'c', š: 's', ž: 'z', đ: 'dj',
+};
+
 document.addEventListener('alpine:init', () => {
   Alpine.data('settingsPage', () => ({
     form: {},
@@ -293,6 +306,27 @@ document.addEventListener('alpine:init', () => {
       return has ? t('•••••••• (neizmenjeno)') : '';
     },
 
+    // slugifyAccount derives an account's stable id from its display name: the
+    // id is simply the name, transliterated to ASCII, lowercased, with every run
+    // of non-slug characters collapsed to a single "-". So "Mama" → "mama",
+    // "Дете 1" → "dete-1". Kept in sync with the server's slugRe.
+    slugifyAccount(nameValue) {
+      const lower = String(nameValue || '').trim().toLowerCase();
+      let out = '';
+      for (const ch of lower) {
+        out += Object.prototype.hasOwnProperty.call(SR_CYR_TO_LAT, ch) ? SR_CYR_TO_LAT[ch] : ch;
+      }
+      return out.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    },
+
+    // setAccountName updates an account's display name and re-derives its id from
+    // it, so the two stay a single field for the user.
+    setAccountName(account, value) {
+      account.label = value;
+      account.id = this.slugifyAccount(value);
+      this.markDirty();
+    },
+
     // accounts returns the (always-array) account list for a provider.
     accounts(name) {
       const list = this.form.providers?.[name];
@@ -347,13 +381,13 @@ document.addEventListener('alpine:init', () => {
         for (const account of list) {
           const id = (account.id || '').trim();
           if (!id) {
-            return `${t('Kada provajder ima više naloga, svaki mora imati oznaku (id).')} (${name})`;
+            return `${t('Kada provajder ima više naloga, svaki mora imati ime.')} (${name})`;
           }
           if (!slug.test(id)) {
-            return `${t('Oznaka naloga sme da sadrži samo mala slova, cifre, „-“ i „_“.')} (${name}/${id})`;
+            return `${t('Ime naloga mora da sadrži bar jedno slovo ili cifru.')} (${name})`;
           }
           if (seen.has(id)) {
-            return `${t('Oznake naloga moraju biti jedinstvene kod istog provajdera.')} (${name}/${id})`;
+            return `${t('Nazivi naloga moraju biti jedinstveni kod istog provajdera.')} (${name}/${id})`;
           }
           seen.add(id);
         }

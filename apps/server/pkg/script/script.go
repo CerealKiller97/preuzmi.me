@@ -142,6 +142,13 @@ var brandPlaceholders = []struct{ from, token string }{
 
 var urlPattern = regexp.MustCompile(`https?://[^\s<>"']+`)
 
+// literalPattern matches technical literals — commands, handles, config keys and
+// acronyms — that are typed or searched verbatim in the real tool, so a Cyrillic
+// transliteration would be unusable. Word boundaries keep standalone terms Latin
+// ("bot token", "chat") while inflected Serbian forms ("botom", "tokenom") still
+// transliterate. Ordered longest-first so specific variants win over "chat".
+var literalPattern = regexp.MustCompile(`@BotFather|\bBotFather\b|\bgetUpdates\b|/newbot|/start|\bchat ID\b|\bchatID\b|\bchat_id\b|\bchat\.id\b|\bbot_token\b|<TOKEN>|\bper_receipt\b|\ball_done\b|\busername\b|\bSTARTTLS\b|\bSMTPS\b|\bSMTP\b|\bTLS\b|\bJSON\b|\btelegram\b|\bsmtp\b|\bchat\b`)
+
 // ToCyrillic transliterates Serbian Latin orthography to Cyrillic.
 // Digraphs (lj, nj, dž) are handled before single letters; "dj" is not mapped.
 // The product name Preuzmi.me, config.json, and http(s) URLs are left in Latin.
@@ -155,6 +162,13 @@ func ToCyrillic(s string) string {
 	s = urlPattern.ReplaceAllStringFunc(s, func(u string) string {
 		token := string(rune(0xE010 + len(urls)))
 		urls = append(urls, ph{token, u})
+		return token
+	})
+
+	var literals []ph
+	s = literalPattern.ReplaceAllStringFunc(s, func(m string) string {
+		token := string(rune(0xE030 + len(literals)))
+		literals = append(literals, ph{token, m})
 		return token
 	})
 
@@ -199,6 +213,9 @@ func ToCyrillic(s string) string {
 	}
 	for _, u := range urls {
 		out = strings.ReplaceAll(out, u.token, u.value)
+	}
+	for _, l := range literals {
+		out = strings.ReplaceAll(out, l.token, l.value)
 	}
 	return out
 }

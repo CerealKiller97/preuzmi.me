@@ -27,6 +27,16 @@
       urls.push({ token, value: u });
       return token;
     });
+    // Technical literals \u2014 commands, handles, config keys and acronyms \u2014 that
+    // are typed/searched verbatim in the real tool, so a Cyrillic transliteration
+    // would be unusable. Word boundaries keep standalone terms Latin ("bot token",
+    // "chat") while inflected Serbian forms ("botom", "tokenom") still convert.
+    const literals = [];
+    s = s.replace(/@BotFather|\bBotFather\b|\bgetUpdates\b|\/newbot|\/start|\bchat ID\b|\bchatID\b|\bchat_id\b|\bchat\.id\b|\bbot_token\b|<TOKEN>|\bper_receipt\b|\ball_done\b|\busername\b|\bSTARTTLS\b|\bSMTPS\b|\bSMTP\b|\bTLS\b|\bJSON\b|\btelegram\b|\bsmtp\b|\bchat\b/g, (m) => {
+      const token = String.fromCharCode(0xE030 + literals.length);
+      literals.push({ token, value: m });
+      return token;
+    });
     const brands = [
       ['Preuzmi.me', '\uE000'],
       ['preuzmi.me', '\uE001'],
@@ -57,6 +67,9 @@
     }
     for (const u of urls) {
       out = out.split(u.token).join(u.value);
+    }
+    for (const l of literals) {
+      out = out.split(l.token).join(l.value);
     }
     return out;
   }

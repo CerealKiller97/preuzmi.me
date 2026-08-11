@@ -10,6 +10,12 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+## [1.7.1] - 11.08.2026
+
+### 🐛 Fixed
+
+- 🏷️ **Mobile downloads now carry the release version.** The APK and IPA attached to each GitHub Release are named for that release (`preuzmi-1.7.1.apk` / `preuzmi-1.7.1-unsigned.ipa`), and the installed app reports the matching version — instead of the placeholder `1.0.0` that every build previously used regardless of the release. The version is taken from the release tag at build time.
+
 ## [1.7.0] - 11.08.2026
 
 ### ✨ Added
@@ -144,7 +150,8 @@ stats, and notifications, so no bill goes unintentionally unpaid.
 - 🐳 Multi-arch (amd64 + arm64), distroless Docker image published to GHCR.
 - 🌐 Bilingual documentation — English and Serbian.
 
-[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.4.0...v1.5.0

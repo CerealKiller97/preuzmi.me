@@ -32,10 +32,7 @@ jobs:
           cache-dependency-path: apps/server/go.sum
 
       - name: Set up Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
       - name: Scan for known vulnerabilities
         run: task govulncheck

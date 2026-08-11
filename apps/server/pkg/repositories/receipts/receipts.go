@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/CerealKiller97/preuzmi.me/database"
+	"github.com/CerealKiller97/preuzmi.me/pkg/services/storage"
 	_ "modernc.org/sqlite" // pure-Go SQLite driver, registered as "sqlite"
 )
 
@@ -83,27 +84,27 @@ const (
 // query is visible in one place.
 const (
 	// upsertReceiptQuery records a downloaded receipt keyed by (provider,
-	// period). On conflict it refreshes only the file facts, leaving price and
-	// status to their dedicated setters.
+	// account, period). On conflict it refreshes only the file facts, leaving
+	// price and status to their dedicated setters.
 	upsertReceiptQuery = `
-INSERT INTO receipts (provider, period, storage_key, size_bytes, price, status, downloaded_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(provider, period) DO UPDATE SET
+INSERT INTO receipts (provider, account, period, storage_key, size_bytes, price, status, downloaded_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(provider, account, period) DO UPDATE SET
 	storage_key   = excluded.storage_key,
 	size_bytes    = excluded.size_bytes,
 	downloaded_at = excluded.downloaded_at;`
 
 	// latestReceiptQuery returns the most recently downloaded receipt for a
-	// provider.
+	// (provider, account).
 	latestReceiptQuery = `
-SELECT id, provider, period, storage_key, size_bytes, price, status, downloaded_at, paid_at, confirmed_at, due_at, due_reminded_at
+SELECT id, provider, account, period, storage_key, size_bytes, price, status, downloaded_at, paid_at, confirmed_at, due_at, due_reminded_at
 FROM receipts
-WHERE provider = ?
+WHERE provider = ? AND account = ?
 ORDER BY downloaded_at DESC, id DESC
 LIMIT 1;`
 
 	// setPriceQuery updates the amount owed for an already-recorded receipt.
-	setPriceQuery = `UPDATE receipts SET price = ? WHERE provider = ? AND period = ?;`
+	setPriceQuery = `UPDATE receipts SET price = ? WHERE provider = ? AND account = ? AND period = ?;`
 
 	// setDueAtQuery stores the payment deadline. A changed due_at clears
 	// due_reminded_at so a revised deadline can notify again.
@@ -111,69 +112,69 @@ LIMIT 1;`
 UPDATE receipts
 SET due_at = ?,
     due_reminded_at = CASE WHEN due_at = ? THEN due_reminded_at ELSE 0 END
-WHERE provider = ? AND period = ?;`
+WHERE provider = ? AND account = ? AND period = ?;`
 
 	// markDueRemindedQuery stamps the receipts that were just included in a
 	// due-soon notification.
-	markDueRemindedQuery = `UPDATE receipts SET due_reminded_at = ? WHERE provider = ? AND period = ?;`
+	markDueRemindedQuery = `UPDATE receipts SET due_reminded_at = ? WHERE provider = ? AND account = ? AND period = ?;`
 
-	// selectStatusQuery reads the current status for a (provider, period).
-	selectStatusQuery = `SELECT status FROM receipts WHERE provider = ? AND period = ?;`
+	// selectStatusQuery reads the current status for a (provider, account, period).
+	selectStatusQuery = `SELECT status FROM receipts WHERE provider = ? AND account = ? AND period = ?;`
 
 	// selectDownloadedAtQuery reads the last download time for a (provider,
-	// period); 0 (or no row) means it has never actually been downloaded, so the
-	// next Record is a first download.
-	selectDownloadedAtQuery = `SELECT downloaded_at FROM receipts WHERE provider = ? AND period = ?;`
+	// account, period); 0 (or no row) means it has never actually been
+	// downloaded, so the next Record is a first download.
+	selectDownloadedAtQuery = `SELECT downloaded_at FROM receipts WHERE provider = ? AND account = ? AND period = ?;`
 
 	// selectNotifiedDownloadQuery / selectNotifiedConfirmedQuery read whether a
 	// download or paid-confirmation notification has already fired for a
-	// (provider, period). A non-zero value means the user was already told once.
-	// The columns are nullable (NULL on rows predating them), so COALESCE folds
-	// NULL to 0 — "not yet notified" — keeping the scan an int64.
-	selectNotifiedDownloadQuery  = `SELECT COALESCE(notified_download_at, 0) FROM receipts WHERE provider = ? AND period = ?;`
-	selectNotifiedConfirmedQuery = `SELECT COALESCE(notified_confirmed_at, 0) FROM receipts WHERE provider = ? AND period = ?;`
+	// (provider, account, period). A non-zero value means the user was already
+	// told once. The columns are nullable (NULL on rows predating them), so
+	// COALESCE folds NULL to 0 — "not yet notified" — keeping the scan an int64.
+	selectNotifiedDownloadQuery  = `SELECT COALESCE(notified_download_at, 0) FROM receipts WHERE provider = ? AND account = ? AND period = ?;`
+	selectNotifiedConfirmedQuery = `SELECT COALESCE(notified_confirmed_at, 0) FROM receipts WHERE provider = ? AND account = ? AND period = ?;`
 
 	// setNotifiedDownloadQuery / setNotifiedConfirmedQuery stamp the "already
 	// notified" marker so a later re-run stays silent about the same receipt.
-	setNotifiedDownloadQuery  = `UPDATE receipts SET notified_download_at = ? WHERE provider = ? AND period = ?;`
-	setNotifiedConfirmedQuery = `UPDATE receipts SET notified_confirmed_at = ? WHERE provider = ? AND period = ?;`
+	setNotifiedDownloadQuery  = `UPDATE receipts SET notified_download_at = ? WHERE provider = ? AND account = ? AND period = ?;`
+	setNotifiedConfirmedQuery = `UPDATE receipts SET notified_confirmed_at = ? WHERE provider = ? AND account = ? AND period = ?;`
 
 	// selectConfirmedPaidQuery reads the fields that decide whether a refresh can
-	// skip a provider: the download time, provider status, and confirmed_at.
-	selectConfirmedPaidQuery = `SELECT downloaded_at, status, confirmed_at FROM receipts WHERE provider = ? AND period = ?;`
+	// skip a provider account: the download time, provider status, and confirmed_at.
+	selectConfirmedPaidQuery = `SELECT downloaded_at, status, confirmed_at FROM receipts WHERE provider = ? AND account = ? AND period = ?;`
 
 	// setStatusPaidQuery marks a receipt paid by the provider, stamping
 	// confirmed_at only on the first confirmation so the timestamp is stable.
 	setStatusPaidQuery = `
 UPDATE receipts
 SET status = ?, confirmed_at = CASE WHEN confirmed_at = 0 THEN ? ELSE confirmed_at END
-WHERE provider = ? AND period = ?;`
+WHERE provider = ? AND account = ? AND period = ?;`
 
 	// setStatusUnpaidQuery clears both the provider status and its confirmation.
-	setStatusUnpaidQuery = `UPDATE receipts SET status = ?, confirmed_at = 0 WHERE provider = ? AND period = ?;`
+	setStatusUnpaidQuery = `UPDATE receipts SET status = ?, confirmed_at = 0 WHERE provider = ? AND account = ? AND period = ?;`
 
-	// selectPriceQuery reads the recorded price for a (provider, period).
-	selectPriceQuery = `SELECT price FROM receipts WHERE provider = ? AND period = ?;`
+	// selectPriceQuery reads the recorded price for a (provider, account, period).
+	selectPriceQuery = `SELECT price FROM receipts WHERE provider = ? AND account = ? AND period = ?;`
 
 	// markPaidQuery stamps paid_at (the user-marked payment), creating a stub row
 	// when the receipt was never recorded by a download.
 	markPaidQuery = `
-INSERT INTO receipts (provider, period, storage_key, size_bytes, price, status, downloaded_at, paid_at)
-VALUES (?, ?, ?, 0, 0, ?, 0, ?)
-ON CONFLICT(provider, period) DO UPDATE SET
+INSERT INTO receipts (provider, account, period, storage_key, size_bytes, price, status, downloaded_at, paid_at)
+VALUES (?, ?, ?, ?, 0, 0, ?, 0, ?)
+ON CONFLICT(provider, account, period) DO UPDATE SET
 	paid_at = excluded.paid_at;`
 
 	// selectIPSQRQuery reads the cached IPS QR payload and whether extraction has
-	// already been attempted for a (provider, period).
-	selectIPSQRQuery = `SELECT ips_qr, ips_checked FROM receipts WHERE provider = ? AND period = ?;`
+	// already been attempted for a (provider, account, period).
+	selectIPSQRQuery = `SELECT ips_qr, ips_checked FROM receipts WHERE provider = ? AND account = ? AND period = ?;`
 
 	// setIPSQRQuery stores the decoded IPS QR payload (possibly empty) and marks
 	// extraction as done, so a bill with no QR is not re-parsed on every render.
-	setIPSQRQuery = `UPDATE receipts SET ips_qr = ?, ips_checked = 1 WHERE provider = ? AND period = ?;`
+	setIPSQRQuery = `UPDATE receipts SET ips_qr = ?, ips_checked = 1 WHERE provider = ? AND account = ? AND period = ?;`
 
 	// listReceiptsQuery returns every recorded receipt, newest download first.
 	listReceiptsQuery = `
-SELECT id, provider, period, storage_key, size_bytes, price, status, downloaded_at, paid_at, confirmed_at, due_at, due_reminded_at
+SELECT id, provider, account, period, storage_key, size_bytes, price, status, downloaded_at, paid_at, confirmed_at, due_at, due_reminded_at
 FROM receipts
 ORDER BY downloaded_at DESC, id DESC;`
 
@@ -197,8 +198,9 @@ ORDER BY downloaded_at DESC, id DESC;`
 	dropPaymentsTableQuery = `DROP TABLE payments;`
 
 	// setImportedPaidQuery writes a paid_at imported from a former store onto its
-	// receipt row (a no-op when the row does not exist yet).
-	setImportedPaidQuery = `UPDATE receipts SET paid_at = ? WHERE provider = ? AND period = ?;`
+	// receipt row (a no-op when the row does not exist yet). Legacy stores predate
+	// multi-account, so the imported row is always the solo account ('').
+	setImportedPaidQuery = `UPDATE receipts SET paid_at = ? WHERE provider = ? AND account = '' AND period = ?;`
 
 	// tableExistsQuery reports whether a table of the given name is present.
 	tableExistsQuery = `SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?;`
@@ -210,7 +212,10 @@ ORDER BY downloaded_at DESC, id DESC;`
 )
 
 type Receipt struct {
-	Provider      string  `json:"provider"`
+	Provider string `json:"provider"`
+	// Account is the provider account this receipt belongs to: "" for the solo
+	// account, or a config account id for a named family-member login.
+	Account       string  `json:"account,omitempty"`
 	Period        string  `json:"period"`
 	StorageKey    string  `json:"storage_key"`
 	Status        string  `json:"status"`
@@ -271,6 +276,14 @@ func New(dir string) (*Repository, error) {
 func migrate(db *sql.DB, dir string) error {
 	if err := database.Apply(db); err != nil {
 		return fmt.Errorf("receipts: applying schema: %w", err)
+	}
+
+	// Rebuild the identity constraint on databases created before the account
+	// column: a table-level UNIQUE cannot be altered in, so a solo database still
+	// carries UNIQUE(provider, period), which would block a second account for
+	// the same provider and period once the user adds one.
+	if err := migrateReceiptsUnique(db); err != nil {
+		return fmt.Errorf("receipts: rebuilding unique constraint: %w", err)
 	}
 
 	if err := migratePeriodsToSlash(db); err != nil {
@@ -400,6 +413,8 @@ func applyImportedPaid(db *sql.DB, key string, paidAt int64) error {
 	provider := providerPart
 	period := slashPeriod(dashPart)
 
+	// Legacy stores predate multi-account: everything imports as the solo
+	// account ('').
 	res, err := db.Exec(setImportedPaidQuery, paidAt, provider, period)
 	if err != nil {
 		return err
@@ -408,10 +423,95 @@ func applyImportedPaid(db *sql.DB, key string, paidAt int64) error {
 		return nil
 	}
 
-	storageKey := fmt.Sprintf("%s/%s.pdf", dashPeriod(period), provider)
-	_, err = db.Exec(markPaidQuery, provider, period, storageKey, StatusUnpaid, paidAt)
+	storageKey := storage.ReceiptKey(dashPeriod(period), provider, "")
+	_, err = db.Exec(markPaidQuery, provider, "", period, storageKey, StatusUnpaid, paidAt)
 
 	return err
+}
+
+// migrateReceiptsUnique rebuilds the receipts table when it still carries the
+// pre-multi-account UNIQUE(provider, period) constraint, replacing it with
+// UNIQUE(provider, account, period). SQLite cannot drop a table-level constraint
+// in place, so the table is recreated from the current schema and its rows
+// copied across. It runs after database.Apply, so the account column already
+// exists; existing rows keep account '' and are byte-identical afterwards.
+//
+// The rebuild is skipped whenever the stored table definition no longer contains
+// the old constraint, so it is a no-op on fresh databases and on every startup
+// after the one that migrates.
+func migrateReceiptsUnique(db *sql.DB) error {
+	var createSQL string
+	switch err := db.QueryRow(
+		`SELECT sql FROM sqlite_master WHERE type='table' AND name='receipts'`,
+	).Scan(&createSQL); {
+	case err == sql.ErrNoRows:
+		return nil
+	case err != nil:
+		return err
+	}
+
+	// Compare against the collapsed, lowercased DDL so whitespace does not matter.
+	// The old constraint is UNIQUE(provider,period); the new one carries account,
+	// so its absence means the table is already on the new shape.
+	collapsed := strings.ToLower(strings.Join(strings.Fields(createSQL), ""))
+	if !strings.Contains(collapsed, "unique(provider,period)") {
+		return nil
+	}
+
+	cols, err := columnNames(db, "receipts")
+	if err != nil {
+		return err
+	}
+	list := strings.Join(cols, ", ")
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // rolled back only if Commit did not run
+
+	// Move the old table aside, recreate receipts fresh from the schema (which now
+	// carries UNIQUE(provider, account, period)), copy the rows over by explicit
+	// column list, and drop the old table. The schema's other CREATE TABLE IF NOT
+	// EXISTS statements are harmless no-ops here.
+	stmts := []string{
+		`ALTER TABLE receipts RENAME TO receipts_old`,
+		database.Schema,
+		fmt.Sprintf("INSERT INTO receipts (%s) SELECT %s FROM receipts_old", list, list),
+		`DROP TABLE receipts_old`,
+	}
+	for _, stmt := range stmts {
+		if _, err := tx.Exec(stmt); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// columnNames returns the column names of a table in schema order.
+func columnNames(db *sql.DB, table string) ([]string, error) {
+	// table comes from our own code, not user input.
+	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck // read-only rows
+
+	var cols []string
+	for rows.Next() {
+		var (
+			cid, notnull, pk int
+			name, ctype      string
+			dflt             sql.NullString
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return nil, err
+		}
+		cols = append(cols, name)
+	}
+
+	return cols, rows.Err()
 }
 
 // tableExists reports whether a table of the given name is present.
@@ -474,7 +574,7 @@ func migratePeriodsToSlash(db *sql.DB) error {
 	return nil
 }
 
-// Record upserts a downloaded receipt keyed by (provider, period): a
+// Record upserts a downloaded receipt keyed by (provider, account, period): a
 // re-download of the same period updates the existing row rather than adding a
 // duplicate.
 func (s *Repository) Record(ctx context.Context, r Receipt) error {
@@ -492,7 +592,7 @@ func (s *Repository) Record(ctx context.Context, r Receipt) error {
 	// re-announce a bill the user has already been told about. Read the marker
 	// before the upsert; 0 means it has never been announced.
 	var notifiedDownloadAt int64
-	_ = s.db.QueryRowContext(ctx, selectNotifiedDownloadQuery, r.Provider, r.Period).Scan(&notifiedDownloadAt)
+	_ = s.db.QueryRowContext(ctx, selectNotifiedDownloadQuery, r.Provider, r.Account, r.Period).Scan(&notifiedDownloadAt)
 	alreadyNotified := notifiedDownloadAt != 0
 
 	// On a re-download we refresh the file facts but deliberately leave price,
@@ -502,6 +602,7 @@ func (s *Repository) Record(ctx context.Context, r Receipt) error {
 		ctx,
 		upsertReceiptQuery,
 		r.Provider,
+		r.Account,
 		r.Period,
 		r.StorageKey,
 		r.SizeBytes,
@@ -517,12 +618,12 @@ func (s *Repository) Record(ctx context.Context, r Receipt) error {
 		// Stamp the marker in the same call that queues the announcement, so even a
 		// crash right after leaves the receipt marked as told (matching the existing
 		// behaviour, where state advances before the notification is sent).
-		if _, err := s.db.ExecContext(ctx, setNotifiedDownloadQuery, time.Now().Unix(), r.Provider, r.Period); err != nil {
+		if _, err := s.db.ExecContext(ctx, setNotifiedDownloadQuery, time.Now().Unix(), r.Provider, r.Account, r.Period); err != nil {
 			return err
 		}
 
 		s.mu.Lock()
-		s.newlyDownloaded = append(s.newlyDownloaded, Receipt{Provider: r.Provider, Period: r.Period})
+		s.newlyDownloaded = append(s.newlyDownloaded, Receipt{Provider: r.Provider, Account: r.Account, Period: r.Period})
 		s.mu.Unlock()
 	}
 
@@ -532,11 +633,11 @@ func (s *Repository) Record(ctx context.Context, r Receipt) error {
 // HasDownloaded reports whether the receipt for (provider, period) is already on
 // record — a row exists with a real download time. A paid-only stub, which
 // carries downloaded_at 0, does not count, so its PDF is still fetched.
-func (s *Repository) HasDownloaded(ctx context.Context, provider, period string) bool {
+func (s *Repository) HasDownloaded(ctx context.Context, provider, account, period string) bool {
 	period = slashPeriod(period)
 
 	var downloadedAt int64
-	err := s.db.QueryRowContext(ctx, selectDownloadedAtQuery, provider, period).Scan(&downloadedAt)
+	err := s.db.QueryRowContext(ctx, selectDownloadedAtQuery, provider, account, period).Scan(&downloadedAt)
 
 	return err == nil && downloadedAt > 0
 }
@@ -550,12 +651,12 @@ func (s *Repository) HasDownloaded(ctx context.Context, provider, period string)
 // Unlike a fully-settled check this does NOT require the user to have marked the
 // receipt paid in the app (paid_at): once the provider itself confirms payment
 // there is no reason to keep logging in, whether or not the user clicked "paid".
-func (s *Repository) IsConfirmedPaid(ctx context.Context, provider, period string) bool {
+func (s *Repository) IsConfirmedPaid(ctx context.Context, provider, account, period string) bool {
 	period = slashPeriod(period)
 
 	var downloadedAt, confirmedAt int64
 	var status string
-	err := s.db.QueryRowContext(ctx, selectConfirmedPaidQuery, provider, period).Scan(&downloadedAt, &status, &confirmedAt)
+	err := s.db.QueryRowContext(ctx, selectConfirmedPaidQuery, provider, account, period).Scan(&downloadedAt, &status, &confirmedAt)
 	if err != nil {
 		return false
 	}
@@ -575,12 +676,13 @@ func (s *Repository) DrainNewlyDownloaded() []Receipt {
 	return out
 }
 
-// Latest returns the most recently downloaded receipt for a provider.
-func (s *Repository) Latest(ctx context.Context, provider string) (Receipt, bool) {
+// Latest returns the most recently downloaded receipt for a (provider, account).
+func (s *Repository) Latest(ctx context.Context, provider, account string) (Receipt, bool) {
 	var r Receipt
-	err := s.db.QueryRowContext(ctx, latestReceiptQuery, provider).Scan(
+	err := s.db.QueryRowContext(ctx, latestReceiptQuery, provider, account).Scan(
 		&r.ID,
 		&r.Provider,
+		&r.Account,
 		&r.Period,
 		&r.StorageKey,
 		&r.SizeBytes,
@@ -600,12 +702,13 @@ func (s *Repository) Latest(ctx context.Context, provider string) (Receipt, bool
 }
 
 // SetPrice updates the amount owed for an already-recorded receipt.
-func (s *Repository) SetPrice(ctx context.Context, provider, period string, price float64) error {
+func (s *Repository) SetPrice(ctx context.Context, provider, account, period string, price float64) error {
 	_, err := s.db.ExecContext(
 		ctx,
 		setPriceQuery,
 		price,
 		provider,
+		account,
 		slashPeriod(period),
 	)
 
@@ -615,13 +718,14 @@ func (s *Repository) SetPrice(ctx context.Context, provider, period string, pric
 // SetDueAt stores the payment deadline for an already-recorded receipt. Passing
 // 0 clears it. A changed deadline resets due_reminded_at so reminders can fire
 // again for the new date.
-func (s *Repository) SetDueAt(ctx context.Context, provider, period string, dueAt int64) error {
+func (s *Repository) SetDueAt(ctx context.Context, provider, account, period string, dueAt int64) error {
 	_, err := s.db.ExecContext(
 		ctx,
 		setDueAtQuery,
 		dueAt,
 		dueAt,
 		provider,
+		account,
 		slashPeriod(period),
 	)
 
@@ -635,7 +739,7 @@ func (s *Repository) MarkDueReminded(ctx context.Context, items []Receipt, at in
 		at = time.Now().Unix()
 	}
 	for _, it := range items {
-		if _, err := s.db.ExecContext(ctx, markDueRemindedQuery, at, it.Provider, slashPeriod(it.Period)); err != nil {
+		if _, err := s.db.ExecContext(ctx, markDueRemindedQuery, at, it.Provider, it.Account, slashPeriod(it.Period)); err != nil {
 			return err
 		}
 	}
@@ -648,11 +752,11 @@ func (s *Repository) MarkDueReminded(ctx context.Context, items []Receipt, at in
 // IPS QR amount — the figure a banking app actually charges — override a price a
 // provider's API or PDF parse recorded differently, so a bill that was filed
 // with a wrong total self-heals. A missing row is a no-op.
-func (s *Repository) ReconcilePrice(ctx context.Context, provider, period string, want float64) (bool, error) {
+func (s *Repository) ReconcilePrice(ctx context.Context, provider, account, period string, want float64) (bool, error) {
 	period = slashPeriod(period)
 
 	var current float64
-	switch err := s.db.QueryRowContext(ctx, selectPriceQuery, provider, period).Scan(&current); {
+	switch err := s.db.QueryRowContext(ctx, selectPriceQuery, provider, account, period).Scan(&current); {
 	case err == sql.ErrNoRows:
 		return false, nil
 	case err != nil:
@@ -663,7 +767,7 @@ func (s *Repository) ReconcilePrice(ctx context.Context, provider, period string
 		return false, nil
 	}
 
-	if _, err := s.db.ExecContext(ctx, setPriceQuery, want, provider, period); err != nil {
+	if _, err := s.db.ExecContext(ctx, setPriceQuery, want, provider, account, period); err != nil {
 		return false, err
 	}
 
@@ -676,7 +780,7 @@ func (s *Repository) ReconcilePrice(ctx context.Context, provider, period string
 // Becoming paid stamps confirmed_at ("verifikovano") on the first confirmation
 // and queues the receipt in newlyVerified so a caller can notify about it via
 // DrainNewlyVerified; becoming unpaid clears confirmed_at.
-func (s *Repository) SetStatus(ctx context.Context, provider, period, status string) error {
+func (s *Repository) SetStatus(ctx context.Context, provider, account, period, status string) error {
 	period = slashPeriod(period)
 
 	var prev string
@@ -685,21 +789,21 @@ func (s *Repository) SetStatus(ctx context.Context, provider, period, status str
 	// ever saw the previous month — e.g. the first time an email provider runs, or
 	// a gap in history. There is nothing on record to confirm, so mark nothing and
 	// queue no notification: a payment is only confirmed for a receipt we hold.
-	existed := s.db.QueryRowContext(ctx, selectStatusQuery, provider, period).Scan(&prev) == nil
+	existed := s.db.QueryRowContext(ctx, selectStatusQuery, provider, account, period).Scan(&prev) == nil
 
 	// Whether we have already announced this payment. Read it before the status
 	// write so a provider that rewrites status every run (e.g. Yettel/eUpravnik
 	// flip the current bill back to unpaid, clearing confirmed_at, then re-confirm
 	// it later) cannot make us re-announce a payment already reported once.
 	var notifiedConfirmedAt int64
-	_ = s.db.QueryRowContext(ctx, selectNotifiedConfirmedQuery, provider, period).Scan(&notifiedConfirmedAt)
+	_ = s.db.QueryRowContext(ctx, selectNotifiedConfirmedQuery, provider, account, period).Scan(&notifiedConfirmedAt)
 
 	if status == StatusPaid {
-		if _, err := s.db.ExecContext(ctx, setStatusPaidQuery, status, time.Now().Unix(), provider, period); err != nil {
+		if _, err := s.db.ExecContext(ctx, setStatusPaidQuery, status, time.Now().Unix(), provider, account, period); err != nil {
 			return err
 		}
 	} else {
-		if _, err := s.db.ExecContext(ctx, setStatusUnpaidQuery, status, provider, period); err != nil {
+		if _, err := s.db.ExecContext(ctx, setStatusUnpaidQuery, status, provider, account, period); err != nil {
 			return err
 		}
 	}
@@ -707,16 +811,17 @@ func (s *Repository) SetStatus(ctx context.Context, provider, period, status str
 	if existed && status == StatusPaid && notifiedConfirmedAt == 0 {
 		// Stamp the marker so this payment is never announced again, even if the
 		// status later flaps unpaid → paid.
-		if _, err := s.db.ExecContext(ctx, setNotifiedConfirmedQuery, time.Now().Unix(), provider, period); err != nil {
+		if _, err := s.db.ExecContext(ctx, setNotifiedConfirmedQuery, time.Now().Unix(), provider, account, period); err != nil {
 			return err
 		}
 
 		var price float64
-		_ = s.db.QueryRowContext(ctx, selectPriceQuery, provider, period).Scan(&price)
+		_ = s.db.QueryRowContext(ctx, selectPriceQuery, provider, account, period).Scan(&price)
 
 		s.mu.Lock()
 		s.newlyVerified = append(s.newlyVerified, Receipt{
 			Provider: provider,
+			Account:  account,
 			Period:   period,
 			Price:    price,
 		})
@@ -743,7 +848,7 @@ func (s *Repository) DrainNewlyVerified() []Receipt {
 // receipt can be marked paid even if it was never recorded by a download: a stub
 // row is created with the conventional storage key, which a later download fills
 // in without disturbing paid_at.
-func (s *Repository) MarkPaid(ctx context.Context, provider, period string, paid bool) (int64, error) {
+func (s *Repository) MarkPaid(ctx context.Context, provider, account, period string, paid bool) (int64, error) {
 	period = slashPeriod(period)
 
 	var at int64
@@ -753,9 +858,9 @@ func (s *Repository) MarkPaid(ctx context.Context, provider, period string, paid
 
 	// The storage key is a path, so it uses the dash form; the period column uses
 	// the slash form.
-	storageKey := fmt.Sprintf("%s/%s.pdf", dashPeriod(period), provider)
+	storageKey := storage.ReceiptKey(dashPeriod(period), provider, account)
 
-	if _, err := s.db.ExecContext(ctx, markPaidQuery, provider, period, storageKey, StatusUnpaid, at); err != nil {
+	if _, err := s.db.ExecContext(ctx, markPaidQuery, provider, account, period, storageKey, StatusUnpaid, at); err != nil {
 		return 0, err
 	}
 
@@ -766,11 +871,11 @@ func (s *Repository) MarkPaid(ctx context.Context, provider, period string, paid
 // extraction has already been attempted. checked is true once we have tried to
 // parse the PDF, even if it carried no QR (payload is then ""), so callers can
 // avoid re-parsing a bill that has none.
-func (s *Repository) IPSQR(ctx context.Context, provider, period string) (payload string, checked bool, err error) {
+func (s *Repository) IPSQR(ctx context.Context, provider, account, period string) (payload string, checked bool, err error) {
 	period = slashPeriod(period)
 
 	var checkedInt int64
-	err = s.db.QueryRowContext(ctx, selectIPSQRQuery, provider, period).Scan(&payload, &checkedInt)
+	err = s.db.QueryRowContext(ctx, selectIPSQRQuery, provider, account, period).Scan(&payload, &checkedInt)
 	if err == sql.ErrNoRows {
 		return "", false, nil
 	}
@@ -784,8 +889,8 @@ func (s *Repository) IPSQR(ctx context.Context, provider, period string) (payloa
 // SetIPSQR caches the decoded IPS QR payload for a receipt (empty when the bill
 // has none) and marks extraction as done. It is a no-op when no receipt row
 // exists for the (provider, period) yet.
-func (s *Repository) SetIPSQR(ctx context.Context, provider, period, payload string) error {
-	_, err := s.db.ExecContext(ctx, setIPSQRQuery, payload, provider, slashPeriod(period))
+func (s *Repository) SetIPSQR(ctx context.Context, provider, account, period, payload string) error {
+	_, err := s.db.ExecContext(ctx, setIPSQRQuery, payload, provider, account, slashPeriod(period))
 
 	return err
 }
@@ -801,7 +906,7 @@ func (s *Repository) List(ctx context.Context) ([]Receipt, error) {
 	var out []Receipt
 	for rows.Next() {
 		var r Receipt
-		if err := rows.Scan(&r.ID, &r.Provider, &r.Period, &r.StorageKey, &r.SizeBytes, &r.Price, &r.Status, &r.DownloadedAt, &r.PaidAt, &r.ConfirmedAt, &r.DueAt, &r.DueRemindedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.Provider, &r.Account, &r.Period, &r.StorageKey, &r.SizeBytes, &r.Price, &r.Status, &r.DownloadedAt, &r.PaidAt, &r.ConfirmedAt, &r.DueAt, &r.DueRemindedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

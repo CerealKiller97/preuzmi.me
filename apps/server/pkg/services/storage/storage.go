@@ -24,6 +24,18 @@ type Interface interface {
 	Load(ctx context.Context, key string) ([]byte, error)
 }
 
+// ReceiptKey builds the storage key for a receipt PDF. A solo account (empty
+// account ID) keeps the historical flat layout "07-2026/eps.pdf"; a named
+// account files under a per-account subfolder "07-2026/eps/<account>.pdf", so
+// several family members' bills for the same provider and period never collide.
+func ReceiptKey(period, provider, account string) string {
+	if account == "" {
+		return fmt.Sprintf("%s/%s.pdf", period, provider)
+	}
+
+	return fmt.Sprintf("%s/%s/%s.pdf", period, provider, account)
+}
+
 // New builds the storage backend named by cfg.Storage.
 func New(cfg *config.Config) (Interface, error) {
 	switch cfg.Storage {

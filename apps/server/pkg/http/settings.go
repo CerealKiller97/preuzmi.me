@@ -19,15 +19,19 @@ import (
 // redacted replaces every secret before it leaves the process.
 const redacted = config.SecretPlaceholder
 
-// redactedCredentials mirrors config.Credentials with the password removed.
+// redactedAccount is one provider account for display: its id/label plus the
+// identifier, with the password shown only as the placeholder when set.
 //
-// The identifier is kept so the account in use can be verified at a glance,
-// but the password never leaves the server: this endpoint has no authentication
-// and the app binds to whatever host config.json names, which may well be every
+// The identifier is kept so the account in use can be verified at a glance, but
+// the password never leaves the server: this endpoint has no authentication and
+// the app binds to whatever host config.json names, which may well be every
 // interface on the machine.
-type redactedCredentials struct {
+type redactedAccount struct {
+	ID         string `json:"id,omitempty"`
+	Label      string `json:"label,omitempty"`
 	Identifier string `json:"identifier"`
 	Password   string `json:"password"`
+	Mailbox    string `json:"mailbox,omitempty"`
 }
 
 // redactedConfig mirrors config.Config for display.
@@ -37,8 +41,8 @@ type redactedCredentials struct {
 // config.json but absent from config.Config are silently ignored at load time
 // and therefore will not appear here either.
 type redactedConfig struct {
-	Providers     map[string]redactedCredentials `json:"providers"`
-	Notifications redactedNotifications          `json:"notifications"`
+	Providers     map[string][]redactedAccount `json:"providers"`
+	Notifications redactedNotifications        `json:"notifications"`
 	Email         redactedEmail                  `json:"email"`
 	S3            redactedS3                     `json:"s3"`
 	Application   struct {
@@ -109,7 +113,7 @@ func redact(cfg *config.Config) redactedConfig {
 		LogLevel:     cfg.LogLevel,
 		Lang:         cfg.Lang,
 		PrettyPrint:  cfg.PrettyPrint,
-		Providers:    make(map[string]redactedCredentials, len(cfg.Providers)),
+		Providers:    make(map[string][]redactedAccount, len(cfg.Providers)),
 	}
 
 	out.S3.Endpoint = cfg.S3.Endpoint
@@ -148,13 +152,21 @@ func redact(cfg *config.Config) redactedConfig {
 	out.Application.Host = cfg.Application.Host
 	out.Application.Port = cfg.Application.Port
 
-	for name, creds := range cfg.Providers {
-		entry := redactedCredentials{Identifier: creds.Username}
-		if creds.Password != "" {
-			entry.Password = redacted
+	for name, accounts := range cfg.Providers {
+		list := make([]redactedAccount, 0, len(accounts))
+		for _, a := range accounts {
+			entry := redactedAccount{
+				ID:         a.ID,
+				Label:      a.Label,
+				Identifier: a.Username,
+				Mailbox:    a.Mailbox,
+			}
+			if a.Password != "" {
+				entry.Password = redacted
+			}
+			list = append(list, entry)
 		}
-
-		out.Providers[string(name)] = entry
+		out.Providers[string(name)] = list
 	}
 
 	return out
@@ -170,29 +182,79 @@ func editableForm(cfg *config.Config) config.Config {
 	out.Notifications.SMTP.Password = ""
 	out.Notifications.Telegram.BotToken = ""
 
-	out.Providers = make(map[config.Provider]config.Credentials, len(cfg.Providers))
-	for name, creds := range cfg.Providers {
-		out.Providers[name] = config.Credentials{
-			Username: creds.Username,
-			Password: "",
-			// Mailbox is not a secret; carry it through so a settings save from
-			// the UI does not blank a provider's configured folder/label.
-			Mailbox: creds.Mailbox,
+	out.Providers = make(map[config.Provider]config.ProviderAccounts, len(cfg.Providers))
+	for name, accounts := range cfg.Providers {
+		list := make(config.ProviderAccounts, 0, len(accounts))
+		for _, a := range accounts {
+			list = append(list, config.Account{
+				ID:       a.ID,
+				Label:    a.Label,
+				Username: a.Username,
+				Password: "",
+				// Mailbox is not a secret; carry it through so a settings save from
+				// the UI does not blank a provider's configured folder/label.
+				Mailbox: a.Mailbox,
+			})
 		}
+		out.Providers[name] = list
 	}
 
 	return out
 }
 
-// ProviderStatus summarises one provider for the settings table.
+// ProviderStatus summarises one provider account for the settings table. A solo
+// provider yields a single entry with an empty Account/Label; a multi-account
+// provider yields one entry per account.
 type ProviderStatus struct {
 	Name        string
+	Account     string
+	Label       string
 	Identifier  string
 	HasPassword bool
 	// Configured means both halves of the credential pair are present.
 	Configured bool
 	// Implemented means a download actually exists for this provider.
 	Implemented bool
+}
+
+// providerStatuses builds one status entry per configured account across all
+// providers, sorted by provider then account so the settings table is stable.
+func providerStatuses(cfg *config.Config) []ProviderStatus {
+	out := make([]ProviderStatus, 0, len(cfg.Providers))
+	for name, accounts := range cfg.Providers {
+		for _, a := range accounts {
+			out = append(out, ProviderStatus{
+				Name:        string(name),
+				Account:     a.ID,
+				Label:       a.Label,
+				Identifier:  a.Username,
+				HasPassword: a.Password != "",
+				Configured:  a.Configured(),
+				Implemented: container.IsImplemented(string(name)),
+			})
+		}
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Name != out[j].Name {
+			return out[i].Name < out[j].Name
+		}
+
+		return out[i].Account < out[j].Account
+	})
+
+	return out
+}
+
+// providerStatusKey is the map key used to expose per-account secret presence to
+// the settings UI: the provider name for a solo account, or "provider/account"
+// for a named one.
+func providerStatusKey(name, account string) string {
+	if account == "" {
+		return name
+	}
+
+	return name + "/" + account
 }
 
 // SettingsPageData backs the settings template.
@@ -274,7 +336,12 @@ func writable(dir string) bool {
 
 // APIProviderStatus is the JSON-friendly provider summary for GET /api/settings.
 type APIProviderStatus struct {
-	Name        string `json:"name"`
+	Name string `json:"name"`
+	// Account is the provider account id ("" for a solo provider); Label is its
+	// display name. Both are omitted for solo so a single-account payload is
+	// unchanged from before multi-account support.
+	Account     string `json:"account,omitempty"`
+	Label       string `json:"label,omitempty"`
 	Identifier  string `json:"identifier"`
 	HasPassword bool   `json:"has_password"`
 	Configured  bool   `json:"configured"`
@@ -310,29 +377,17 @@ type APISettings struct {
 // status fields mirror SettingsPageData.
 func settingsAPIHandler(cfg *config.Config, version string, notifier *notify.Service) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
-		names := make([]string, 0, len(cfg.Providers))
-		for name := range cfg.Providers {
-			names = append(names, string(name))
-		}
-		sort.Strings(names)
-
-		providers := make([]APIProviderStatus, 0, len(names))
-		for _, name := range names {
-			creds := cfg.Providers[config.Provider(name)]
-			providers = append(providers, APIProviderStatus{
-				Name:        name,
-				Identifier:  creds.Username,
-				HasPassword: creds.Password != "",
-				Configured:  creds.Username != "" && creds.Password != "",
-				Implemented: container.IsImplemented(name),
-			})
+		statuses := providerStatuses(cfg)
+		providers := make([]APIProviderStatus, 0, len(statuses))
+		for _, s := range statuses {
+			providers = append(providers, APIProviderStatus(s))
 		}
 
 		dir := cfg.DownloadPath
 		_, statErr := os.Stat(dir)
 		exists := statErr == nil
 
-		receipts, err := scanReceipts(dir, nil)
+		receipts, err := scanReceipts(cfg, nil)
 		if err != nil {
 			log.Err(err).Msg("Error counting receipts for settings API")
 		}
@@ -380,30 +435,14 @@ func settingsHandler(cfg *config.Config, version string, notifier *notify.Servic
 			return
 		}
 
-		// Stable order: ranging a map would reshuffle the table every reload.
-		names := make([]string, 0, len(cfg.Providers))
-		for name := range cfg.Providers {
-			names = append(names, string(name))
-		}
-		sort.Strings(names)
-
-		providers := make([]ProviderStatus, 0, len(names))
-		for _, name := range names {
-			creds := cfg.Providers[config.Provider(name)]
-			providers = append(providers, ProviderStatus{
-				Name:        name,
-				Identifier:  creds.Username,
-				HasPassword: creds.Password != "",
-				Configured:  creds.Username != "" && creds.Password != "",
-				Implemented: container.IsImplemented(name),
-			})
-		}
+		// One row per account, stably ordered (ranging a map would reshuffle).
+		providers := providerStatuses(cfg)
 
 		dir := cfg.DownloadPath
 		_, statErr := os.Stat(dir)
 		exists := statErr == nil
 
-		receipts, err := scanReceipts(dir, nil)
+		receipts, err := scanReceipts(cfg, nil)
 		if err != nil {
 			log.Err(err).Msg("Error counting receipts for settings")
 		}
@@ -429,7 +468,7 @@ func settingsHandler(cfg *config.Config, version string, notifier *notify.Servic
 
 		providerSecrets := map[string]bool{}
 		for _, p := range providers {
-			providerSecrets[p.Name] = p.HasPassword
+			providerSecrets[providerStatusKey(p.Name, p.Account)] = p.HasPassword
 		}
 		providerSecretsJSON, _ := json.Marshal(providerSecrets)
 

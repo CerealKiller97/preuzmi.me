@@ -108,6 +108,8 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
           .where(
             (r) =>
                 r.provider.toLowerCase().contains(q) ||
+                r.account.toLowerCase().contains(q) ||
+                r.label.toLowerCase().contains(q) ||
                 r.filename.toLowerCase().contains(q) ||
                 r.period.toLowerCase().contains(q),
           )
@@ -116,9 +118,44 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
     items.sort((a, b) {
       final byMod = b.modified.compareTo(a.modified);
       if (byMod != 0) return byMod;
-      return a.provider.compareTo(b.provider);
+      final byProv = a.provider.compareTo(b.provider);
+      if (byProv != 0) return byProv;
+      return a.account.compareTo(b.account);
     });
     return items;
+  }
+
+  /// Whether any filtered receipt belongs to a named account — section headers
+  /// only appear then; solo deployments stay a flat list (matches web).
+  bool _hasAccountGroups(List<Receipt> items) =>
+      items.any((r) => r.account.isNotEmpty || r.label.isNotEmpty);
+
+  /// Bucket filtered receipts by provider+account for the dashboard layout.
+  List<({String key, String title, bool showHeader, List<Receipt> items})>
+  _grouped(List<Receipt> items) {
+    if (!_hasAccountGroups(items)) {
+      return [(key: 'all', title: '', showHeader: false, items: items)];
+    }
+    final order = <String>[];
+    final buckets = <String, List<Receipt>>{};
+    for (final r in items) {
+      final key = '${r.provider.toLowerCase()}\x00${r.account}';
+      buckets
+          .putIfAbsent(key, () {
+            order.add(key);
+            return <Receipt>[];
+          })
+          .add(r);
+    }
+    return [
+      for (final key in order)
+        (
+          key: key,
+          title: fmt.receiptLabel(buckets[key]!.first),
+          showHeader: true,
+          items: buckets[key]!,
+        ),
+    ];
   }
 
   Future<void> _runRefresh() async {
@@ -205,7 +242,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
       api: api,
       receipt: r,
       onMarkPaid: () async {
-        await api.markPaid(r.period, r.provider, true);
+        await api.markPaid(r.period, r.provider, true, account: r.account);
         ref.invalidate(receiptsProvider);
         ref.invalidate(statsProvider);
       },
@@ -271,7 +308,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               children: [
                 Text(
-                  'Svi preuzeti računi, grupisani po provajderu i periodu.',
+                  'Svi preuzeti računi, grupisani po nalogu i periodu.',
                   style: TextStyle(fontSize: 14, color: c.mutedForeground),
                 ),
                 const SizedBox(height: 16),
@@ -290,16 +327,30 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
                 if (filtered.isEmpty)
                   _emptyState(c)
                 else
-                  ...filtered.map(
-                    (r) => Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: ReceiptCard(
-                        receipt: r,
-                        onOpenQr: () => _openQr(r),
-                        onOpenPdf: () => _openPdf(r),
+                  for (final group in _grouped(filtered)) ...[
+                    if (group.showHeader) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 10),
+                        child: Text(
+                          group.title,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: c.mutedForeground,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
+                    ],
+                    for (final r in group.items)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: ReceiptCard(
+                          receipt: r,
+                          onOpenQr: () => _openQr(r),
+                          onOpenPdf: () => _openPdf(r),
+                        ),
+                      ),
+                  ],
               ],
             );
           },
@@ -318,7 +369,7 @@ class _ReceiptsScreenState extends ConsumerState<ReceiptsScreen> {
           onChanged: (v) => setState(() => _query = v),
           decoration: InputDecoration(
             prefixIcon: Icon(Icons.search_rounded, size: 20),
-            hintText: 'Provajder, period, naziv fajla...'.t,
+            hintText: 'Provajder, nalog, period, naziv fajla...'.t,
           ),
         ),
       ],

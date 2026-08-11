@@ -2,6 +2,19 @@
  * Settings page: editable config form with apply/reload, notification test,
  * and step-by-step setup guides for the selected driver.
  */
+
+// Serbian Cyrillic + Latin-diacritic → ASCII, used to derive an account's
+// path-safe id slug from its display name. Lossy on purpose (č/ć→c): slugs only
+// need to be stable, unique and filesystem/URL-safe, and duplicates are caught
+// by validation.
+const SR_CYR_TO_LAT = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', ђ: 'dj', е: 'e', ж: 'z', з: 'z',
+  и: 'i', ј: 'j', к: 'k', л: 'l', љ: 'lj', м: 'm', н: 'n', њ: 'nj', о: 'o',
+  п: 'p', р: 'r', с: 's', т: 't', ћ: 'c', у: 'u', ф: 'f', х: 'h', ц: 'c',
+  ч: 'c', џ: 'dz', ш: 's',
+  č: 'c', ć: 'c', š: 's', ž: 'z', đ: 'dj',
+};
+
 document.addEventListener('alpine:init', () => {
   Alpine.data('settingsPage', () => ({
     form: {},
@@ -219,6 +232,24 @@ document.addEventListener('alpine:init', () => {
       if (!form.providers) {
         form.providers = {};
       }
+      // Normalize every provider to an array of account objects so the UI can
+      // iterate and edit them uniformly. A solo provider arrives as a single
+      // credential object (the historical shape); wrap it as a one-element list.
+      // Mailbox is carried through even though it has no field, so a save never
+      // blanks a provider's configured IMAP folder.
+      for (const name of Object.keys(form.providers)) {
+        let list = form.providers[name];
+        if (!Array.isArray(list)) {
+          list = list && typeof list === 'object' ? [list] : [];
+        }
+        form.providers[name] = list.map((a) => ({
+          id: (a && a.id) || '',
+          label: (a && a.label) || '',
+          identifier: (a && a.identifier) || '',
+          password: (a && a.password) || '',
+          mailbox: (a && a.mailbox) || '',
+        }));
+      }
       if (!form.notifications) {
         form.notifications = {};
       }
@@ -275,6 +306,95 @@ document.addEventListener('alpine:init', () => {
       return has ? t('•••••••• (neizmenjeno)') : '';
     },
 
+    // slugifyAccount derives an account's stable id from its display name: the
+    // id is simply the name, transliterated to ASCII, lowercased, with every run
+    // of non-slug characters collapsed to a single "-". So "Mama" → "mama",
+    // "Дете 1" → "dete-1". Kept in sync with the server's slugRe.
+    slugifyAccount(nameValue) {
+      const lower = String(nameValue || '').trim().toLowerCase();
+      let out = '';
+      for (const ch of lower) {
+        out += Object.prototype.hasOwnProperty.call(SR_CYR_TO_LAT, ch) ? SR_CYR_TO_LAT[ch] : ch;
+      }
+      return out.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    },
+
+    // setAccountName updates an account's display name and re-derives its id from
+    // it, so the two stay a single field for the user.
+    setAccountName(account, value) {
+      account.label = value;
+      account.id = this.slugifyAccount(value);
+      this.markDirty();
+    },
+
+    // accounts returns the (always-array) account list for a provider.
+    accounts(name) {
+      const list = this.form.providers?.[name];
+      return Array.isArray(list) ? list : [];
+    },
+
+    // multiAccount reports whether a provider holds more than one account, which
+    // is when each account must carry a stable id.
+    multiAccount(name) {
+      return this.accounts(name).length > 1;
+    },
+
+    // accountSecretKey mirrors the server's providerStatusKey: the provider name
+    // for a solo account, or "provider/id" for a named one. It looks up whether a
+    // saved password already exists so the field can show a "kept" placeholder.
+    accountSecretKey(name, account) {
+      return account && account.id ? `${name}/${account.id}` : name;
+    },
+
+    hasSecret(name, account) {
+      return !!this.secretHints.providers[this.accountSecretKey(name, account)];
+    },
+
+    // addAccount appends a blank account to a provider, turning a solo provider
+    // into a multi-account one. The template then reveals the id/label fields.
+    addAccount(name) {
+      if (!Array.isArray(this.form.providers[name])) {
+        this.form.providers[name] = [];
+      }
+      this.form.providers[name].push({ id: '', label: '', identifier: '', password: '', mailbox: '' });
+      this.markDirty();
+    },
+
+    removeAccount(name, index) {
+      const list = this.form.providers[name];
+      if (Array.isArray(list) && index >= 0 && index < list.length) {
+        list.splice(index, 1);
+        this.markDirty();
+      }
+    },
+
+    // validateAccounts mirrors the server's config.validateProviders so the user
+    // gets an immediate, localized error instead of a round-trip rejection. It
+    // returns an empty string when every provider's accounts are valid.
+    validateAccounts(providers) {
+      const slug = /^[a-z0-9][a-z0-9_-]*$/;
+      for (const [name, list] of Object.entries(providers || {})) {
+        if (!Array.isArray(list) || list.length <= 1) {
+          continue;
+        }
+        const seen = new Set();
+        for (const account of list) {
+          const id = (account.id || '').trim();
+          if (!id) {
+            return `${t('Kada provajder ima više naloga, svaki mora imati ime.')} (${name})`;
+          }
+          if (!slug.test(id)) {
+            return `${t('Ime naloga mora da sadrži bar jedno slovo ili cifru.')} (${name})`;
+          }
+          if (seen.has(id)) {
+            return `${t('Nazivi naloga moraju biti jedinstveni kod istog provajdera.')} (${name}/${id})`;
+          }
+          seen.add(id);
+        }
+      }
+      return '';
+    },
+
     markDirty() {
       this.dirty = true;
     },
@@ -289,6 +409,14 @@ document.addEventListener('alpine:init', () => {
 
       try {
         const payload = this.normalizeForm(this.form);
+
+        const accountError = this.validateAccounts(payload.providers);
+        if (accountError) {
+          this.showFlash(false, t('Neispravni nalozi'), accountError);
+          this.saving = false;
+          return;
+        }
+
         payload.application.port = Number(payload.application.port) || 0;
         payload.check_until = Number(payload.check_until) || 0;
         payload.notifications.smtp.port = Number(payload.notifications.smtp.port) || 0;

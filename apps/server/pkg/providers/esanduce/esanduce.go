@@ -46,6 +46,9 @@ type (
 		receipts *receipts.Repository
 		http     *http.Client
 		config   config.Credentials
+		// account is the provider account id this instance downloads for: "" for a
+		// solo deployment, or a config account id for a named family-member login.
+		account string
 	}
 
 	LoginResponse struct {
@@ -131,9 +134,10 @@ type (
 
 var _ provider.Interface = &Service{}
 
-func New(config config.Credentials, logger zerolog.Logger, storage storage.Interface, receiptsStore *receipts.Repository) *Service {
+func New(config config.Credentials, account string, logger zerolog.Logger, storage storage.Interface, receiptsStore *receipts.Repository) *Service {
 	return &Service{
 		config:   config,
+		account:  account,
 		logger:   logger,
 		storage:  storage,
 		receipts: receiptsStore,
@@ -190,14 +194,14 @@ func (s Service) DownloadReceipt() error {
 		if amount, ok := ipsqr.AmountFromPDF(pdf); ok {
 			price = amount
 		}
-		if err := s.receipts.SetPrice(ctx, fileName, period, price); err != nil {
+		if err := s.receipts.SetPrice(ctx, fileName, s.account, period, price); err != nil {
 			s.logger.Err(err).Str("period", period).Msg("Failed to record esanduce receipt price")
 		}
-		if err := s.receipts.SetStatus(ctx, fileName, period, billStatus(bill)); err != nil {
+		if err := s.receipts.SetStatus(ctx, fileName, s.account, period, billStatus(bill)); err != nil {
 			s.logger.Err(err).Str("period", period).Msg("Failed to record esanduce receipt status")
 		}
 		if due, ok := parseDueDate(bill.DatumValute); ok {
-			if err := s.receipts.SetDueAt(ctx, fileName, period, due.Unix()); err != nil {
+			if err := s.receipts.SetDueAt(ctx, fileName, s.account, period, due.Unix()); err != nil {
 				s.logger.Err(err).Str("period", period).Msg("Failed to record esanduce receipt due date")
 			}
 		}
@@ -292,7 +296,7 @@ func (s Service) downloadReceipt(token string, ident, ggmm int, period string) (
 		return nil, fmt.Errorf("esanduce pdf base64 decode: %w", err)
 	}
 
-	key := fmt.Sprintf("%s/%s.pdf", period, fileName)
+	key := storage.ReceiptKey(period, fileName, s.account)
 
 	if err := s.storage.Save(context.Background(), key, data); err != nil {
 		return nil, err

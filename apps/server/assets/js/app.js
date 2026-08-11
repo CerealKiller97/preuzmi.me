@@ -179,14 +179,52 @@ document.addEventListener('alpine:init', () => {
     },
 
     /**
-     * URL of the rendered IPS payment QR for a receipt. item.url is already
-     * "/receipt/{period}/{provider}"; the image lives one segment deeper.
+     * The ?account=<id> selector for a receipt, or "" for a solo account. Every
+     * receipt sub-resource (qr.png, qr.txt, the paid endpoint) carries it so the
+     * request targets the right family-member account.
+     *
+     * @param {object} item
+     * @returns {string}
+     */
+    accountQuery(item) {
+      return item && item.account ? `?account=${encodeURIComponent(item.account)}` : '';
+    },
+
+    /**
+     * The receipt's base path without any query string. item.url is
+     * "/receipt/{period}/{provider}" plus an optional "?account=…"; sub-resources
+     * live one segment deeper, so the suffix must go before the query.
+     *
+     * @param {object} item
+     * @returns {string}
+     */
+    receiptPath(item) {
+      return String((item && item.url) || '').split('?')[0];
+    },
+
+    /**
+     * URL of the rendered IPS payment QR for a receipt. The image lives one
+     * segment deeper than the receipt path, with the account selector preserved.
      *
      * @param {object} item
      * @returns {string}
      */
     qrImgUrl(item) {
-      return `${item.url}/qr.png`;
+      return `${this.receiptPath(item)}/qr.png${this.accountQuery(item)}`;
+    },
+
+    /**
+     * Short display label for a receipt's account ("Mama"), or "" for a solo
+     * account. Prefers the configured label, falling back to the account id.
+     *
+     * @param {object} item
+     * @returns {string}
+     */
+    accountName(item) {
+      if (!item || !item.account) {
+        return '';
+      }
+      return item.label || item.account;
     },
 
     /**
@@ -233,7 +271,7 @@ document.addEventListener('alpine:init', () => {
       }
 
       try {
-        const res = await fetch(`${item.url}/qr.txt`);
+        const res = await fetch(`${this.receiptPath(item)}/qr.txt${this.accountQuery(item)}`);
         if (!res.ok) {
           // Image @error may also flip this; keep both paths in sync.
           this.qrMissing = true;
@@ -337,7 +375,7 @@ document.addEventListener('alpine:init', () => {
       try {
         let payload = this.qrPayload;
         if (!payload) {
-          const res = await fetch(`${item.url}/qr.txt`);
+          const res = await fetch(`${this.receiptPath(item)}/qr.txt${this.accountQuery(item)}`);
           if (!res.ok) {
             this.qrMissing = true;
             return;
@@ -401,14 +439,18 @@ document.addEventListener('alpine:init', () => {
         items = items.filter(r =>
           (r.provider || '').toLowerCase().includes(q) ||
           (r.filename || '').toLowerCase().includes(q) ||
-          (r.period || '').toLowerCase().includes(q)
+          (r.period || '').toLowerCase().includes(q) ||
+          (r.label || '').toLowerCase().includes(q) ||
+          (r.account || '').toLowerCase().includes(q)
         );
       }
 
-      // Newest first, then alphabetically by provider.
+      // Newest first, then grouped by provider, then by account so several
+      // family-member accounts of one provider sit next to each other.
       items.sort((a, b) =>
         (b.modified || 0) - (a.modified || 0) ||
-        (a.provider || '').localeCompare(b.provider || '')
+        (a.provider || '').localeCompare(b.provider || '') ||
+        (a.account || '').localeCompare(b.account || '')
       );
 
       return items;
@@ -499,7 +541,7 @@ document.addEventListener('alpine:init', () => {
       item.paid = next;
 
       try {
-        const res = await fetch(`/api/receipts/${item.period}/${item.provider}/paid`, {
+        const res = await fetch(`/api/receipts/${item.period}/${item.provider}/paid${this.accountQuery(item)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ paid: next }),

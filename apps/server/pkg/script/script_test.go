@@ -14,6 +14,7 @@ func TestToCyrillic(t *testing.T) {
 	assert.Equal(t, "Његош", script.ToCyrillic("Njegoš"))
 	assert.Equal(t, "џем", script.ToCyrillic("džem"))
 	assert.Equal(t, "Preuzmi.me: рачун", script.ToCyrillic("Preuzmi.me: račun"))
+	assert.Equal(t, "идентификатор у config.json-у", script.ToCyrillic("identifikator u config.json-u"))
 	assert.Equal(t, "Све", script.ToCyrillic("Sve"))
 }
 

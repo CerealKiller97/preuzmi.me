@@ -19,21 +19,19 @@ import (
 )
 
 type Container struct {
-	Logger            zerolog.Logger
-	esanduceProvider  provider.Interface
-	storage           storage.Interface
-	receiptsStore     *receipts.Repository
-	mtsProvider       provider.Interface
-	a1Provider        provider.Interface
-	Ctx               context.Context
-	yettelProvider    provider.Interface
-	epsProvider       provider.Interface
-	eupravnikProvider provider.Interface
-	config            *config.Config
-	Assets            embed.FS
-	notifier          *notify.Service
-	version           string
-	mu                sync.RWMutex
+	Logger        zerolog.Logger
+	storage       storage.Interface
+	receiptsStore *receipts.Repository
+	Ctx           context.Context
+	config        *config.Config
+	// providers caches one implementation per configured account, keyed by
+	// provider.JobKey(provider, account). A solo deployment has one entry per
+	// provider (account ""); a multi-account provider has one per account.
+	providers map[string]provider.Interface
+	notifier  *notify.Service
+	Assets    embed.FS
+	version   string
+	mu        sync.RWMutex
 }
 
 var _ io.Closer = &Container{}
@@ -76,12 +74,7 @@ func (c *Container) Reload(cfg *config.Config) {
 		c.receiptsStore = nil
 	}
 	c.notifier = nil
-	c.mtsProvider = nil
-	c.a1Provider = nil
-	c.esanduceProvider = nil
-	c.yettelProvider = nil
-	c.epsProvider = nil
-	c.eupravnikProvider = nil
+	c.providers = nil
 
 	level := cfg.LogLevel
 	if level == "" {
@@ -154,7 +147,7 @@ func (c *Container) NotifyRefreshResults(results []refresh.Result) {
 	newly := store.DrainNewlyDownloaded()
 	isNew := make(map[string]struct{}, len(newly))
 	for _, r := range newly {
-		isNew[downloadKey(r.Provider, r.Period)] = struct{}{}
+		isNew[downloadKey(r.Provider, r.Account, r.Period)] = struct{}{}
 	}
 
 	for i := range enriched {
@@ -163,12 +156,12 @@ func (c *Container) NotifyRefreshResults(results []refresh.Result) {
 		}
 
 		// Name the month and amount from the database when available.
-		if rec, ok := store.Latest(c.Ctx, enriched[i].Provider); ok {
+		if rec, ok := store.Latest(c.Ctx, enriched[i].Provider, enriched[i].Account); ok {
 			enriched[i].Period = rec.Period
 			enriched[i].Price = rec.Price
 		}
 
-		if _, ok := isNew[downloadKey(enriched[i].Provider, enriched[i].Period)]; ok {
+		if _, ok := isNew[downloadKey(enriched[i].Provider, enriched[i].Account, enriched[i].Period)]; ok {
 			enriched[i].New = true
 		}
 	}
@@ -181,6 +174,8 @@ func (c *Container) NotifyRefreshResults(results []refresh.Result) {
 		for _, r := range verified {
 			items = append(items, notify.VerifiedReceipt{
 				Provider: r.Provider,
+				Account:  r.Account,
+				Label:    c.accountLabel(r.Provider, r.Account),
 				Period:   r.Period,
 				Price:    r.Price,
 			})
@@ -215,6 +210,8 @@ func (c *Container) notifyDueReminders(store *receipts.Repository, notifier *not
 		}
 		candidates = append(candidates, notify.DueReceipt{
 			Provider: r.Provider,
+			Account:  r.Account,
+			Label:    c.accountLabel(r.Provider, r.Account),
 			Period:   r.Period,
 			Price:    r.Price,
 			DueAt:    r.DueAt,
@@ -228,15 +225,27 @@ func (c *Container) notifyDueReminders(store *receipts.Repository, notifier *not
 
 	stamped := make([]receipts.Receipt, 0, len(sent))
 	for _, it := range sent {
-		stamped = append(stamped, receipts.Receipt{Provider: it.Provider, Period: it.Period})
+		stamped = append(stamped, receipts.Receipt{Provider: it.Provider, Account: it.Account, Period: it.Period})
 	}
 	if err := store.MarkDueReminded(c.Ctx, stamped, time.Now().Unix()); err != nil {
 		c.Logger.Err(err).Msg("Failed to stamp due reminders")
 	}
 }
 
-// downloadKey joins a receipt's provider and period into the map key used to
-// match run results against the newly-downloaded set.
-func downloadKey(provider, period string) string {
-	return provider + "\x00" + period
+// accountLabel returns the display label configured for a (provider, account),
+// falling back to the account id, then to "" for a solo account. It lets
+// notifications built from database rows (which carry only the account id) show
+// the friendly name, e.g. "EPS · Mama".
+func (c *Container) accountLabel(provider, account string) string {
+	if acc, ok := c.GetConfig().AccountByID(provider, account); ok && acc.Label != "" {
+		return acc.Label
+	}
+
+	return account
+}
+
+// downloadKey joins a receipt's provider, account and period into the map key
+// used to match run results against the newly-downloaded set.
+func downloadKey(provider, account, period string) string {
+	return provider + "\x00" + account + "\x00" + period
 }

@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-  ghcr.io/cerealkiller97/preuzmi.me:1.5.0
+  ghcr.io/cerealkiller97/preuzmi.me:1.7.0
 ```
 
 ### docker compose
@@ -65,7 +65,7 @@ docker run -d --name preuzmi \
 ```yaml
 services:
   preuzmi:
-    image: ghcr.io/cerealkiller97/preuzmi.me:1.5.0
+    image: ghcr.io/cerealkiller97/preuzmi.me:1.7.0
     container_name: preuzmi.me
     ports:
       - "5500:5500"
@@ -93,6 +93,7 @@ docker exec preuzmi /app/preuzmi checks
 ## Mogućnosti
 
 - **Više provajdera** — A1, mts, EPS i e.Sanduče se prijavljuju kredencijalima svoje platforme; Yettel i eUpravnik čitaju račun iz vašeg sandučeta preko IMAP-a (za sada)
+- **Više naloga po provajderu** — dodaj više prijava za istog provajdera (npr. članovi porodice), svaki sa svojim imenom; računi se grupišu i označavaju po nalogu, a obaveštenja imenuju nalog („ЕПС · Мама“). Solo podešavanja ostaju nepromenjena
 - **Pametno osvežavanje** — preskače provajdere čiji je račun za prošli mesec završen (`paid_at` postavljen, status `plaćeno` i `confirmed_at` postavljen); neplaćeni ili neverifikovani računi se i dalje proveravaju da bi status mogao da se promeni
 - **Dashboard računa** — pretraga, filter po periodu / provajderu / statusu plaćanja
 - **Praćenje plaćanja** — označi račun kao plaćen iz UI-ja ili `receipts` CLI-ja; prati se kao dva odvojena trenutka: *ti platio* i *provajder potvrdio*
@@ -129,6 +130,25 @@ docker exec preuzmi /app/preuzmi checks
 
 <p align="center">
   <img src="docs/screenshots/settings.png" alt="Stranica podešavanja" width="880" />
+</p>
+
+### Mobilna aplikacija (iOS i Android)
+
+Flutter aplikacija ([`apps/mobile`](apps/mobile)) preslikava veb UI na obe platforme — iOS levo, Android desno.
+
+<p align="center">
+  <img src="docs/screenshots/mobile-ios-receipts.png" alt="Računi — iOS" width="250" />
+  <img src="docs/screenshots/mobile-android-receipts.png" alt="Računi — Android" width="250" />
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/mobile-ios-stats.png" alt="Statistika — iOS" width="250" />
+  <img src="docs/screenshots/mobile-android-stats.png" alt="Statistika — Android" width="250" />
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/mobile-ios-settings.png" alt="Podešavanja — iOS" width="250" />
+  <img src="docs/screenshots/mobile-android-settings.png" alt="Podešavanja — Android" width="250" />
 </p>
 
 ## Konfiguracija
@@ -188,10 +208,25 @@ docker exec preuzmi /app/preuzmi checks
 | `lang` | Pismo UI-ja i obaveštenja: `latin` (podrazumevano) ili `cyrillic` |
 | `notifications.mode` | `off` · `per_receipt` · `all_done` |
 | `notifications.driver` | `telegram` ili `smtp` |
+| `notifications.telegram.bot_token` | Token bota za Telegram. Otvori Telegram, nađi **@BotFather**, pošalji `/newbot`, izaberi ime i username — BotFather ti vrati token. |
+| `notifications.telegram.chat_id` | ID chata u koji stižu obaveštenja. Pošalji poruku svom botu, pa otvori `https://api.telegram.org/bot<TOKEN>/getUpdates` i pročitaj `chat.id`. Za lični chat radi i **@userinfobot**. |
 | `notifications.due_reminders` | Šalje podsetnik za neplaćene račune koji su dospeli ili uskoro dospevaju — `true` / `false` (podrazumevano `false`) |
 | `notifications.due_reminder_days` | Koliko dana pre roka počinju podsetnici (podrazumevano `7`) |
 | `email.provider` | Drajver sandučeta za email provajdere (eUpravnik / Yettel). **Trenutno samo `gmail`.** |
 | `providers.<ime>.mailbox` | Gmail labela koja se pretražuje za račun tog provajdera. Prazno → pada na `email.mailbox`, pa na `INBOX`. |
+
+### Provajderi
+
+**Portal** je mesto gde se korisnik prijavljuje; **Prijava** je način na koji Preuzmi.me zapravo preuzima račun — ili preko sopstvene platforme provajdera ili iz vašeg sandučeta preko IMAP-a.
+
+| Provajder | Portal | Prijava |
+| --- | --- | --- |
+| **A1** | [asmp.a1.rs](https://asmp.a1.rs) | Platforma |
+| **mts** | [moj.mts.rs](https://moj.mts.rs) | Platforma |
+| **EPS** | [portal.eps.rs](https://portal.eps.rs) | Platforma |
+| **e.Sanduče** | [esanduce.rs](https://esanduce.rs) | Platforma |
+| **eUpravnik** | [moj.e-upravnik.rs](https://moj.e-upravnik.rs) | Sanduče (IMAP) — račun stiže mejlom |
+| **Yettel** | — (račun stiže mejlom) | Sanduče (IMAP) |
 
 > **Dva načina prijave.** **A1, mts, EPS i e.Sanduče** se autentifikuju na sopstvenu platformu, pa su njihovi `identifier` / `password` vaša **prijava za tog provajdera**. **Yettel i eUpravnik** nemaju upotrebljiv API, pa — *za sada* — aplikacija čita PDF računa iz vašeg sandučeta preko IMAP-a; njihovi `identifier` / `password` su vaša **Gmail adresa i Google App Password**, a ne prijava za provajdera. Vidi [eUpravnik & Yettel](#eupravnik--yettel--preko-sandučeta-za-sada-samo-gmail) niže.
 

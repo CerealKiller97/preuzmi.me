@@ -4,10 +4,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/models.dart';
 import '../state/app_state.dart';
 import '../theme/app_colors.dart';
+import '../util/format.dart' as fmt;
 import '../util/i18n.dart';
 import '../widgets/app_toast.dart';
 import '../widgets/guide_dialog.dart';
 import '../widgets/ui.dart';
+
+/// Base providers in display order (mirrors web settings.js KNOWN_BASES).
+const _knownBases = ['a1', 'mts', 'yettel', 'eps', 'esanduce', 'eupravnik'];
+
+/// Providers that read invoices from IMAP — expose a mailbox field per account.
+const _emailBases = {'yettel', 'eupravnik'};
 
 /// The Settings screen — mirrors `templates/settings.html`: status cards, the
 /// editable config form (storage, email, notifications, providers) and the
@@ -347,70 +354,6 @@ class _SettingsEditorState extends ConsumerState<_SettingsEditor> {
   Map<String, dynamic> _sub(String key) =>
       (_form[key] as Map?)?.cast<String, dynamic>() ?? {};
 
-  @override
-  void initState() {
-    super.initState();
-    _form = _deepCopy(widget.settings.form);
-    final n = _sub('notifications');
-    final smtp = (n['smtp'] as Map?)?.cast<String, dynamic>() ?? {};
-    final tg = (n['telegram'] as Map?)?.cast<String, dynamic>() ?? {};
-    final s3 = _sub('s3');
-    final email = _sub('email');
-
-    _storage = (_form['storage'] ?? 'local').toString();
-    _lang = (_form['lang'] ?? 'latin').toString();
-    _emailProvider = (email['provider'] ?? 'gmail').toString();
-    _notifyMode = (n['mode'] ?? 'off').toString();
-    _notifyDriver = (n['driver'] ?? 'telegram').toString();
-    _paidConfirmation = n['paid_confirmation'] == true;
-    _dueReminders = n['due_reminders'] == true;
-
-    _mk('check_until', (_form['check_until'] ?? 20).toString());
-    _mk('download_path', (_form['download_path'] ?? '').toString());
-    _mk('s3.endpoint', (s3['endpoint'] ?? '').toString());
-    _mk('s3.bucket', (s3['bucket'] ?? '').toString());
-    _mk('s3.region', (s3['region'] ?? '').toString());
-    _mk('s3.access_key', '');
-    _mk('s3.secret_key', '');
-    _mk('email.mailbox', (email['mailbox'] ?? '').toString());
-    _mk('email.host', (email['host'] ?? '').toString());
-    _mk('email.port', (email['port'] ?? 0).toString());
-    _mk('n.due_days', (n['due_reminder_days'] ?? 7).toString());
-    _mk('tg.bot_token', '');
-    _mk('tg.chat_id', (tg['chat_id'] ?? '').toString());
-    _mk('smtp.host', (smtp['host'] ?? '').toString());
-    _mk('smtp.port', (smtp['port'] ?? 0).toString());
-    _mk('smtp.username', (smtp['username'] ?? '').toString());
-    _mk('smtp.password', '');
-    _mk('smtp.from', (smtp['from'] ?? '').toString());
-    _mk('smtp.to', (smtp['to'] ?? '').toString());
-
-    for (final p in _providerNames()) {
-      final creds = _providers()[p] as Map? ?? {};
-      _mk('prov.$p.identifier', (creds['identifier'] ?? '').toString());
-      _mk('prov.$p.password', '');
-    }
-  }
-
-  void _mk(String key, String value) =>
-      _ctl[key] = TextEditingController(text: value);
-
-  @override
-  void dispose() {
-    for (final c in _ctl.values) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  Map<String, dynamic> _providers() =>
-      (_form['providers'] as Map?)?.cast<String, dynamic>() ?? {};
-
-  List<String> _providerNames() {
-    final names = _providers().keys.toList()..sort();
-    return names;
-  }
-
   int _int(String key, int fallback) =>
       int.tryParse(_ctl[key]!.text.trim()) ?? fallback;
 
@@ -458,14 +401,7 @@ class _SettingsEditorState extends ConsumerState<_SettingsEditor> {
     n['smtp'] = smtp;
     form['notifications'] = n;
 
-    final provs = <String, dynamic>{...?form['providers'] as Map?};
-    for (final p in _providerNames()) {
-      final creds = <String, dynamic>{...?provs[p] as Map?};
-      creds['identifier'] = _ctl['prov.$p.identifier']!.text.trim();
-      creds['password'] = _ctl['prov.$p.password']!.text; // blank keeps
-      provs[p] = creds;
-    }
-    form['providers'] = provs;
+    form['providers'] = _pruneProviders();
 
     try {
       final res = await ref.read(apiClientProvider).updateSettings(form);
@@ -487,6 +423,365 @@ class _SettingsEditorState extends ConsumerState<_SettingsEditor> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _form = _deepCopy(widget.settings.form);
+    final n = _sub('notifications');
+    final smtp = (n['smtp'] as Map?)?.cast<String, dynamic>() ?? {};
+    final tg = (n['telegram'] as Map?)?.cast<String, dynamic>() ?? {};
+    final s3 = _sub('s3');
+    final email = _sub('email');
+
+    _storage = (_form['storage'] ?? 'local').toString();
+    _lang = (_form['lang'] ?? 'latin').toString();
+    _emailProvider = (email['provider'] ?? 'gmail').toString();
+    _notifyMode = (n['mode'] ?? 'off').toString();
+    _notifyDriver = (n['driver'] ?? 'telegram').toString();
+    _paidConfirmation = n['paid_confirmation'] == true;
+    _dueReminders = n['due_reminders'] == true;
+
+    _mk('check_until', (_form['check_until'] ?? 20).toString());
+    _mk('download_path', (_form['download_path'] ?? '').toString());
+    _mk('s3.endpoint', (s3['endpoint'] ?? '').toString());
+    _mk('s3.bucket', (s3['bucket'] ?? '').toString());
+    _mk('s3.region', (s3['region'] ?? '').toString());
+    _mk('s3.access_key', '');
+    _mk('s3.secret_key', '');
+    _mk('email.mailbox', (email['mailbox'] ?? '').toString());
+    _mk('email.host', (email['host'] ?? '').toString());
+    _mk('email.port', (email['port'] ?? 0).toString());
+    _mk('n.due_days', (n['due_reminder_days'] ?? 7).toString());
+    _mk('tg.bot_token', '');
+    _mk('tg.chat_id', (tg['chat_id'] ?? '').toString());
+    _mk('smtp.host', (smtp['host'] ?? '').toString());
+    _mk('smtp.port', (smtp['port'] ?? 0).toString());
+    _mk('smtp.username', (smtp['username'] ?? '').toString());
+    _mk('smtp.password', '');
+    _mk('smtp.from', (smtp['from'] ?? '').toString());
+    _mk('smtp.to', (smtp['to'] ?? '').toString());
+
+    // Normalize every provider to an account list and seed known bases so each
+    // renders a card (empty seeded accounts are pruned on apply).
+    _form['providers'] = _normalizeProviders(_form['providers']);
+    _seedProviderControllers();
+  }
+
+  void _mk(String key, String value) =>
+      _ctl[key] = TextEditingController(text: value);
+
+  void _disposeProviderControllers() {
+    final keys = _ctl.keys.where((k) => k.startsWith('prov.')).toList();
+    for (final k in keys) {
+      _ctl.remove(k)?.dispose();
+    }
+  }
+
+  void _seedProviderControllers() {
+    _disposeProviderControllers();
+    for (final base in _providerBases()) {
+      final accounts = _accounts(base);
+      for (var i = 0; i < accounts.length; i++) {
+        final a = accounts[i];
+        _mk('prov.$base.$i.id', (a['id'] ?? '').toString());
+        _mk('prov.$base.$i.label', (a['label'] ?? '').toString());
+        _mk('prov.$base.$i.identifier', (a['identifier'] ?? '').toString());
+        _mk('prov.$base.$i.password', '');
+        _mk('prov.$base.$i.mailbox', (a['mailbox'] ?? '').toString());
+      }
+    }
+  }
+
+  /// Turns FormJSON providers (solo object OR account array) into
+  /// `Map<base, List<Map>>`, seeding an empty solo account for known bases.
+  Map<String, dynamic> _normalizeProviders(dynamic raw) {
+    final out = <String, dynamic>{};
+    final src = (raw as Map?)?.cast<String, dynamic>() ?? {};
+    for (final e in src.entries) {
+      out[e.key] = _asAccountList(e.value);
+    }
+    for (final base in _knownBases) {
+      out.putIfAbsent(base, () => [_emptyAccount()]);
+    }
+    return out;
+  }
+
+  Map<String, String> _emptyAccount() => {
+    'id': '',
+    'label': '',
+    'identifier': '',
+    'password': '',
+    'mailbox': '',
+  };
+
+  List<Map<String, String>> _asAccountList(dynamic value) {
+    if (value is List) {
+      return [
+        for (final e in value)
+          if (e is Map)
+            {
+              'id': (e['id'] ?? '').toString(),
+              'label': (e['label'] ?? '').toString(),
+              'identifier': (e['identifier'] ?? '').toString(),
+              'password': (e['password'] ?? '').toString(),
+              'mailbox': (e['mailbox'] ?? '').toString(),
+            },
+      ];
+    }
+    if (value is Map) {
+      return [
+        {
+          'id': (value['id'] ?? '').toString(),
+          'label': (value['label'] ?? '').toString(),
+          'identifier': (value['identifier'] ?? '').toString(),
+          'password': (value['password'] ?? '').toString(),
+          'mailbox': (value['mailbox'] ?? '').toString(),
+        },
+      ];
+    }
+    return [_emptyAccount()];
+  }
+
+  List<Map<String, String>> _accounts(String base) {
+    final list = (_form['providers'] as Map?)?[base];
+    if (list is! List) return [_emptyAccount()];
+    return [
+      for (final e in list)
+        if (e is Map)
+          {
+            'id': (e['id'] ?? '').toString(),
+            'label': (e['label'] ?? '').toString(),
+            'identifier': (e['identifier'] ?? '').toString(),
+            'password': (e['password'] ?? '').toString(),
+            'mailbox': (e['mailbox'] ?? '').toString(),
+          },
+    ];
+  }
+
+  void _setAccounts(String base, List<Map<String, String>> accounts) {
+    final provs = Map<String, dynamic>.from(
+      (_form['providers'] as Map?)?.cast<String, dynamic>() ?? {},
+    );
+    provs[base] = accounts;
+    _form['providers'] = provs;
+  }
+
+  List<String> _providerBases() => List<String>.from(_knownBases);
+
+  bool _isMulti(String base) => _accounts(base).length > 1;
+
+  // Serbian Cyrillic → Latin, so an account name typed in Cyrillic still yields
+  // a valid ASCII id slug. Mirrors web settings.js SR_CYR_TO_LAT.
+  static const Map<String, String> _srCyrToLat = {
+    'а': 'a',
+    'б': 'b',
+    'в': 'v',
+    'г': 'g',
+    'д': 'd',
+    'ђ': 'dj',
+    'е': 'e',
+    'ж': 'z',
+    'з': 'z',
+    'и': 'i',
+    'ј': 'j',
+    'к': 'k',
+    'л': 'l',
+    'љ': 'lj',
+    'м': 'm',
+    'н': 'n',
+    'њ': 'nj',
+    'о': 'o',
+    'п': 'p',
+    'р': 'r',
+    'с': 's',
+    'т': 't',
+    'ћ': 'c',
+    'у': 'u',
+    'ф': 'f',
+    'х': 'h',
+    'ц': 'c',
+    'ч': 'c',
+    'џ': 'dz',
+    'ш': 's',
+  };
+
+  String _slugify(String value) {
+    var s = value.toLowerCase();
+    _srCyrToLat.forEach((k, v) => s = s.replaceAll(k, v));
+    s = s
+        .replaceAll(RegExp(r'[àáâãäå]'), 'a')
+        .replaceAll(RegExp(r'[èéêë]'), 'e')
+        .replaceAll(RegExp(r'[ìíîï]'), 'i')
+        .replaceAll(RegExp(r'[òóôõö]'), 'o')
+        .replaceAll(RegExp(r'[ùúûü]'), 'u')
+        .replaceAll(RegExp(r'[čć]'), 'c')
+        .replaceAll('š', 's')
+        .replaceAll('ž', 'z')
+        .replaceAll('đ', 'dj')
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    if (s.length > 32) s = s.substring(0, 32);
+    return s;
+  }
+
+  String _uniqueSlug(String preferred, List<Map<String, String>> accounts) {
+    var base = _slugify(preferred);
+    if (base.isEmpty || !RegExp(r'^[a-z0-9]').hasMatch(base)) {
+      base = 'nalog';
+    }
+    final taken = {
+      for (final a in accounts)
+        if ((a['id'] ?? '').isNotEmpty) a['id']!.toLowerCase(),
+    };
+    if (!taken.contains(base)) return base;
+    var n = 2;
+    while (taken.contains('$base-$n')) {
+      n++;
+    }
+    return '$base-$n';
+  }
+
+  List<Map<String, String>> _ensureAccountIds(List<Map<String, String>> list) {
+    if (list.length <= 1) {
+      if (list.length == 1) {
+        return [
+          {...list.first, 'id': ''},
+        ];
+      }
+      return list;
+    }
+    final seen = <String>{};
+    final out = <Map<String, String>>[];
+    for (final a in list) {
+      var id = _slugify(a['id'] ?? '');
+      if (id.isEmpty) id = _slugify(a['label'] ?? '');
+      if (id.isEmpty || !RegExp(r'^[a-z0-9]').hasMatch(id)) id = 'nalog';
+      var candidate = id;
+      var n = 2;
+      while (seen.contains(candidate)) {
+        candidate = '$id-$n';
+        n++;
+      }
+      seen.add(candidate);
+      out.add({...a, 'id': candidate});
+    }
+    return out;
+  }
+
+  void _addAccount(String base) {
+    final accounts = _accounts(base);
+    // Sync current controller values into the list before mutating.
+    _syncAccountControllers(base);
+    if (accounts.length == 1 && (accounts.first['id'] ?? '').isEmpty) {
+      accounts[0] = {
+        ...accounts[0],
+        'id': _uniqueSlug(accounts[0]['label'] ?? '1', accounts),
+      };
+    }
+    accounts.add({
+      ..._emptyAccount(),
+      'id': _uniqueSlug('nalog-${accounts.length + 1}', accounts),
+    });
+    setState(() {
+      _setAccounts(base, accounts);
+      _seedProviderControllers();
+    });
+  }
+
+  void _removeAccount(String base, int index) {
+    final accounts = _accounts(base);
+    if (accounts.length <= 1) return;
+    _syncAccountControllers(base);
+    accounts.removeAt(index);
+    if (accounts.length == 1) {
+      accounts[0] = {...accounts[0], 'id': ''};
+    }
+    setState(() {
+      _setAccounts(base, accounts);
+      _seedProviderControllers();
+    });
+  }
+
+  void _syncAccountControllers(String base) {
+    final accounts = _accounts(base);
+    for (var i = 0; i < accounts.length; i++) {
+      accounts[i] = {
+        'id': _ctl['prov.$base.$i.id']?.text.trim() ?? '',
+        'label': _ctl['prov.$base.$i.label']?.text.trim() ?? '',
+        'identifier': _ctl['prov.$base.$i.identifier']?.text.trim() ?? '',
+        'password': _ctl['prov.$base.$i.password']?.text ?? '',
+        'mailbox': _ctl['prov.$base.$i.mailbox']?.text.trim() ?? '',
+      };
+    }
+    _setAccounts(base, accounts);
+  }
+
+  bool _hasSecret(String base, int index) {
+    final accounts = _accounts(base);
+    if (index < 0 || index >= accounts.length) return false;
+    final account = accounts[index];
+    final id = account['id'] ?? '';
+    final key = id.isEmpty ? base : '$base/$id';
+    for (final ps in widget.settings.providers) {
+      if (ps.secretKey == key && ps.hasPassword) return true;
+    }
+    // Solo→multi upgrade: the previous solo secret still sits under the bare
+    // provider key. Only the first account (the upgraded solo) inherits it.
+    if (id.isEmpty || index != 0) return false;
+    for (final ps in widget.settings.providers) {
+      if (ps.name == base && ps.account.isEmpty && ps.hasPassword) {
+        final ident = account['identifier'] ?? '';
+        return ident.isEmpty || ident == ps.identifier;
+      }
+    }
+    return false;
+  }
+
+  /// Drops empty seeded accounts so config.json only holds real ones.
+  Map<String, dynamic> _pruneProviders() {
+    final hints = {
+      for (final ps in widget.settings.providers)
+        if (ps.hasPassword) ps.secretKey: true,
+    };
+    final kept = <String, dynamic>{};
+    for (final base in _providerBases()) {
+      _syncAccountControllers(base);
+      final filtered = _accounts(base).where((a) {
+        final id = (a['id'] ?? '').trim();
+        final hintKey = id.isEmpty ? base : '$base/$id';
+        return (a['identifier'] ?? '').trim().isNotEmpty ||
+            (a['password'] ?? '').trim().isNotEmpty ||
+            (a['label'] ?? '').trim().isNotEmpty ||
+            (a['mailbox'] ?? '').trim().isNotEmpty ||
+            hints[hintKey] == true ||
+            (id.isEmpty && hints[base] == true);
+      }).toList();
+      if (filtered.isEmpty) continue;
+      final withIds = _ensureAccountIds(filtered);
+      kept[base] = [
+        for (final a in withIds)
+          {
+            if ((a['id'] ?? '').isNotEmpty) 'id': a['id'],
+            if ((a['label'] ?? '').trim().isNotEmpty)
+              'label': a['label']!.trim(),
+            'identifier': (a['identifier'] ?? '').trim(),
+            'password': a['password'] ?? '',
+            if ((a['mailbox'] ?? '').trim().isNotEmpty)
+              'mailbox': a['mailbox']!.trim(),
+          },
+      ];
+    }
+    return kept;
+  }
+
+  @override
+  void dispose() {
+    for (final c in _ctl.values) {
+      c.dispose();
+    }
+    super.dispose();
   }
 
   Future<void> _sendTest() async {
@@ -683,14 +978,14 @@ class _SettingsEditorState extends ConsumerState<_SettingsEditor> {
       ),
       child: Column(
         children: [
-          _dropdown('Režim'.t, _notifyMode, const {
-            'off': 'off',
-            'per_receipt': 'per_receipt',
-            'all_done': 'all_done',
+          _dropdown('Režim'.t, _notifyMode, {
+            'off': 'Isključeno'.t,
+            'per_receipt': 'Po računu'.t,
+            'all_done': 'Kad svi završe'.t,
           }, (v) => setState(() => _notifyMode = v)),
-          _dropdown('Drajver'.t, _notifyDriver, const {
-            'smtp': 'smtp',
-            'telegram': 'telegram',
+          _dropdown('Drajver'.t, _notifyDriver, {
+            'smtp': 'SMTP (email)'.t,
+            'telegram': 'Telegram',
           }, (v) => setState(() => _notifyDriver = v)),
           Align(
             alignment: Alignment.centerLeft,
@@ -737,10 +1032,11 @@ class _SettingsEditorState extends ConsumerState<_SettingsEditor> {
     return SectionCard(
       title: 'Provajderi'.t,
       subtitle:
-          'Preuzimaju se samo provajderi sa popunjena oba polja i implementacijom.',
+          'Preuzimaju se samo provajderi sa popunjena oba polja i implementacijom. Za člana porodice sa zasebnim nalogom dodaj nalog i daj mu ime (npr. Mama).'
+              .t,
       child: Column(
         children: [
-          for (final p in _providerNames())
+          for (final base in _providerBases())
             Container(
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(14),
@@ -751,21 +1047,99 @@ class _SettingsEditorState extends ConsumerState<_SettingsEditor> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    p.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: c.foreground,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          fmt.providerLabel(base),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: c.foreground,
+                          ),
+                        ),
+                      ),
+                      AppButton(
+                        label: '+ Dodaj nalog'.t,
+                        variant: ButtonVariant.ghost,
+                        onPressed: () => _addAccount(base),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 10),
-                  _textField('Nalog'.t, 'prov.$p.identifier', mono: true),
-                  _secretField(
-                    'Lozinka'.t,
-                    'prov.$p.password',
-                    _providerHasPassword(p),
-                  ),
+                  for (var i = 0; i < _accounts(base).length; i++) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: c.border),
+                        borderRadius: BorderRadius.circular(AppColors.radiusSm),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Name + derived id preview — only for multi-account
+                          // providers, matching the web settings form. The id is
+                          // slugified from the name automatically (no manual id).
+                          if (_isMulti(base)) ...[
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: _textField(
+                                    'Ime naloga'.t,
+                                    'prov.$base.$i.label',
+                                    onChanged: (v) {
+                                      _ctl['prov.$base.$i.id']?.text = _slugify(
+                                        v,
+                                      );
+                                      setState(() {});
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 22),
+                                  child: AppButton(
+                                    label: 'Ukloni'.t,
+                                    variant: ButtonVariant.ghost,
+                                    onPressed: () => _removeAccount(base, i),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Text(
+                                'id: ${_ctl['prov.$base.$i.id']?.text ?? ''}',
+                                style: TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontSize: 12,
+                                  color: c.mutedForeground,
+                                ),
+                              ),
+                            ),
+                          ],
+                          _textField(
+                            'Nalog'.t,
+                            'prov.$base.$i.identifier',
+                            mono: true,
+                          ),
+                          _secretField(
+                            'Lozinka'.t,
+                            'prov.$base.$i.password',
+                            _hasSecret(base, i),
+                          ),
+                          if (_emailBases.contains(base))
+                            _textField(
+                              'Folder / Gmail oznaka'.t,
+                              'prov.$base.$i.mailbox',
+                              mono: true,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -774,16 +1148,14 @@ class _SettingsEditorState extends ConsumerState<_SettingsEditor> {
     );
   }
 
-  bool _providerHasPassword(String name) {
-    for (final ps in widget.settings.providers) {
-      if (ps.name == name) return ps.hasPassword;
-    }
-    return false;
-  }
-
   // --- field builders -------------------------------------------------------
 
-  Widget _textField(String label, String key, {bool mono = false}) {
+  Widget _textField(
+    String label,
+    String key, {
+    bool mono = false,
+    ValueChanged<String>? onChanged,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -794,6 +1166,7 @@ class _SettingsEditorState extends ConsumerState<_SettingsEditor> {
             controller: _ctl[key],
             autocorrect: false,
             enableSuggestions: false,
+            onChanged: onChanged,
             style: mono
                 ? const TextStyle(fontFamily: 'monospace', fontSize: 13)
                 : null,

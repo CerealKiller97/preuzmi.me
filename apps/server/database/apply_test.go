@@ -21,7 +21,7 @@ func TestParseSchemaTables(t *testing.T) {
 	}
 
 	want := []string{
-		"id", "provider", "period", "storage_key", "size_bytes",
+		"id", "provider", "account", "period", "storage_key", "size_bytes",
 		"price", "status", "downloaded_at", "paid_at", "confirmed_at",
 		"due_at", "due_reminded_at",
 		"ips_qr", "ips_checked",

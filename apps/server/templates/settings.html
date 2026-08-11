@@ -275,9 +275,9 @@
             {{template "hint" "off = isključeno, per_receipt = poruka za svaki uspešan račun, all_done = jedna poruka kad svi uspeju."}}
           </label>
           <select id="notify-mode" class="input" x-model="form.notifications.mode">
-            <option value="off">off</option>
-            <option value="per_receipt">per_receipt</option>
-            <option value="all_done">all_done</option>
+            <option value="off">{{t "Isključeno"}}</option>
+            <option value="per_receipt">{{t "Po računu"}}</option>
+            <option value="all_done">{{t "Kad svi završe"}}</option>
           </select>
         </div>
         <div class="flex flex-col gap-1.5">
@@ -287,8 +287,8 @@
           </label>
           <select id="notify-driver" class="input" x-model="form.notifications.driver"
                   @change="guideKey = form.notifications.driver">
-            <option value="smtp">smtp</option>
-            <option value="telegram">telegram</option>
+            <option value="smtp">{{t "SMTP (email)"}}</option>
+            <option value="telegram">Telegram</option>
           </select>
         </div>
       </div>
@@ -304,7 +304,7 @@
       <div class="mt-3">
         <label class="inline-flex items-center gap-2 text-sm font-medium" for="notify-due">
           <input id="notify-due" type="checkbox" class="h-4 w-4" x-model="form.notifications.due_reminders">
-          Obavesti o računima koji dospevaju
+          {{t "Obavesti o računima koji dospevaju"}}
           {{template "hint" "Šalje podsetnik sa spiskom neplaćenih računa koji su već dospeli ili dospevaju u zadatom roku (npr. „• ЈЕТЕЛ рачун доспева за 2 дана — 400,52 RSD“). Radi nezavisno od režima."}}
         </label>
       </div>
@@ -312,7 +312,7 @@
       <div class="mt-3" x-show="form.notifications.due_reminders" x-cloak>
         <label class="flex flex-col gap-1.5 text-sm font-medium" for="notify-due-days">
           <span class="inline-flex items-center gap-2">
-            Koliko dana unapred podsetiti
+            {{t "Koliko dana unapred podsetiti"}}
             {{template "hint" "Račun ulazi u podsetnik kada je već dospeo ili dospeva u narednih toliko dana. 0–60; podrazumevano 7 (nedelja dana)."}}
           </span>
           <input id="notify-due-days" type="number" min="0" max="60" step="1"
@@ -413,30 +413,68 @@
         {{t "Preuzimaju se samo provajderi kod kojih su popunjena oba polja i za koje postoji implementacija."}}
       </p>
 
+      <p class="mt-2 text-xs text-muted-foreground">
+        {{t "Za više naloga kod istog provajdera (npr. članovi porodice) klikni „Dodaj nalog“ i daj svakom ime."}}
+      </p>
+
       <div class="mt-5 flex flex-col gap-4">
         <template x-for="name in providerNames()" :key="name">
           <div class="rounded-lg border p-4">
             <div class="flex flex-wrap items-center justify-between gap-2">
               <h3 class="text-sm font-semibold uppercase tracking-tight" x-text="name"></h3>
+              <button type="button" class="btn btn-ghost h-7 gap-1 px-2 text-xs" @click="addAccount(name)">
+                <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                {{t "Dodaj nalog"}}
+              </button>
             </div>
-            <div class="mt-3 grid gap-3 sm:grid-cols-2">
-              <div class="flex flex-col gap-1.5">
-                <label class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                  {{t "Nalog"}}
-                  {{template "hint" "Korisničko ime ili email za prijavu kod ovog provajdera (identifier u config.json)."}}
-                </label>
-                <input type="text" class="input font-mono text-xs"
-                       x-model="form.providers[name].identifier" placeholder="—">
-              </div>
-              <div class="flex flex-col gap-1.5">
-                <label class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                  {{t "Lozinka"}}
-                  {{template "hint" "Lozinka naloga. Ostavi prazno da zadržiš postojeću vrednost."}}
-                </label>
-                <input type="password" class="input font-mono text-xs" autocomplete="new-password"
-                       x-model="form.providers[name].password"
-                       :placeholder="secretPlaceholder(!!secretHints.providers[name])">
-              </div>
+
+            <div class="mt-3 flex flex-col gap-3">
+              <template x-for="(account, idx) in accounts(name)" :key="idx">
+                <div class="rounded-md border border-dashed p-3">
+                  {{/* Header + remove: only when the provider holds several accounts. */}}
+                  <div class="mb-3 flex items-center justify-between gap-2" x-show="multiAccount(name)" x-cloak>
+                    <span class="text-xs font-medium text-muted-foreground"
+                          x-text="account.label || account.id || ('{{t "Nalog"}} ' + (idx + 1))"></span>
+                    <button type="button" class="text-xs font-medium text-destructive hover:underline"
+                            @click="removeAccount(name, idx)">{{t "Ukloni"}}</button>
+                  </div>
+
+                  {{/* Account name — the id slug is derived from it automatically. */}}
+                  <div class="flex flex-col gap-1.5" x-show="multiAccount(name)" x-cloak>
+                    <label class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                      {{t "Ime naloga"}}
+                      {{template "hint" "Ime koje se prikazuje uz račune (npr. „Mama“). Iz njega se automatski pravi oznaka (id) koja se koristi u putanjama do računa."}}
+                    </label>
+                    <input type="text" class="input text-xs" :value="account.label"
+                           @input="setAccountName(account, $event.target.value)" placeholder="npr. Mama">
+                    <p class="text-xs text-muted-foreground" x-show="account.id" x-cloak>
+                      {{t "id"}}: <span class="font-mono" x-text="account.id"></span>
+                    </p>
+                  </div>
+
+                  <div class="grid gap-3 sm:grid-cols-2" :class="multiAccount(name) ? 'mt-3' : ''">
+                    <div class="flex flex-col gap-1.5">
+                      <label class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                        {{t "Nalog"}}
+                        {{template "hint" "Korisničko ime ili email za prijavu kod ovog provajdera (identifikator u config.json-u)."}}
+                      </label>
+                      <input type="text" class="input font-mono text-xs"
+                             x-model="account.identifier" placeholder="—">
+                    </div>
+                    <div class="flex flex-col gap-1.5">
+                      <label class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                        {{t "Lozinka"}}
+                        {{template "hint" "Lozinka naloga. Ostavi prazno da zadržiš postojeću vrednost."}}
+                      </label>
+                      <input type="password" class="input font-mono text-xs" autocomplete="new-password"
+                             x-model="account.password"
+                             :placeholder="secretPlaceholder(hasSecret(name, account))">
+                    </div>
+                  </div>
+                </div>
+              </template>
             </div>
           </div>
         </template>

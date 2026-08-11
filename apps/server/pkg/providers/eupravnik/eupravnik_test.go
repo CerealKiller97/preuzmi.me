@@ -70,7 +70,7 @@ func TestDownloadReceiptSavesLatestPDF(t *testing.T) {
 	reader := &fakeReader{messages: []mailbox.Message{older, newer}}
 	store := &memStorage{}
 
-	s := New(reader, zerolog.Nop(), store, nil)
+	s := New(reader, "", zerolog.Nop(), store, nil)
 	if err := s.DownloadReceipt(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestDownloadReceiptNoPDFIsNoOp(t *testing.T) {
 
 	// No invoice PDF in the mailbox is a normal "nothing to fetch yet", reported
 	// as the ErrNoReceipt sentinel (not a failure), and nothing is saved.
-	s := New(reader, zerolog.Nop(), store, nil)
+	s := New(reader, "", zerolog.Nop(), store, nil)
 	if err := s.DownloadReceipt(); !errors.Is(err, provider.ErrNoReceipt) {
 		t.Fatalf("no PDF should report ErrNoReceipt, got: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestDownloadReceiptNoPDFIsNoOp(t *testing.T) {
 
 func TestDownloadReceiptPropagatesSearchError(t *testing.T) {
 	reader := &fakeReader{err: errors.New("imap down")}
-	s := New(reader, zerolog.Nop(), &memStorage{}, nil)
+	s := New(reader, "", zerolog.Nop(), &memStorage{}, nil)
 	if err := s.DownloadReceipt(); err == nil {
 		t.Fatal("expected the search error to propagate")
 	}

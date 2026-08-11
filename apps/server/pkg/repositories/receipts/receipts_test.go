@@ -106,11 +106,11 @@ func TestPriceAndPaid(t *testing.T) {
 		t.Fatalf("Record: %v", err)
 	}
 
-	if err := store.SetPrice(ctx, "eps", "06-2026", 4212.55); err != nil {
+	if err := store.SetPrice(ctx, "eps", "", "06-2026", 4212.55); err != nil {
 		t.Fatalf("SetPrice: %v", err)
 	}
 
-	if _, err := store.MarkPaid(ctx, "eps", "06-2026", true); err != nil {
+	if _, err := store.MarkPaid(ctx, "eps", "", "06-2026", true); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
 
@@ -151,7 +151,7 @@ func TestDueAt(t *testing.T) {
 	}
 
 	due := time.Date(2026, 7, 15, 0, 0, 0, 0, time.Local).Unix()
-	if err := store.SetDueAt(ctx, "mts", "06-2026", due); err != nil {
+	if err := store.SetDueAt(ctx, "mts", "", "06-2026", due); err != nil {
 		t.Fatalf("SetDueAt: %v", err)
 	}
 
@@ -176,7 +176,7 @@ func TestDueAt(t *testing.T) {
 
 	// A changed deadline clears the reminder stamp so it can fire again.
 	newDue := due + 86400
-	if err := store.SetDueAt(ctx, "mts", "06-2026", newDue); err != nil {
+	if err := store.SetDueAt(ctx, "mts", "", "06-2026", newDue); err != nil {
 		t.Fatalf("SetDueAt change: %v", err)
 	}
 	got, err = store.List(ctx)
@@ -203,7 +203,7 @@ func TestSetStatus(t *testing.T) {
 	if err := store.Record(ctx, Receipt{Provider: "mts", Period: "05-2026", StorageKey: "05-2026/mts.pdf", SizeBytes: 100}); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
-	if err := store.SetStatus(ctx, "mts", "05-2026", StatusPaid); err != nil {
+	if err := store.SetStatus(ctx, "mts", "", "05-2026", StatusPaid); err != nil {
 		t.Fatalf("SetStatus: %v", err)
 	}
 
@@ -232,12 +232,12 @@ func TestNewlyVerifiedTransition(t *testing.T) {
 	if err := store.Record(ctx, Receipt{Provider: "mts", Period: "05-2026", StorageKey: "05-2026/mts.pdf"}); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
-	if err := store.SetPrice(ctx, "mts", "05-2026", 1819.46); err != nil {
+	if err := store.SetPrice(ctx, "mts", "", "05-2026", 1819.46); err != nil {
 		t.Fatalf("SetPrice: %v", err)
 	}
 
 	// First set to unpaid — not a verification.
-	if err := store.SetStatus(ctx, "mts", "05-2026", StatusUnpaid); err != nil {
+	if err := store.SetStatus(ctx, "mts", "", "05-2026", StatusUnpaid); err != nil {
 		t.Fatalf("SetStatus unpaid: %v", err)
 	}
 	if got := store.DrainNewlyVerified(); len(got) != 0 {
@@ -245,7 +245,7 @@ func TestNewlyVerifiedTransition(t *testing.T) {
 	}
 
 	// Unpaid -> paid is the verification moment.
-	if err := store.SetStatus(ctx, "mts", "05-2026", StatusPaid); err != nil {
+	if err := store.SetStatus(ctx, "mts", "", "05-2026", StatusPaid); err != nil {
 		t.Fatalf("SetStatus paid: %v", err)
 	}
 	verified := store.DrainNewlyVerified()
@@ -261,7 +261,7 @@ func TestNewlyVerifiedTransition(t *testing.T) {
 	}
 
 	// Paid -> paid again is not a new verification.
-	if err := store.SetStatus(ctx, "mts", "05-2026", StatusPaid); err != nil {
+	if err := store.SetStatus(ctx, "mts", "", "05-2026", StatusPaid); err != nil {
 		t.Fatalf("SetStatus paid again: %v", err)
 	}
 	if got := store.DrainNewlyVerified(); len(got) != 0 {
@@ -282,7 +282,7 @@ func TestSetStatusPaidOnMissingReceiptIsNotVerified(t *testing.T) {
 	ctx := context.Background()
 
 	// No Record for this (provider, period): the row does not exist.
-	if err := store.SetStatus(ctx, "yettel", "05-2026", StatusPaid); err != nil {
+	if err := store.SetStatus(ctx, "yettel", "", "05-2026", StatusPaid); err != nil {
 		t.Fatalf("SetStatus: %v", err)
 	}
 
@@ -304,7 +304,7 @@ func TestEmptyToPaidIsVerified(t *testing.T) {
 	}
 	// A receipt whose status was never set (empty) becoming paid counts as a
 	// verification — providers that add the status field later must still notify.
-	if err := store.SetStatus(ctx, "eps", "06-2026", StatusPaid); err != nil {
+	if err := store.SetStatus(ctx, "eps", "", "06-2026", StatusPaid); err != nil {
 		t.Fatalf("SetStatus: %v", err)
 	}
 	if got := store.DrainNewlyVerified(); len(got) != 1 {
@@ -322,7 +322,7 @@ func TestMarkPaidCreatesStubWhenUnrecorded(t *testing.T) {
 	ctx := context.Background()
 
 	// No prior Record: marking paid must still create a stub row carrying paid_at.
-	at, err := store.MarkPaid(ctx, "eps", "06-2026", true)
+	at, err := store.MarkPaid(ctx, "eps", "", "06-2026", true)
 	if err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
@@ -357,7 +357,7 @@ func TestMarkPaidCreatesStubWhenUnrecorded(t *testing.T) {
 	}
 
 	// Unmarking clears paid_at.
-	if _, err := store.MarkPaid(ctx, "eps", "06-2026", false); err != nil {
+	if _, err := store.MarkPaid(ctx, "eps", "", "06-2026", false); err != nil {
 		t.Fatalf("MarkPaid unmark: %v", err)
 	}
 	got, _ = store.List(ctx)
@@ -376,16 +376,16 @@ func TestHasDownloaded(t *testing.T) {
 	ctx := context.Background()
 
 	// Never recorded: nothing to skip.
-	if store.HasDownloaded(ctx, "eps", "06-2026") {
+	if store.HasDownloaded(ctx, "eps", "", "06-2026") {
 		t.Fatal("HasDownloaded true for an unrecorded receipt")
 	}
 
 	// A paid-only stub has no real download time, so it must not count as
 	// downloaded — the PDF still needs fetching.
-	if _, err := store.MarkPaid(ctx, "eps", "06-2026", true); err != nil {
+	if _, err := store.MarkPaid(ctx, "eps", "", "06-2026", true); err != nil {
 		t.Fatalf("MarkPaid: %v", err)
 	}
-	if store.HasDownloaded(ctx, "eps", "06-2026") {
+	if store.HasDownloaded(ctx, "eps", "", "06-2026") {
 		t.Fatal("HasDownloaded true for a paid-only stub (downloaded_at 0)")
 	}
 
@@ -393,13 +393,13 @@ func TestHasDownloaded(t *testing.T) {
 	if err := store.Record(ctx, Receipt{Provider: "eps", Period: "06-2026", StorageKey: "06-2026/eps.pdf", SizeBytes: 100}); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
-	if !store.HasDownloaded(ctx, "eps", "06-2026") {
+	if !store.HasDownloaded(ctx, "eps", "", "06-2026") {
 		t.Fatal("HasDownloaded false after a real download")
 	}
 
 	// The check is scoped to the exact (provider, period): a different period is
 	// still unfetched.
-	if store.HasDownloaded(ctx, "eps", "07-2026") {
+	if store.HasDownloaded(ctx, "eps", "", "07-2026") {
 		t.Fatal("HasDownloaded true for a period that was never downloaded")
 	}
 }
@@ -414,7 +414,7 @@ func TestIsConfirmedPaid(t *testing.T) {
 	ctx := context.Background()
 
 	// Never recorded.
-	if store.IsConfirmedPaid(ctx, "eps", "06-2026") {
+	if store.IsConfirmedPaid(ctx, "eps", "", "06-2026") {
 		t.Fatal("IsConfirmedPaid true for an unrecorded receipt")
 	}
 
@@ -422,28 +422,28 @@ func TestIsConfirmedPaid(t *testing.T) {
 	if err := store.Record(ctx, Receipt{Provider: "eps", Period: "06-2026", StorageKey: "06-2026/eps.pdf", SizeBytes: 100}); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
-	if store.IsConfirmedPaid(ctx, "eps", "06-2026") {
+	if store.IsConfirmedPaid(ctx, "eps", "", "06-2026") {
 		t.Fatal("IsConfirmedPaid true for a downloaded unpaid receipt")
 	}
 
 	// Provider confirms paid (status + confirmed_at). No manual paid_at needed:
 	// once downloaded and provider-confirmed, there is nothing left to re-check.
-	if err := store.SetStatus(ctx, "eps", "06-2026", StatusPaid); err != nil {
+	if err := store.SetStatus(ctx, "eps", "", "06-2026", StatusPaid); err != nil {
 		t.Fatalf("SetStatus: %v", err)
 	}
-	if !store.IsConfirmedPaid(ctx, "eps", "06-2026") {
+	if !store.IsConfirmedPaid(ctx, "eps", "", "06-2026") {
 		t.Fatal("IsConfirmedPaid false after download + status paid + confirmed_at (without paid_at)")
 	}
 
 	// A paid-only stub that the provider confirms but that was never downloaded
 	// (downloaded_at 0) is NOT skippable — its PDF still needs fetching.
-	if _, err := store.MarkPaid(ctx, "a1", "06-2026", true); err != nil {
+	if _, err := store.MarkPaid(ctx, "a1", "", "06-2026", true); err != nil {
 		t.Fatalf("MarkPaid stub: %v", err)
 	}
-	if err := store.SetStatus(ctx, "a1", "06-2026", StatusPaid); err != nil {
+	if err := store.SetStatus(ctx, "a1", "", "06-2026", StatusPaid); err != nil {
 		t.Fatalf("SetStatus stub: %v", err)
 	}
-	if store.IsConfirmedPaid(ctx, "a1", "06-2026") {
+	if store.IsConfirmedPaid(ctx, "a1", "", "06-2026") {
 		t.Fatal("IsConfirmedPaid true for a confirmed-but-never-downloaded stub")
 	}
 
@@ -451,15 +451,22 @@ func TestIsConfirmedPaid(t *testing.T) {
 	if err := store.Record(ctx, Receipt{Provider: "a1", Period: "06-2026", StorageKey: "06-2026/a1.pdf", SizeBytes: 50}); err != nil {
 		t.Fatalf("Record stub download: %v", err)
 	}
-	if !store.IsConfirmedPaid(ctx, "a1", "06-2026") {
+	if !store.IsConfirmedPaid(ctx, "a1", "", "06-2026") {
 		t.Fatal("IsConfirmedPaid false after the confirmed stub was downloaded")
 	}
 }
 
 func TestParseKey(t *testing.T) {
-	provider, period := parseKey("07-2026/eps.pdf")
-	if provider != "eps" || period != "07-2026" {
-		t.Fatalf("parseKey = (%q, %q), want (eps, 07-2026)", provider, period)
+	// Solo layout: no account segment.
+	provider, account, period := parseKey("07-2026/eps.pdf")
+	if provider != "eps" || account != "" || period != "07-2026" {
+		t.Fatalf("parseKey solo = (%q, %q, %q), want (eps, \"\", 07-2026)", provider, account, period)
+	}
+
+	// Per-account layout: {period}/{provider}/{account}.pdf.
+	provider, account, period = parseKey("07-2026/eps/mama.pdf")
+	if provider != "eps" || account != "mama" || period != "07-2026" {
+		t.Fatalf("parseKey multi = (%q, %q, %q), want (eps, mama, 07-2026)", provider, account, period)
 	}
 }
 
@@ -512,7 +519,7 @@ VALUES ('eps', '06/2026', '06-2026/eps.pdf', 1234, 2365.0, 'neplaćeno', 1720000
 
 	ctx := context.Background()
 
-	payload, checked, err := store.IPSQR(ctx, "eps", "06/2026")
+	payload, checked, err := store.IPSQR(ctx, "eps", "", "06/2026")
 	if err != nil {
 		t.Fatalf("IPSQR after upgrade: %v", err)
 	}
@@ -532,10 +539,10 @@ VALUES ('eps', '06/2026', '06-2026/eps.pdf', 1234, 2365.0, 'neplaćeno', 1720000
 	}
 
 	const wantPayload = "K:PR|V:01|C:1|R:160000000000000000|N:EPS|I:RSD2365,00|RO:97123"
-	if err := store.SetIPSQR(ctx, "eps", "06/2026", wantPayload); err != nil {
+	if err := store.SetIPSQR(ctx, "eps", "", "06/2026", wantPayload); err != nil {
 		t.Fatalf("SetIPSQR: %v", err)
 	}
-	payload, checked, err = store.IPSQR(ctx, "eps", "06/2026")
+	payload, checked, err = store.IPSQR(ctx, "eps", "", "06/2026")
 	if err != nil {
 		t.Fatalf("IPSQR after set: %v", err)
 	}
@@ -553,7 +560,7 @@ VALUES ('eps', '06/2026', '06-2026/eps.pdf', 1234, 2365.0, 'neplaćeno', 1720000
 	}
 	defer store.Close() //nolint:errcheck
 
-	payload, checked, err = store.IPSQR(ctx, "eps", "06/2026")
+	payload, checked, err = store.IPSQR(ctx, "eps", "", "06/2026")
 	if err != nil {
 		t.Fatalf("IPSQR after re-open: %v", err)
 	}
@@ -575,24 +582,24 @@ func TestReconcilePrice(t *testing.T) {
 		t.Fatalf("Record: %v", err)
 	}
 	// A wrong provider total, as the API reported it.
-	if err := store.SetPrice(ctx, "esanduce", "07-2026", 4426.94); err != nil {
+	if err := store.SetPrice(ctx, "esanduce", "", "07-2026", 4426.94); err != nil {
 		t.Fatalf("SetPrice: %v", err)
 	}
 
 	// The QR amount differs, so it wins and the row changes.
-	changed, err := store.ReconcilePrice(ctx, "esanduce", "07-2026", 4376.94)
+	changed, err := store.ReconcilePrice(ctx, "esanduce", "", "07-2026", 4376.94)
 	if err != nil {
 		t.Fatalf("ReconcilePrice: %v", err)
 	}
 	if !changed {
 		t.Fatal("ReconcilePrice reported no change for a differing amount")
 	}
-	if r, ok := store.Latest(ctx, "esanduce"); !ok || r.Price != 4376.94 {
+	if r, ok := store.Latest(ctx, "esanduce", ""); !ok || r.Price != 4376.94 {
 		t.Fatalf("price after reconcile = %v (ok=%v), want 4376.94", r.Price, ok)
 	}
 
 	// Idempotent: reconciling to the same value is a no-op.
-	changed, err = store.ReconcilePrice(ctx, "esanduce", "07-2026", 4376.94)
+	changed, err = store.ReconcilePrice(ctx, "esanduce", "", "07-2026", 4376.94)
 	if err != nil {
 		t.Fatalf("second ReconcilePrice: %v", err)
 	}
@@ -601,7 +608,7 @@ func TestReconcilePrice(t *testing.T) {
 	}
 
 	// A missing row is a silent no-op, not an error.
-	changed, err = store.ReconcilePrice(ctx, "eps", "01-2026", 100)
+	changed, err = store.ReconcilePrice(ctx, "eps", "", "01-2026", 100)
 	if err != nil {
 		t.Fatalf("ReconcilePrice (missing row): %v", err)
 	}

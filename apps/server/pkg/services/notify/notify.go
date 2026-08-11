@@ -171,9 +171,13 @@ const defaultDueReminderDays = 7
 // DueReceipt is one unpaid receipt included in a due-soon reminder.
 type DueReceipt struct {
 	Provider string
-	Period   string
-	Price    float64
-	DueAt    int64
+	// Account is the provider account id ("" for solo); Label is its display name
+	// ("Mama"), appended to the provider name in the message (see accountName).
+	Account string
+	Label   string
+	Period  string
+	Price   float64
+	DueAt   int64
 }
 
 // DueReminderEnabled reports whether due-soon notifications will fire. It is
@@ -274,8 +278,8 @@ func dueReminderMessage(items []DueReceipt, now time.Time) Message {
 	var total float64
 	var repl map[string]string
 	for _, it := range sorted {
-		name := displayName(it.Provider)
-		repl = addRepl(repl, it.Provider, name)
+		name := accountName(it.Provider, it.Label)
+		repl = addRepl(repl, it.Provider, displayName(it.Provider))
 		total += it.Price
 		fmt.Fprintf(&b, "• %s račun %s — %s.\n",
 			name, dueWhen(DaysUntilDue(it.DueAt, now)), formatPrice(it.Price))
@@ -343,6 +347,20 @@ func displayName(provider string) string {
 	return strings.ToUpper(provider)
 }
 
+// accountName renders the provider display name with the account label appended
+// for a named (multi-account) receipt: "EPS · Mama". A solo account (empty
+// label) yields just the provider name, byte-identical to the pre-multi-account
+// text. The provider display name is kept as a leading substring so the Cyrillic
+// Repl (keyed on displayName) still matches (see addRepl / Message.Repl).
+func accountName(provider, label string) string {
+	name := displayName(provider)
+	if label == "" {
+		return name
+	}
+
+	return name + " · " + label
+}
+
 // addRepl records the Latin→Cyrillic substitution for a provider whose Cyrillic
 // name is fixed (providerCyrillic). Providers that transliterate normally add
 // nothing and leave repl untouched.
@@ -385,12 +403,12 @@ func Messages(cfg config.Notifications, results []refresh.Result) []Message {
 			if !r.OK || !r.New {
 				continue
 			}
-			name := displayName(r.Provider)
+			name := accountName(r.Provider, r.Label)
 			out = append(out, Message{
 				Emoji:   emojiReceipt,
 				Subject: fmt.Sprintf("preuzmi.me: račun %s preuzet", name),
 				Body:    perReceiptBody(name, r),
-				Repl:    addRepl(nil, r.Provider, name),
+				Repl:    addRepl(nil, r.Provider, displayName(r.Provider)),
 			})
 		}
 		return out
@@ -405,9 +423,8 @@ func Messages(cfg config.Notifications, results []refresh.Result) []Message {
 		names := make([]string, 0, len(results))
 		var repl map[string]string
 		for _, r := range results {
-			name := displayName(r.Provider)
-			names = append(names, name)
-			repl = addRepl(repl, r.Provider, name)
+			names = append(names, accountName(r.Provider, r.Label))
+			repl = addRepl(repl, r.Provider, displayName(r.Provider))
 		}
 		return []Message{{
 			Emoji:   emojiAllDone,
@@ -427,8 +444,12 @@ func Messages(cfg config.Notifications, results []refresh.Result) []Message {
 // VerifiedReceipt describes a receipt whose provider just confirmed payment.
 type VerifiedReceipt struct {
 	Provider string
-	Period   string
-	Price    float64
+	// Account is the provider account id ("" for solo); Label is its display name,
+	// appended to the provider name in the message (see accountName).
+	Account string
+	Label   string
+	Period  string
+	Price   float64
 }
 
 // HandleVerified sends a notification for each receipt the provider newly
@@ -453,7 +474,7 @@ func (s *Service) HandleVerified(items []VerifiedReceipt) {
 
 // verifiedMessage builds the message for a payment-confirmed receipt.
 func verifiedMessage(it VerifiedReceipt) Message {
-	name := displayName(it.Provider)
+	name := accountName(it.Provider, it.Label)
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "Račun za %s za %s je potvrđen kao plaćen.", name, formatPeriod(it.Period))
@@ -466,7 +487,7 @@ func verifiedMessage(it VerifiedReceipt) Message {
 		Emoji:   emojiPaid,
 		Subject: fmt.Sprintf("preuzmi.me: račun %s potvrđen", name),
 		Body:    b.String(),
-		Repl:    addRepl(nil, it.Provider, name),
+		Repl:    addRepl(nil, it.Provider, displayName(it.Provider)),
 	}
 }
 

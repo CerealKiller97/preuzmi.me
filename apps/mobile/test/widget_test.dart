@@ -12,8 +12,10 @@ void main() {
     expect(formatDate(null), '');
   });
 
-  test('providerLabel uppercases and applies overrides', () {
+  test('providerLabel uppercases, applies overrides, and appends labels', () {
     expect(providerLabel('mts'), 'MTS');
     expect(providerLabel('esanduce'), 'E-SANDUČE');
+    expect(providerLabel('a1', 'Mama'), 'A1 — Mama');
+    expect(providerLabel('eps', ''), 'EPS');
   });
 }

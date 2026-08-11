@@ -35,14 +35,15 @@ func TestScanReceiptsJoinsStatus(t *testing.T) {
 	if err := store.Record(ctx, receipts.Receipt{Provider: "mts", Period: "05-2026", StorageKey: "05-2026/mts.pdf", SizeBytes: 13}); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
-	if err := store.SetStatus(ctx, "mts", "05-2026", receipts.StatusPaid); err != nil {
+	if err := store.SetStatus(ctx, "mts", "", "05-2026", receipts.StatusPaid); err != nil {
 		t.Fatalf("SetStatus: %v", err)
 	}
-	if err := store.SetPrice(ctx, "mts", "05-2026", 1819.46); err != nil {
+	if err := store.SetPrice(ctx, "mts", "", "05-2026", 1819.46); err != nil {
 		t.Fatalf("SetPrice: %v", err)
 	}
 
-	items, err := scanReceipts(dir, store)
+	cfg := &config.Config{Storage: config.StorageLocal, DownloadPath: dir}
+	items, err := scanReceipts(cfg, store)
 	if err != nil {
 		t.Fatalf("scanReceipts: %v", err)
 	}
@@ -73,7 +74,7 @@ func TestCollectReceiptsS3ListsFromDB(t *testing.T) {
 	if err := store.Record(ctx, receipts.Receipt{Provider: "a1", Period: "06-2026", StorageKey: "06-2026/a1.pdf", SizeBytes: 42}); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
-	if err := store.SetPrice(ctx, "a1", "06-2026", 499); err != nil {
+	if err := store.SetPrice(ctx, "a1", "", "06-2026", 499); err != nil {
 		t.Fatalf("SetPrice: %v", err)
 	}
 
@@ -100,7 +101,7 @@ func TestCollectReceiptsS3ListsFromDB(t *testing.T) {
 	}
 
 	// Sanity: the local walk really would have returned nothing here.
-	fsItems, err := scanReceipts(dir, store)
+	fsItems, err := scanReceipts(cfg, store)
 	if err != nil {
 		t.Fatalf("scanReceipts: %v", err)
 	}

@@ -13,12 +13,23 @@ const Map<String, String> _providerNames = {
   'eupravnik': 'E-UPRAVNIK',
 };
 
-/// Display name for a provider key (Latin). E.g. `mts` → `MTS`,
+/// Brand display name for a provider key (Latin). E.g. `mts` → `MTS`,
 /// `esanduce` → `E-SANDUČE`.
-String providerLabel(String key) {
+String providerBrand(String key) {
   final k = key.toLowerCase();
   return _providerNames[k] ?? key.toUpperCase();
 }
+
+/// Display name for a provider account. When [label] is set it is appended
+/// ("A1 — Mama"); otherwise just the brand. Mirrors `providerLabel` in script.js.
+String providerLabel(String key, [String? label]) {
+  final brand = providerBrand(key);
+  final l = (label ?? '').trim();
+  return l.isEmpty ? brand : '$brand — $l';
+}
+
+/// Card/header title for a receipt that already carries provider + optional label.
+String receiptLabel(Receipt r) => providerLabel(r.provider, r.label);
 
 final NumberFormat _money = NumberFormat.currency(
   locale: 'sr',
@@ -79,6 +90,7 @@ int? daysUntilDue(Receipt r) {
 
 bool isOverdue(Receipt r) {
   final d = daysUntilDue(r);
+
   return d != null && d < 0;
 }
 
@@ -91,11 +103,26 @@ bool isPaid(Receipt r) => r.paid || isProviderPaid(r);
 /// Short badge label for unpaid receipts with a known deadline. `''` hides it.
 String dueLabel(Receipt r) {
   final days = daysUntilDue(r);
-  if (days == null) return '';
-  if (days < 0) return 'Dospeo';
-  if (days == 0) return 'Danas';
-  if (days == 1) return 'Sutra';
-  if (days <= 3) return 'Za $days dana';
+  if (days == null) {
+    return '';
+  }
+
+  if (days < 0) {
+    return 'Dospeo';
+  }
+
+  if (days == 0) {
+    return 'Danas';
+  }
+
+  if (days == 1) {
+    return 'Sutra';
+  }
+
+  if (days <= 3) {
+    return 'Za $days dana';
+  }
+
   return '';
 }
 

@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -16,21 +15,21 @@ import (
 // (the `receipts view` CLI command), so they render the QR from the very same
 // cached-then-parsed payload — and trigger the same price reconciliation — as
 // the dashboard card. ok is false when the bill carries no readable QR.
-func ResolveIPSPayload(ctx context.Context, store storage.Interface, rec *receipts.Repository, provider, period string) (string, bool) {
-	return resolveIPSPayload(ctx, store, rec, provider, period)
+func ResolveIPSPayload(ctx context.Context, store storage.Interface, rec *receipts.Repository, provider, account, period string) (string, bool) {
+	return resolveIPSPayload(ctx, store, rec, provider, account, period)
 }
 
 // resolveIPSPayload returns the NBS IPS QR payload for a receipt, reading the
 // database cache first and falling back to parsing the PDF on a cache miss (then
 // caching the result — including an empty payload for a bill with no QR, so it
 // is parsed at most once). ok is false when the bill carries no readable QR.
-func resolveIPSPayload(ctx context.Context, store storage.Interface, rec *receipts.Repository, provider, period string) (string, bool) {
-	payload, ok := lookupIPSPayload(ctx, store, rec, provider, period)
+func resolveIPSPayload(ctx context.Context, store storage.Interface, rec *receipts.Repository, provider, account, period string) (string, bool) {
+	payload, ok := lookupIPSPayload(ctx, store, rec, provider, account, period)
 	if ok {
 		// The QR carries the amount a banking app actually charges, so treat it as
 		// the authoritative price and correct the recorded total when it drifted
 		// (e.g. a provider API reporting a figure that includes an extra fee).
-		reconcileIPSPrice(ctx, rec, provider, period, payload)
+		reconcileIPSPrice(ctx, rec, provider, account, period, payload)
 	}
 
 	return payload, ok
@@ -39,15 +38,15 @@ func resolveIPSPayload(ctx context.Context, store storage.Interface, rec *receip
 // lookupIPSPayload returns the receipt's IPS payload, from the database cache
 // when present and by parsing the PDF (then caching the result) on a miss. ok is
 // false when the bill carries no readable QR.
-func lookupIPSPayload(ctx context.Context, store storage.Interface, rec *receipts.Repository, provider, period string) (string, bool) {
+func lookupIPSPayload(ctx context.Context, store storage.Interface, rec *receipts.Repository, provider, account, period string) (string, bool) {
 	if rec != nil {
-		if payload, checked, err := rec.IPSQR(ctx, provider, period); err == nil && checked {
+		if payload, checked, err := rec.IPSQR(ctx, provider, account, period); err == nil && checked {
 			return payload, payload != ""
 		}
 	}
 
 	// Cache miss: parse the PDF through the configured storage backend.
-	key := fmt.Sprintf("%s/%s.pdf", period, provider)
+	key := storage.ReceiptKey(period, provider, account)
 	pdf, err := store.Load(ctx, key)
 	if err != nil {
 		// A missing PDF is an ordinary 404 for a receipt that is only a paid-only
@@ -57,8 +56,8 @@ func lookupIPSPayload(ctx context.Context, store storage.Interface, rec *receipt
 
 	payload, _ := ipsqr.Extract(pdf)
 	if rec != nil {
-		if err := rec.SetIPSQR(ctx, provider, period, payload); err != nil {
-			log.Err(err).Str("provider", provider).Str("period", period).Msg("Failed to cache IPS QR payload")
+		if err := rec.SetIPSQR(ctx, provider, account, period, payload); err != nil {
+			log.Err(err).Str("provider", provider).Str("account", account).Str("period", period).Msg("Failed to cache IPS QR payload")
 		}
 	}
 
@@ -69,7 +68,7 @@ func lookupIPSPayload(ctx context.Context, store storage.Interface, rec *receipt
 // carries. It runs on every resolve but only writes when the two differ, so a
 // bill filed with a wrong provider total self-heals the first time its QR is
 // viewed. Best-effort: a failure is logged and swallowed.
-func reconcileIPSPrice(ctx context.Context, rec *receipts.Repository, provider, period, payload string) {
+func reconcileIPSPrice(ctx context.Context, rec *receipts.Repository, provider, account, period, payload string) {
 	if rec == nil {
 		return
 	}
@@ -79,8 +78,8 @@ func reconcileIPSPrice(ctx context.Context, rec *receipts.Repository, provider, 
 		return
 	}
 
-	if _, err := rec.ReconcilePrice(ctx, provider, period, amount); err != nil {
-		log.Err(err).Str("provider", provider).Str("period", period).Msg("Failed to reconcile price from IPS QR")
+	if _, err := rec.ReconcilePrice(ctx, provider, account, period, amount); err != nil {
+		log.Err(err).Str("provider", provider).Str("account", account).Str("period", period).Msg("Failed to reconcile price from IPS QR")
 	}
 }
 
@@ -94,8 +93,9 @@ func receiptQRImageHandler(store storage.Interface, receiptsStore func() *receip
 		if err != nil {
 			return
 		}
+		account := accountParam(r)
 
-		payload, ok := resolveIPSPayload(r.Context(), store, receiptsStore(), provider, period)
+		payload, ok := resolveIPSPayload(r.Context(), store, receiptsStore(), provider, account, period)
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
 			return
@@ -133,8 +133,9 @@ func receiptQRPayloadHandler(store storage.Interface, receiptsStore func() *rece
 		if err != nil {
 			return
 		}
+		account := accountParam(r)
 
-		payload, ok := resolveIPSPayload(r.Context(), store, receiptsStore(), provider, period)
+		payload, ok := resolveIPSPayload(r.Context(), store, receiptsStore(), provider, account, period)
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
 			return

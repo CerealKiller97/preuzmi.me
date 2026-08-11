@@ -2,8 +2,8 @@ package http
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
+	"regexp"
 
 	"github.com/CerealKiller97/preuzmi.me/pkg/config"
 	"github.com/CerealKiller97/preuzmi.me/pkg/container"
@@ -116,6 +116,25 @@ func validate(w http.ResponseWriter, req *http.Request) (string, string, error) 
 	return provider, period, nil
 }
 
+// accountSlug bounds an account id to the same filesystem- and URL-safe shape as
+// config account ids, so a value read from the request can be used verbatim in a
+// storage key without risking path traversal.
+var accountSlug = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
+
+// accountParam returns the optional ?account=<id> query value that selects which
+// provider account a receipt request targets. Empty — the default — is the solo
+// account, so every existing single-account URL keeps working unchanged. A value
+// that is not a valid slug is treated as the solo account rather than trusted in
+// a path.
+func accountParam(req *http.Request) string {
+	acc := req.URL.Query().Get("account")
+	if acc == "" || !accountSlug.MatchString(acc) {
+		return ""
+	}
+
+	return acc
+}
+
 func receiptHandler(store storage.Interface) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		provider, period, err := validate(w, r)
@@ -123,11 +142,12 @@ func receiptHandler(store storage.Interface) Handler {
 			log.Err(err).Msg("Error validating request")
 			return
 		}
+		account := accountParam(r)
 
 		// Read through the configured storage backend so the same handler serves
 		// PDFs whether they live on local disk or in an S3 bucket. The key is the
 		// same forward-slash form used when the receipt was saved.
-		key := fmt.Sprintf("%s/%s.pdf", period, provider)
+		key := storage.ReceiptKey(period, provider, account)
 
 		file, err := store.Load(r.Context(), key)
 		if err != nil {

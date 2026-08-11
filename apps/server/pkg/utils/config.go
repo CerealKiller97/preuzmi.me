@@ -7,12 +7,23 @@ import (
 
 var ErrEmptyProviders = errors.New("empty providers")
 
+// GetPairs returns the distinct names of providers that have at least one fully
+// configured account. It backs the parts of the UI that only need to know which
+// providers exist; the refresh path uses config.ConfiguredAccounts, which
+// enumerates individual (provider, account) pairs.
 func GetPairs(cfg *config.Config) ([]string, error) {
-	providers := make([]string, 0, 5)
+	seen := make(map[string]struct{}, len(cfg.Providers))
+	providers := make([]string, 0, len(cfg.Providers))
 
-	for provider, item := range cfg.Providers {
-		if item.Username != "" && item.Password != "" {
-			providers = append(providers, string(provider))
+	for provider, accounts := range cfg.Providers {
+		for _, a := range accounts {
+			if !a.Configured() {
+				continue
+			}
+			if _, ok := seen[string(provider)]; !ok {
+				seen[string(provider)] = struct{}{}
+				providers = append(providers, string(provider))
+			}
 		}
 	}
 

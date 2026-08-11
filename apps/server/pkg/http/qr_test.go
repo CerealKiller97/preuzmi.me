@@ -81,7 +81,7 @@ func TestReceiptQRImageHandlerServesAndCaches(t *testing.T) {
 	}
 
 	// The payload must now be cached (ips_checked = 1, non-empty payload).
-	payload, checked, err := rec.IPSQR(context.Background(), "mts", "05-2026")
+	payload, checked, err := rec.IPSQR(context.Background(), "mts", "", "05-2026")
 	if err != nil {
 		t.Fatalf("IPSQR: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestReceiptQRImageHandlerNoQR(t *testing.T) {
 	}
 
 	// The negative result is cached: checked, empty payload.
-	payload, checked, err := rec.IPSQR(context.Background(), provider, period)
+	payload, checked, err := rec.IPSQR(context.Background(), provider, "", period)
 	if err != nil {
 		t.Fatalf("IPSQR: %v", err)
 	}

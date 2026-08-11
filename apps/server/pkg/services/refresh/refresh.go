@@ -25,7 +25,12 @@ const fileName = "refresh.json"
 // available, so notifications can report which month's bill was fetched and how
 // much it was.
 type Result struct {
-	Provider   string  `json:"provider"`
+	Provider string `json:"provider"`
+	// Account is the provider account this result is for: "" for a solo
+	// deployment, or a config account id for a named family-member login. Label is
+	// its human-friendly name, used in notifications and the dashboard.
+	Account    string  `json:"account,omitempty"`
+	Label      string  `json:"label,omitempty"`
 	Error      string  `json:"error,omitempty"`
 	Period     string  `json:"period,omitempty"`
 	DurationMS int64   `json:"duration_ms"`
@@ -123,7 +128,7 @@ func (s State) WithWindow(checkUntil int, allowed bool) State {
 //
 // after, when non-nil, is called once the run finishes (with the results)
 // still on the worker goroutine — used for notifications.
-func (s *Service) Start(providers map[string]provider.Interface, after func([]Result)) (State, error) {
+func (s *Service) Start(providers map[string]provider.Job, after func([]Result)) (State, error) {
 	s.mu.Lock()
 
 	if s.state.Running {
@@ -160,7 +165,7 @@ func (s *Service) Start(providers map[string]provider.Interface, after func([]Re
 //
 // Unlike Start it blocks until the run finishes and returns the results, which
 // suits the one-shot `checks` command that exits when it is done.
-func (s *Service) RunOnce(providers map[string]provider.Interface) ([]Result, error) {
+func (s *Service) RunOnce(providers map[string]provider.Job) ([]Result, error) {
 	s.mu.Lock()
 	if s.state.Running {
 		s.mu.Unlock()
@@ -225,25 +230,27 @@ func (s *Service) SyncFromDisk() {
 //
 // One provider failing never stops the others: a broken eSanduce login should
 // not cost you the MTS receipt.
-func Run(providers map[string]provider.Interface) []Result {
-	results := make([]Result, 0, len(providers))
+func Run(jobs map[string]provider.Job) []Result {
+	results := make([]Result, 0, len(jobs))
 
 	var (
 		mu sync.Mutex
 		wg sync.WaitGroup
 	)
 
-	for name, p := range providers {
+	for _, job := range jobs {
 		wg.Add(1)
 
-		go func(name string, p provider.Interface) {
+		go func(job provider.Job) {
 			defer wg.Done()
 
 			started := time.Now()
-			err := p.DownloadReceipt()
+			err := job.Impl.DownloadReceipt()
 
 			result := Result{
-				Provider:   name,
+				Provider:   job.Provider,
+				Account:    job.Account,
+				Label:      job.Label,
 				DurationMS: time.Since(started).Milliseconds(),
 			}
 
@@ -262,14 +269,19 @@ func Run(providers map[string]provider.Interface) []Result {
 			mu.Lock()
 			results = append(results, result)
 			mu.Unlock()
-		}(name, p)
+		}(job)
 	}
 
 	wg.Wait()
 
-	// Stable order, since goroutines finish in whatever order they please.
+	// Stable order, since goroutines finish in whatever order they please. Sort by
+	// provider, then account, so several accounts of one provider group together.
 	sort.Slice(results, func(i, j int) bool {
-		return results[i].Provider < results[j].Provider
+		if results[i].Provider != results[j].Provider {
+			return results[i].Provider < results[j].Provider
+		}
+
+		return results[i].Account < results[j].Account
 	})
 
 	return results

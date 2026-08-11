@@ -8,6 +8,12 @@
 CREATE TABLE IF NOT EXISTS receipts (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     provider      TEXT    NOT NULL,
+    -- account: the provider account this receipt belongs to. Empty ('') is the
+    -- single implicit account of a solo deployment, so existing rows keep the
+    -- historical (provider, period) identity untouched. A non-empty account is a
+    -- named family-member login (config account id), letting several accounts
+    -- share one provider and period without colliding.
+    account       TEXT    NOT NULL DEFAULT '',
     period        TEXT    NOT NULL,
     storage_key   TEXT    NOT NULL,
     size_bytes    INTEGER NOT NULL,
@@ -46,5 +52,10 @@ CREATE TABLE IF NOT EXISTS receipts (
     -- were already downloaded/confirmed so upgrading does not re-announce history.
     notified_download_at  INTEGER,
     notified_confirmed_at INTEGER,
-    UNIQUE (provider, period)
+    -- Identity is (provider, account, period). account is '' for a solo
+    -- deployment, so this is equivalent to the historical (provider, period) key
+    -- there; databases created before the account column are rebuilt to this
+    -- shape by receipts.migrateReceiptsUnique, since a table-level UNIQUE cannot
+    -- be retrofitted by ALTER.
+    UNIQUE (provider, account, period)
 );

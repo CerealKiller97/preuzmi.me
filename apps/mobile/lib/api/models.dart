@@ -10,6 +10,8 @@ String _asStr(dynamic v) => v == null ? '' : v.toString();
 class Receipt {
   Receipt({
     required this.provider,
+    required this.account,
+    required this.label,
     required this.period,
     required this.url,
     required this.filename,
@@ -27,6 +29,12 @@ class Receipt {
   });
 
   final String provider;
+
+  /// Provider account id ("" for a solo deployment).
+  final String account;
+
+  /// Display name for [account] ("Mama"); empty for solo / unlabeled.
+  final String label;
   final String period;
   final String url;
   final String filename;
@@ -44,6 +52,8 @@ class Receipt {
 
   factory Receipt.fromJson(Map<String, dynamic> j) => Receipt(
     provider: _asStr(j['provider']),
+    account: _asStr(j['account']),
+    label: _asStr(j['label']),
     period: _asStr(j['period']),
     url: _asStr(j['url']),
     filename: _asStr(j['filename']),
@@ -60,8 +70,9 @@ class Receipt {
     confirmed: _asBool(j['confirmed']),
   );
 
-  /// Unique key used for list identity and the mark-paid route.
-  String get key => '$period/$provider';
+  /// Unique key used for list identity (period + provider + account).
+  String get key =>
+      account.isEmpty ? '$period/$provider' : '$period/$provider/$account';
 }
 
 /// Aggregate stats for a year (`StatsResponse` in stats.go).
@@ -168,16 +179,30 @@ class RefreshState {
 }
 
 class RefreshResult {
-  RefreshResult(this.provider, this.durationMs, this.ok, this.error);
+  RefreshResult({
+    required this.provider,
+    required this.account,
+    required this.label,
+    required this.durationMs,
+    required this.ok,
+    required this.error,
+    required this.empty,
+  });
   final String provider;
+  final String account;
+  final String label;
   final int durationMs;
   final bool ok;
   final String error;
+  final bool empty;
   factory RefreshResult.fromJson(Map<String, dynamic> j) => RefreshResult(
-    _asStr(j['provider']),
-    _asInt(j['duration_ms']),
-    _asBool(j['ok']),
-    _asStr(j['error']),
+    provider: _asStr(j['provider']),
+    account: _asStr(j['account']),
+    label: _asStr(j['label']),
+    durationMs: _asInt(j['duration_ms']),
+    ok: _asBool(j['ok']),
+    error: _asStr(j['error']),
+    empty: _asBool(j['empty']),
   );
 }
 
@@ -185,6 +210,8 @@ class RefreshResult {
 class ProviderStatus {
   ProviderStatus({
     required this.name,
+    required this.account,
+    required this.label,
     required this.identifier,
     required this.hasPassword,
     required this.configured,
@@ -192,6 +219,10 @@ class ProviderStatus {
   });
 
   final String name;
+
+  /// Account id ("" for solo); matches config Account.ID.
+  final String account;
+  final String label;
   final String identifier;
   final bool hasPassword;
   final bool configured;
@@ -199,11 +230,16 @@ class ProviderStatus {
 
   factory ProviderStatus.fromJson(Map<String, dynamic> j) => ProviderStatus(
     name: _asStr(j['name']),
+    account: _asStr(j['account']),
+    label: _asStr(j['label']),
     identifier: _asStr(j['identifier']),
     hasPassword: _asBool(j['has_password']),
     configured: _asBool(j['configured']),
     implemented: _asBool(j['implemented']),
   );
+
+  /// Secret-hint key matching the web settings UI / server providerStatusKey.
+  String get secretKey => account.isEmpty ? name : '$name/$account';
 }
 
 /// The full settings payload (`APISettings`). [form] is kept as a mutable JSON

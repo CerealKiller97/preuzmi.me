@@ -53,6 +53,21 @@ class ReceiptCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
               ],
+              // Provider-confirmed payment sits alongside the paid status here,
+              // grouping both status marks at the top. It's a compact icon-only
+              // badge (long-press shows the "Verifikovano" tooltip) so it fits
+              // next to the paid pill without crowding the provider label.
+              if (verified) ...[
+                Tooltip(
+                  message: 'Verifikovano'.t,
+                  child: const AppBadge(
+                    '',
+                    variant: BadgeVariant.success,
+                    icon: Icons.verified_outlined,
+                  ),
+                ),
+                const SizedBox(width: 6),
+              ],
               AppBadge(
                 paid ? 'Plaćeno' : 'Neplaćeno',
                 variant: paid ? BadgeVariant.success : BadgeVariant.warning,
@@ -78,28 +93,47 @@ class ReceiptCard extends StatelessWidget {
             style: TextStyle(fontSize: 14, color: c.mutedForeground),
           ),
           const SizedBox(height: 16),
-          // File meta row.
+          // File meta row. The filename group is Expanded so the download date
+          // sits flush against the card's right edge — aligned with the status
+          // badges above and the action button below — instead of being pushed
+          // only halfway by a Spacer that shares flex with the filename.
           Row(
             children: [
-              Icon(
-                Icons.description_outlined,
-                size: 14,
-                color: c.mutedForeground,
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  receipt.filename,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12, color: c.mutedForeground),
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.description_outlined,
+                      size: 14,
+                      color: c.mutedForeground,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        receipt.filename,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: c.mutedForeground,
+                        ),
+                      ),
+                    ),
+                    if (receipt.size > 0)
+                      Text(
+                        ' · ${fmt.formatSize(receipt.size)}'.t,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: c.mutedForeground,
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              if (receipt.size > 0)
-                Text(
-                  ' · ${fmt.formatSize(receipt.size)}'.t,
-                  style: TextStyle(fontSize: 12, color: c.mutedForeground),
-                ),
-              const Spacer(),
+              const SizedBox(width: 8),
+              // Download date ("datum preuzimanja"): the small download glyph
+              // marks it as when the PDF was fetched, matching the web tooltip.
+              Icon(Icons.download_outlined, size: 13, color: c.mutedForeground),
+              const SizedBox(width: 4),
               Text(
                 fmt.formatDate(
                   receipt.downloadedAt > 0
@@ -127,14 +161,6 @@ class ReceiptCard extends StatelessWidget {
                     style: TextStyle(fontSize: 12, color: c.mutedForeground),
                   ),
                 ),
-                if (verified) ...[
-                  const Spacer(),
-                  AppBadge(
-                    'Verifikovano'.t,
-                    variant: BadgeVariant.success,
-                    icon: Icons.verified_outlined,
-                  ),
-                ],
               ],
             ),
           ],

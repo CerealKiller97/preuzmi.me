@@ -88,8 +88,11 @@ class AppBadge extends StatelessWidget {
         fg = c.foreground;
         border = c.border;
     }
+    // An icon with no text renders as a compact, near-square badge (tighter
+    // padding, slightly larger glyph) — used for the header "Verifikovano" mark.
+    final iconOnly = text.isEmpty && icon != null;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: EdgeInsets.symmetric(horizontal: iconOnly ? 5 : 8, vertical: 2),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(AppColors.radiusMd),
@@ -99,18 +102,19 @@ class AppBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 12, color: fg),
-            const SizedBox(width: 4),
+            Icon(icon, size: iconOnly ? 14 : 12, color: fg),
+            if (!iconOnly) const SizedBox(width: 4),
           ],
-          Text(
-            text,
-            style: TextStyle(
-              color: fg,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              height: 1.2,
+          if (text.isNotEmpty)
+            Text(
+              text,
+              style: TextStyle(
+                color: fg,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                height: 1.2,
+              ),
             ),
-          ),
         ],
       ),
     );

@@ -140,6 +140,19 @@
                     :class="isOverdue(item) ? 'badge-destructive' : 'badge-warning'"
                     :title="dueTitle(item)"
                     x-text="dueLabel(item)"></span>
+              {{/* Provider-confirmed payment ("Verifikovano") — a compact
+                   icon-only badge so it groups with the paid status in the header
+                   without overflowing the narrow grid cards. Tooltip / aria-label
+                   carry the meaning. */}}
+              <span x-show="isVerified(item)" x-cloak
+                    class="badge badge-success shrink-0 px-1.5"
+                    title="{{t "Verifikovano — provajder je potvrdio plaćanje"}}"
+                    aria-label="{{t "Verifikovano"}}">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                  <path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z" />
+                  <path d="m9 12 2 2 4-4" />
+                </svg>
+              </span>
               {{/* Colours cross-fade via .badge's transition; the pop only fires
                    on an actual toggle, not on every re-render. */}}
               <span class="badge shrink-0" :class="{ 'badge-success': isPaid(item), 'badge-warning': !isPaid(item), 'animate-pop': item.pulse }"
@@ -167,14 +180,18 @@
             </svg>
             <span class="truncate" x-text="item.filename"></span>
             <span x-show="item.size > 0" class="shrink-0" x-text="'· ' + formatSize(item.size)"></span>
-            <span class="ml-auto shrink-0 pl-2"
-                  title="{{t "Datum preuzimanja"}}"
+            {{/* Download date ("datum preuzimanja"): the download glyph marks it as
+                 when the PDF was fetched; ml-auto keeps the pair flush right. */}}
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ml-auto h-3.5 w-3.5 shrink-0">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" />
+            </svg>
+            <span class="shrink-0" title="{{t "Datum preuzimanja"}}"
                   x-text="formatDate(item.downloaded_at || item.modified)"></span>
           </div>
 
           {{/* Always in the layout (invisible when unpaid) so mark-as-paid
-               does not change card height. Verified state is a success badge
-               here, not a second header badge. */}}
+               does not change card height. The provider-confirmed "Verifikovano"
+               badge now lives in the header alongside the paid status. */}}
           <div class="mt-2 flex min-h-5 items-center gap-1.5 text-xs text-muted-foreground"
                :class="{ 'invisible': !(isPaid(item) && (item.paid_at > 0 || item.confirmed_at > 0)) }"
                :aria-hidden="!(isPaid(item) && (item.paid_at > 0 || item.confirmed_at > 0))">
@@ -182,16 +199,6 @@
               <rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18M8 2v4M16 2v4" /><path d="m9 16 2 2 4-4" />
             </svg>
             <span class="min-w-0 truncate">{{t "Plaćeno"}} <span x-text="formatDate(item.paid_at || item.confirmed_at)"></span></span>
-            <span class="badge badge-success ml-auto shrink-0"
-                  title="{{t "Provajder je potvrdio plaćanje"}}"
-                  :class="{ 'invisible': !isVerified(item) }"
-                  :aria-hidden="!isVerified(item)">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1 h-3 w-3">
-                <path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z" />
-                <path d="m9 12 2 2 4-4" />
-              </svg>
-              <span>{{t "Verifikovano"}}</span>
-            </span>
           </div>
 
           {{/* Due date: datum dospeća parsed from the PDF. */}}

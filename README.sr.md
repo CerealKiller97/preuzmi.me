@@ -57,7 +57,7 @@ docker run -d --name preuzmi \
   -p 5500:5500 \
   -v "$PWD/config.json:/app/config.json:ro" \
   -v preuzmi-receipts:/data/receipts \
-  ghcr.io/cerealkiller97/preuzmi.me:1.5.0
+  ghcr.io/cerealkiller97/preuzmi.me:1.7.0
 ```
 
 ### docker compose
@@ -65,7 +65,7 @@ docker run -d --name preuzmi \
 ```yaml
 services:
   preuzmi:
-    image: ghcr.io/cerealkiller97/preuzmi.me:1.5.0
+    image: ghcr.io/cerealkiller97/preuzmi.me:1.7.0
     container_name: preuzmi.me
     ports:
       - "5500:5500"
@@ -93,6 +93,7 @@ docker exec preuzmi /app/preuzmi checks
 ## Mogućnosti
 
 - **Više provajdera** — A1, mts, EPS i e.Sanduče se prijavljuju kredencijalima svoje platforme; Yettel i eUpravnik čitaju račun iz vašeg sandučeta preko IMAP-a (za sada)
+- **Više naloga po provajderu** — dodaj više prijava za istog provajdera (npr. članovi porodice), svaki sa svojim imenom; računi se grupišu i označavaju po nalogu, a obaveštenja imenuju nalog („ЕПС · Мама“). Solo podešavanja ostaju nepromenjena
 - **Pametno osvežavanje** — preskače provajdere čiji je račun za prošli mesec završen (`paid_at` postavljen, status `plaćeno` i `confirmed_at` postavljen); neplaćeni ili neverifikovani računi se i dalje proveravaju da bi status mogao da se promeni
 - **Dashboard računa** — pretraga, filter po periodu / provajderu / statusu plaćanja
 - **Praćenje plaćanja** — označi račun kao plaćen iz UI-ja ili `receipts` CLI-ja; prati se kao dva odvojena trenutka: *ti platio* i *provajder potvrdio*

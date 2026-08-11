@@ -10,6 +10,16 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+## [1.7.0] - 11.08.2026
+
+### ✨ Added
+
+- 👪 **Multiple accounts per provider.** Add more than one login for the same provider — e.g. two EPS accounts for different family members — each with its own name. Receipts are grouped and labelled by account across the dashboard, stats and the mobile app, and notifications name the account (e.g. "EPS · Mama"). Set it up from **Settings → provider → Dodaj nalog**: you give each account a name and its stable id (used in storage paths and URLs) is derived from it automatically. **Solo installs are completely unchanged** — a provider with a single login keeps the exact same config shape, storage layout and URLs as before, so there's nothing to edit and no receipts move. Opening an existing `receipts.db` adds the `account` column and rebuilds the identity constraint automatically — no manual migration or data wipe, and paid state and history stay put.
+
+### 🐛 Fixed
+
+- 🔤 **Technical literals stay Latin in Cyrillic mode.** With `lang: "cyrillic"`, commands, handles, config keys and acronyms that you type or search verbatim — `@BotFather`, `/newbot`, `chat_id`, `bot_token`, `<TOKEN>`, `SMTP` / `STARTTLS`, `JSON` … — are no longer transliterated to Cyrillic, so setup instructions and settings hints stay usable. Inflected Serbian words around them still convert as before.
+
 ## [1.6.0] - 09.08.2026
 
 ### ✨ Added
@@ -134,7 +144,8 @@ stats, and notifications, so no bill goes unintentionally unpaid.
 - 🐳 Multi-arch (amd64 + arm64), distroless Docker image published to GHCR.
 - 🌐 Bilingual documentation — English and Serbian.
 
-[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.3.2...v1.4.0

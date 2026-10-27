@@ -135,3 +135,48 @@ func TestMergeSecretsMultiAccount(t *testing.T) {
 	assert.Equal(t, "secret2", next.Providers["eps"][0].Password)
 	assert.Equal(t, "secret1", next.Providers["eps"][1].Password)
 }
+
+// Upgrading a solo account (empty id) to a named multi-account list must keep
+// the solo password on the account that still carries its username.
+func TestMergeSecretsSoloToMulti(t *testing.T) {
+	prev := Config{
+		Providers: map[Provider]ProviderAccounts{
+			"eps": {{Username: "u1", Password: "solo-secret"}},
+		},
+	}
+	next := Config{
+		Providers: map[Provider]ProviderAccounts{
+			"eps": {
+				{ID: "mama", Label: "Mama", Username: "u1", Password: ""},
+				{ID: "tata", Label: "Tata", Username: "u2", Password: "new-secret"},
+			},
+		},
+	}
+
+	next.MergeSecrets(prev)
+
+	assert.Equal(t, "solo-secret", next.Providers["eps"][0].Password)
+	assert.Equal(t, "new-secret", next.Providers["eps"][1].Password)
+}
+
+// Collapsing multi back to a solo empty-id account must keep the remaining
+// account's password even though the id was cleared.
+func TestMergeSecretsMultiToSolo(t *testing.T) {
+	prev := Config{
+		Providers: map[Provider]ProviderAccounts{
+			"eps": {
+				{ID: "mama", Username: "u1", Password: "secret1"},
+				{ID: "tata", Username: "u2", Password: "secret2"},
+			},
+		},
+	}
+	next := Config{
+		Providers: map[Provider]ProviderAccounts{
+			"eps": {{Username: "u1", Password: ""}},
+		},
+	}
+
+	next.MergeSecrets(prev)
+
+	assert.Equal(t, "secret1", next.Providers["eps"][0].Password)
+}

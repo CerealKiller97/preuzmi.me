@@ -497,13 +497,29 @@ func (next *Config) MergeSecrets(prev Config) {
 	}
 
 	// Restore each account's password from the previous config when the form
-	// omitted it. Accounts are matched by ID (empty for a solo account), so a
-	// reordered or renamed-label account still keeps its secret.
+	// omitted it. Prefer an exact ID match (empty for a solo account). Fall back
+	// to username when the settings UI renames a solo account to a named id,
+	// clears an id on multi→solo collapse, or otherwise keeps the same login.
+	// A sole-account rename that also changes the username still inherits.
 	for name, nextAccounts := range next.Providers {
 		prevAccounts := prev.Providers[name]
 		for i := range nextAccounts {
 			if prevA, ok := findAccount(prevAccounts, nextAccounts[i].ID); ok {
 				nextAccounts[i].Password = KeepSecret(nextAccounts[i].Password, prevA.Password)
+				continue
+			}
+			matched := false
+			if nextAccounts[i].Username != "" {
+				for _, prevA := range prevAccounts {
+					if prevA.Username == nextAccounts[i].Username {
+						nextAccounts[i].Password = KeepSecret(nextAccounts[i].Password, prevA.Password)
+						matched = true
+						break
+					}
+				}
+			}
+			if !matched && len(prevAccounts) == 1 && len(nextAccounts) == 1 {
+				nextAccounts[i].Password = KeepSecret(nextAccounts[i].Password, prevAccounts[0].Password)
 			}
 		}
 		next.Providers[name] = nextAccounts

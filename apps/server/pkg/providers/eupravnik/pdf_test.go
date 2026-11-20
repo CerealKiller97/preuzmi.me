@@ -1,8 +1,14 @@
 package eupravnik
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestInvoiceFromRows(t *testing.T) {
+	// Arrange
+	assert := require.New(t)
 	// Rows as reconstructed from the real invoice layout.
 	rows := []string{
 		"Period:Maj 2026",
@@ -11,57 +17,93 @@ func TestInvoiceFromRows(t *testing.T) {
 		"UKUPNO:1,912.00",
 	}
 
+	// Act
 	in, err := invoiceFromRows(rows)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !in.hasTotal || in.total != 1912.00 {
-		t.Errorf("total = %v (has=%v), want 1912.00", in.total, in.hasTotal)
-	}
-	if !in.hasDebt || in.debt != 0 {
-		t.Errorf("debt = %v (has=%v), want 0", in.debt, in.hasDebt)
-	}
-	if !in.paid() {
-		t.Error("paid() = false, want true for DUG 0.00")
-	}
-	if !in.hasPeriod || in.periodString() != "05-2026" {
-		t.Errorf("period = %s (has=%v), want 05-2026", in.periodString(), in.hasPeriod)
-	}
-	if in.previousPeriodString() != "04-2026" {
-		t.Errorf("previous = %s, want 04-2026", in.previousPeriodString())
-	}
+
+	// Assert
+	assert.NoError(err)
+	assert.True(in.hasTotal)
+	assert.InDelta(1912.00, in.total, amountEpsilon)
+	assert.True(in.hasDebt)
+	assert.InDelta(0, in.debt, amountEpsilon)
+	assert.True(in.paid(), "DUG 0.00 means the account is settled")
+	assert.True(in.hasPeriod)
+	assert.Equal("05-2026", in.periodString())
+	assert.Equal("04-2026", in.previousPeriodString())
 }
 
 func TestPreviousPeriodStringRollsYear(t *testing.T) {
+	// Arrange
+	assert := require.New(t)
 	in := invoice{periodMonth: 1, periodYear: 2026, hasPeriod: true}
-	if got := in.previousPeriodString(); got != "12-2025" {
-		t.Errorf("previousPeriodString = %s, want 12-2025", got)
-	}
+
+	// Act
+	got := in.previousPeriodString()
+
+	// Assert
+	assert.Equal("12-2025", got)
 }
 
 func TestInvoiceFromRowsUnpaidWhenDebtPositive(t *testing.T) {
-	in, err := invoiceFromRows([]string{"UKUPNO:1.912,00", "DUG:1.912,00"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if in.total != 1912.00 {
-		t.Errorf("total = %v, want 1912.00", in.total)
-	}
-	if in.paid() {
-		t.Error("paid() = true, want false when DUG is positive")
-	}
+	// Arrange
+	assert := require.New(t)
+	rows := []string{"UKUPNO:1.912,00", "DUG:1.912,00"}
+
+	// Act
+	in, err := invoiceFromRows(rows)
+
+	// Assert
+	assert.NoError(err)
+	assert.InDelta(1912.00, in.total, amountEpsilon)
+	assert.False(in.paid(), "a positive DUG means the account is not settled")
 }
 
 func TestInvoiceFromRowsErrorsWhenLabelsMissing(t *testing.T) {
-	if _, err := invoiceFromRows([]string{"Period:Maj 2026", "Beograd"}); err == nil {
-		t.Error("expected an error when neither UKUPNO nor DUG is present")
-	}
+	// Arrange
+	assert := require.New(t)
+	rows := []string{"Period:Maj 2026", "Beograd"}
+
+	// Act
+	_, err := invoiceFromRows(rows)
+
+	// Assert
+	assert.Error(err, "neither UKUPNO nor DUG is present")
 }
 
 func TestInvoicePaidRequiresDebtLine(t *testing.T) {
+	// Arrange
+	assert := require.New(t)
 	// Without a parsed debt line, paid() must be false so status stays untouched.
 	in := invoice{hasTotal: true, total: 100}
-	if in.paid() {
-		t.Error("paid() = true without a debt line, want false")
+
+	// Act
+	paid := in.paid()
+
+	// Assert
+	assert.False(paid)
+}
+
+// TestInvoiceFromRowsGluedPeriod covers invoices whose text layer has no space
+// between the month and the year ("Period:oktobar2026"). The October bill is
+// issued in November and must still be filed under 10-2026.
+func TestInvoiceFromRowsGluedPeriod(t *testing.T) {
+	// Arrange
+	assert := require.New(t)
+	rows := []string{
+		"Datum izdavanja:05.11.2026",
+		"Datum prometa:31.10.2026",
+		"Period:oktobar2026",
+		"DUG:0.00",
+		"UKUPNO:1,912.00",
+		"Račun period: oktobar2026",
 	}
+
+	// Act
+	in, err := invoiceFromRows(rows)
+
+	// Assert
+	assert.NoError(err)
+	assert.True(in.hasPeriod)
+	assert.Equal("10-2026", in.periodString())
+	assert.Equal("09-2026", in.previousPeriodString())
 }

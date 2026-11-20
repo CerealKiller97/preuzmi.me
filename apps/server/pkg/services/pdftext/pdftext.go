@@ -25,8 +25,10 @@ import (
 // separators, e.g. "1,912.00", "1.912,00" or "400.00".
 var numberRe = regexp.MustCompile(`\d[\d.,]*\d|\d`)
 
-// yearRe matches a four-digit year.
-var yearRe = regexp.MustCompile(`\b(\d{4})\b`)
+// yearRe matches a four-digit year bounded by non-digits. It deliberately does
+// not use \b: eUpravnik PDFs glue the month and year together ("oktobar2026"),
+// and there is no word boundary between a letter and a digit.
+var yearRe = regexp.MustCompile(`(?:^|\D)(\d{4})(?:\D|$)`)
 
 // dateRe matches a Serbian calendar date DD.MM.YYYY, with an optional trailing
 // period (common on invoices: "15.07.2026.").
@@ -353,12 +355,12 @@ func ParsePeriod(row string) (month, year int, ok bool) {
 			continue
 		}
 
-		y := yearRe.FindString(row)
-		if y == "" {
+		match := yearRe.FindStringSubmatch(row)
+		if match == nil {
 			continue
 		}
 
-		parsed, err := strconv.Atoi(y)
+		parsed, err := strconv.Atoi(match[1])
 		if err != nil {
 			continue
 		}

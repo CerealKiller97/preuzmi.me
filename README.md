@@ -31,7 +31,7 @@
 </p>
 
 <p align="center">
-  <img alt="Go" src="https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go&logoColor=white" />
+  <img alt="Go" src="https://img.shields.io/badge/Go-1.27+-00ADD8?style=flat-square&logo=go&logoColor=white" />
   <img alt="UI" src="https://img.shields.io/badge/UI-Alpine.js%20%2B%20Tailwind-38BDF8?style=flat-square" />
   <img alt="License" src="https://img.shields.io/badge/License-AGPL--3.0--only-blue?style=flat-square" />
 </p>
@@ -255,7 +255,7 @@ Resolution order is `providers.<name>.mailbox` → `email.mailbox` → `INBOX`: 
 
 Prefer to run it without Docker? You'll need:
 
-- Go **1.26+**
+- Go **1.27+**
 - Node **18+** (only to build CSS once)
 - A `config.json` in the project root (see [Configuration](#configuration))
 

@@ -12,10 +12,10 @@ COPY templates ./templates
 RUN npm run build
 
 # ---- build binary ----
-# Pin to Go 1.26 (matches go.mod). Running the toolchain on the native
+# Pin to Go 1.27 (matches go.mod). Running the toolchain on the native
 # $BUILDPLATFORM and cross-compiling to $TARGET* keeps multi-arch builds off
 # QEMU — the Go compiler is far faster natively than emulated.
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build
 WORKDIR /src
 
 ARG TARGETOS

@@ -1,8 +1,8 @@
 module github.com/CerealKiller97/preuzmi.me
 
-go 1.26.0
+go 1.27.0
 
-toolchain go1.26.5
+toolchain go1.27.4
 
 require (
 	github.com/emersion/go-imap v1.2.1

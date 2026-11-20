@@ -10,6 +10,16 @@ Release, so keep the entries user-facing.
 
 ## [Unreleased]
 
+## [1.7.3] - 20.11.2026
+
+### 🐛 Fixed
+
+- 🏢 **eUpravnik bills are filed under the right month.** Some eUpravnik invoices print the billing period with no space between the month and the year (`Period:oktobar2026`). The period wasn't recognised, so the receipt fell back to the email's date and landed a month late: the October bill, sent in November, showed up as **11/2026**. The period is now read correctly, so that bill files under **10/2026**, and the "previous month paid" update lands on the right month. Receipts that were already filed under the wrong month aren't moved automatically: delete the wrong entry and fetch it again.
+
+### 🔧 Changed
+
+- 🛡️ **Built with Go 1.27 and updated dependencies.** The server now builds on Go 1.27.4 with refreshed dependencies, which brings in the upstream security fixes that `govulncheck` flagged in the older Go 1.26.5 standard library.
+
 ## [1.7.2] - 11.08.2026
 
 ### 🎨 Changed
@@ -156,7 +166,8 @@ stats, and notifications, so no bill goes unintentionally unpaid.
 - 🐳 Multi-arch (amd64 + arm64), distroless Docker image published to GHCR.
 - 🌐 Bilingual documentation — English and Serbian.
 
-[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.7.2...HEAD
+[Unreleased]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.7.3...HEAD
+[1.7.3]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.7.2...v1.7.3
 [1.7.2]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/CerealKiller97/preuzmi.me/compare/v1.6.0...v1.7.0
